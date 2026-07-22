@@ -80,6 +80,56 @@ async def _shutdown() -> None:
         _drain_task.cancel()
 
 
+@app.get("/offline-queue")
+async def get_offline_queue():
+    """Everything not yet durably synced — 'pending' (will be retried
+    automatically every _QUEUE_DRAIN_INTERVAL_SECONDS) and 'failed'
+    (a permanent rejection, e.g. a duplicate-translation validation
+    error, that drain_once will never retry on its own). Joined against
+    source_strings/files purely so the panel can show something a
+    person recognizes ("Torn Letter_216956.xml — 'Дякую...'") instead of
+    a bare string id."""
+    with get_conn() as conn:
+        items = [
+            dict(row) for row in conn.execute(
+                """
+                SELECT q.id, q.operation_type, q.string_id, q.language_id, q.created_at,
+                       q.attempts, q.last_attempt_at, q.last_error, q.status,
+                       s.text AS source_text, f.path AS file_path,
+                       json_extract(q.payload_json, '$.text') AS draft_text
+                FROM offline_queue q
+                LEFT JOIN source_strings s ON s.id = q.string_id
+                LEFT JOIN files f ON f.id = s.file_id
+                WHERE q.status IN ('pending', 'failed')
+                ORDER BY q.created_at
+                """
+            )
+        ]
+    return {"items": items}
+
+
+@app.post("/offline-queue/drain")
+async def trigger_offline_queue_drain():
+    """Manual "retry now" — the background loop already retries every
+    15s on its own, but a user who just reconnected shouldn't have to
+    wait for it."""
+    drained = await run_in_threadpool(offline_queue.drain_once)
+    return {"drained": drained}
+
+
+@app.post("/offline-queue/{item_id}/retry")
+async def retry_offline_queue_item(item_id: int):
+    """Resets one 'failed' (permanently-rejected) item back to 'pending'
+    so the next drain attempts it again — for cases where the actual
+    upstream condition has since changed (e.g. the conflicting duplicate
+    translation was itself removed), not something the item's own retry
+    logic could ever have detected on its own."""
+    with get_conn() as conn:
+        conn.execute("UPDATE offline_queue SET status = 'pending' WHERE id = ? AND status = 'failed'", (item_id,))
+    drained = await run_in_threadpool(offline_queue.drain_once)
+    return {"drained": drained}
+
+
 class TokenIn(BaseModel):
     token: str
 
@@ -365,15 +415,25 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
             languageId=body.language_id,
             text=body.text,
         )
-    except APIException as exc:
-        if exc.should_retry:
-            # Transient (network/5xx/429-after-retries) — durable, will be
-            # drained automatically once conditions recover.
-            logger.warning("Live translation submit failed for string %s, queuing: %s", string_id, exc.message)
+    except Exception as exc:  # noqa: BLE001 - see the terminal-vs-queue split below
+        # Genuine offline (no network at all) raises requests.ConnectionError/
+        # Timeout, not an APIException — those aren't in Crowdin's exception
+        # hierarchy at all, since they never got far enough to receive an
+        # HTTP response to classify. Catching only APIException here (as an
+        # earlier version of this code did) meant a translation typed while
+        # offline never reached the queue - it just surfaced as a raw 500,
+        # silently discarding the edit. Default to "queue it" for anything
+        # that isn't a confirmed-permanent APIException, matching the same
+        # terminal-vs-retry split drain_once already uses.
+        terminal = isinstance(exc, APIException) and not exc.should_retry
+        if not terminal:
+            # Transient (network/offline/5xx/429-after-retries) — durable,
+            # will be drained automatically once conditions recover.
+            logger.warning("Live translation submit failed for string %s, queuing: %s", string_id, exc)
             await run_in_threadpool(
                 offline_queue.enqueue_add_translation, project_id, string_id, body.language_id, body.text
             )
-            return {"status": "queued", "reason": exc.message}
+            return {"status": "queued", "reason": str(exc)}
 
         # Permanent (validation errors, e.g. Crowdin's "duplicate
         # translation" check) — retrying won't ever help, so surface it

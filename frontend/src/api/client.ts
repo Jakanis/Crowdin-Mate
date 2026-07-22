@@ -117,6 +117,21 @@ export interface GlossaryMatch {
   glossary_name: string | null;
 }
 
+export interface OfflineQueueItem {
+  id: number;
+  operation_type: string;
+  string_id: number;
+  language_id: string;
+  created_at: string;
+  attempts: number;
+  last_attempt_at: string | null;
+  last_error: string | null;
+  status: "pending" | "failed";
+  source_text: string | null;
+  file_path: string | null;
+  draft_text: string | null;
+}
+
 export const api = {
   authStatus: () => request<AuthStatus>("/auth/status"),
   setToken: (token: string) =>
@@ -148,6 +163,10 @@ export const api = {
       `/projects/${projectId}/files/${fileId}/resync?language_id=${encodeURIComponent(languageId)}`,
       { method: "POST" },
     ),
+  getOfflineQueue: () => request<{ items: OfflineQueueItem[] }>("/offline-queue"),
+  drainOfflineQueue: () => request<{ drained: number }>("/offline-queue/drain", { method: "POST" }),
+  retryOfflineQueueItem: (itemId: number) =>
+    request<{ drained: number }>(`/offline-queue/${itemId}/retry`, { method: "POST" }),
   submitTranslation: (projectId: number, stringId: number, languageId: string, text: string) =>
     request<SubmitTranslationResult>(`/projects/${projectId}/strings/${stringId}/translations`, {
       method: "POST",

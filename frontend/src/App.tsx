@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api, type TreeFile } from "./api/client";
+import { OfflineIndicator } from "./components/OfflineIndicator";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { TabBar } from "./components/TabBar";
@@ -194,6 +195,7 @@ export function App() {
             {sync.isPending ? "Syncing…" : "Sync tree"}
           </button>
           <SettingsMenu autoAdvance={autoAdvance.enabled} onAutoAdvanceChange={autoAdvance.setEnabled} />
+          <OfflineIndicator />
         </div>
       </header>
 

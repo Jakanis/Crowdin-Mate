@@ -266,6 +266,119 @@ body {
   cursor: pointer;
 }
 
+.offline-indicator {
+  position: relative;
+}
+
+.offline-indicator-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  background: none;
+  color: inherit;
+  border-radius: 100px;
+  padding: 4px 10px 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.offline-indicator-badge--offline {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.offline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+
+.offline-dot--offline {
+  background: var(--warning);
+}
+
+.offline-queue-count {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 100px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.offline-queue-popover {
+  width: 320px;
+}
+
+.offline-queue-empty {
+  padding: 0;
+  font-size: 12px;
+}
+
+.offline-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.offline-queue-item {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.offline-queue-item-file {
+  opacity: 0.6;
+  font-size: 11px;
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.offline-queue-item-text {
+  white-space: pre-wrap;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.offline-queue-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.7;
+}
+
+.offline-queue-status {
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 100px;
+}
+
+.offline-queue-status--pending {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.offline-queue-status--failed {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.offline-queue-item-error {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(128, 128, 128, 0.15);
+  opacity: 0.6;
+  font-size: 11px;
+  word-break: break-word;
+}
+
 .app-body {
   display: flex;
   flex: 1;
