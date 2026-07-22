@@ -1,8 +1,10 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useMemo, useRef, useState } from "react";
-import type { TreeDirectory, TreeFile } from "../api/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, type ProgressInfo, type TreeDirectory, type TreeFile } from "../api/client";
 
 interface FileTreeProps {
+  projectId: number;
+  languageId: string;
   directories: TreeDirectory[];
   files: TreeFile[];
   onSelectFile?: (file: TreeFile) => void;
@@ -22,9 +24,46 @@ const ROW_HEIGHT = 28;
  * Collapsed folders contribute exactly one row here, regardless of how
  * many thousands of descendants they hold.
  */
-export function FileTree({ directories, files, onSelectFile }: FileTreeProps) {
+export function FileTree({ projectId, languageId, directories, files, onSelectFile }: FileTreeProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const parentRef = useRef<HTMLDivElement>(null);
+
+  // Translation/approval progress, merged in as it's fetched — root on
+  // mount, then a directory's children right when it's expanded. Never
+  // fetched in bulk (there's no bulk endpoint — see progress_sync.py),
+  // so this map only ever grows to cover what's actually been revealed.
+  const [dirProgress, setDirProgress] = useState<Map<number, ProgressInfo>>(new Map());
+  const [fileProgress, setFileProgress] = useState<Map<number, ProgressInfo>>(new Map());
+  const fetchedParents = useRef<Set<number | "root">>(new Set());
+
+  const mergeProgress = (result: { directories: Record<number, ProgressInfo>; files: Record<number, ProgressInfo> }) => {
+    setDirProgress((prev) => {
+      const next = new Map(prev);
+      for (const [id, p] of Object.entries(result.directories)) next.set(Number(id), p);
+      return next;
+    });
+    setFileProgress((prev) => {
+      const next = new Map(prev);
+      for (const [id, p] of Object.entries(result.files)) next.set(Number(id), p);
+      return next;
+    });
+  };
+
+  const fetchProgressFor = (parentId: number | "root") => {
+    if (fetchedParents.current.has(parentId)) return;
+    fetchedParents.current.add(parentId);
+    api
+      .getTreeProgress(projectId, languageId, parentId === "root" ? undefined : parentId)
+      .then(mergeProgress)
+      .catch(() => {
+        fetchedParents.current.delete(parentId); // allow retry on next expand
+      });
+  };
+
+  useEffect(() => {
+    fetchProgressFor("root");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, languageId]);
 
   const { childDirsByParent, childFilesByDir } = useMemo(() => {
     const childDirsByParent = new Map<number | null, TreeDirectory[]>();
@@ -91,8 +130,12 @@ export function FileTree({ directories, files, onSelectFile }: FileTreeProps) {
   const toggleDir = (id: number) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        fetchProgressFor(id);
+      }
       return next;
     });
   };
@@ -102,6 +145,7 @@ export function FileTree({ directories, files, onSelectFile }: FileTreeProps) {
       <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const row = rows[virtualRow.index];
+          const progress = row.kind === "dir" ? dirProgress.get(row.id) : fileProgress.get(row.id);
           return (
             <div
               key={`${row.kind}-${row.id}`}
@@ -125,13 +169,30 @@ export function FileTree({ directories, files, onSelectFile }: FileTreeProps) {
                 <span className="tree-caret tree-caret--file" />
               )}
               <span className="tree-name">{row.name}</span>
-              {row.kind === "file" && row.stringsCount != null && (
-                <span className="tree-count">{row.stringsCount}</span>
-              )}
+              {progress && <ProgressBadges progress={progress} />}
             </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+function ProgressBadges({ progress }: { progress: ProgressInfo }) {
+  return (
+    <span className="tree-progress">
+      <span
+        className={`progress-badge${progress.translation_progress === 100 ? " progress-badge--full" : ""}`}
+        title="Translated"
+      >
+        {progress.translation_progress}%
+      </span>
+      <span
+        className={`progress-badge progress-badge--approved${progress.approval_progress === 100 ? " progress-badge--full" : ""}`}
+        title="Approved"
+      >
+        {progress.approval_progress}%
+      </span>
+    </span>
   );
 }

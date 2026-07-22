@@ -4,6 +4,8 @@ import { FileStringsList } from "./FileStringsList";
 import { FileTree } from "./FileTree";
 
 interface SidebarProps {
+  projectId: number;
+  languageId: string;
   directories: TreeDirectory[];
   files: TreeFile[];
   onSelectFile: (file: TreeFile) => void;
@@ -20,6 +22,8 @@ type Tab = "files" | "strings";
  * open file for quick jumping. Collapsible to reclaim width for the
  * editor, same as the right sidebar. */
 export function Sidebar({
+  projectId,
+  languageId,
   directories,
   files,
   onSelectFile,
@@ -59,11 +63,22 @@ export function Sidebar({
         </button>
       </div>
 
-      {tab === "files" || selectedFile == null ? (
-        <FileTree directories={directories} files={files} onSelectFile={onSelectFile} />
-      ) : (
+      {/* Both panels stay mounted always, toggled via CSS rather than
+          conditional rendering — otherwise switching to Strings and back
+          would remount FileTree and lose its expanded-folders state and
+          scroll position. */}
+      <div className="sidebar-panel" hidden={!(tab === "files" || selectedFile == null)}>
+        <FileTree
+          projectId={projectId}
+          languageId={languageId}
+          directories={directories}
+          files={files}
+          onSelectFile={onSelectFile}
+        />
+      </div>
+      <div className="sidebar-panel" hidden={!(tab === "strings" && selectedFile != null)}>
         <FileStringsList strings={strings} focusedStringId={focusedStringId} onSelect={onFocusString} />
-      )}
+      </div>
     </aside>
   );
 }

@@ -145,6 +145,30 @@ CREATE TABLE IF NOT EXISTS suggestion_lookups (
     PRIMARY KEY (string_id, language_id, kind)
 );
 
+-- Per-file/per-directory translation+approval progress, matching the
+-- badges Crowdin's own tree shows. There is no bulk endpoint for this —
+-- confirmed live, get_file_progress is one call per file — so with
+-- ~19,866 files in this project these are only ever fetched lazily for
+-- whatever's currently visible (a folder's direct children, right when
+-- it's expanded), never for the whole tree at once.
+CREATE TABLE IF NOT EXISTS file_progress (
+    file_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    translation_progress INTEGER NOT NULL,
+    approval_progress INTEGER NOT NULL,
+    cached_at TEXT NOT NULL,
+    PRIMARY KEY (file_id, language_id)
+);
+
+CREATE TABLE IF NOT EXISTS directory_progress (
+    directory_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    translation_progress INTEGER NOT NULL,
+    approval_progress INTEGER NOT NULL,
+    cached_at TEXT NOT NULL,
+    PRIMARY KEY (directory_id, language_id)
+);
+
 CREATE TABLE IF NOT EXISTS translation_drafts (
     string_id INTEGER NOT NULL,
     language_id TEXT NOT NULL,

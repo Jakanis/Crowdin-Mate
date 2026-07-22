@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { api, type SourceString } from "../api/client";
+import { useEffect, useRef, useState } from "react";
+import { api } from "../api/client";
 import { ComfortableView } from "./ComfortableView";
 import { RightSidebar } from "./RightSidebar";
 import { SideBySideView } from "./SideBySideView";
@@ -9,28 +9,32 @@ interface TranslationWorkspaceProps {
   projectId: number;
   fileId: number;
   languageId: string;
-  strings: SourceString[];
-  isLoading: boolean;
-  isError: boolean;
-  error: Error | null;
   focusedStringId: number | null;
   onFocusChange: (stringId: number | null) => void;
 }
 
 type ViewMode = "comfortable" | "side-by-side";
 
+/** One instance per open tab (see App.tsx) — each keeps its own strings
+ * query and view-mode state, and stays mounted (hidden via CSS) even
+ * when a different tab is active, so switching tabs never loses scroll
+ * position or which view mode/string you had focused. React Query dedupes
+ * the strings fetch by queryKey, so having one instance per open tab
+ * costs no extra network requests beyond what each distinct file needs. */
 export function TranslationWorkspace({
   projectId,
   fileId,
   languageId,
-  strings,
-  isLoading,
-  isError,
-  error,
   focusedStringId,
   onFocusChange,
 }: TranslationWorkspaceProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
+
+  const stringsQuery = useQuery({
+    queryKey: ["file-strings", projectId, fileId, languageId],
+    queryFn: () => api.getFileStrings(projectId, fileId, languageId),
+  });
+  const strings = stringsQuery.data?.strings ?? [];
 
   const permissionsQuery = useQuery({
     queryKey: ["permissions", projectId],
@@ -38,8 +42,20 @@ export function TranslationWorkspace({
     staleTime: 5 * 60_000,
   });
 
-  if (isLoading) return <p className="hint">Loading strings…</p>;
-  if (isError) return <p className="error">{error?.message}</p>;
+  // Default focus to the first string once this tab's data has actually
+  // loaded. Keyed on fileId so re-visiting an already-open tab doesn't
+  // reset a focus the user already moved away from.
+  const initializedForFileId = useRef<number | null>(null);
+  useEffect(() => {
+    if (strings.length > 0 && initializedForFileId.current !== fileId && focusedStringId == null) {
+      onFocusChange(strings[0].id);
+      initializedForFileId.current = fileId;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, strings]);
+
+  if (stringsQuery.isLoading) return <p className="hint">Loading strings…</p>;
+  if (stringsQuery.isError) return <p className="error">{(stringsQuery.error as Error).message}</p>;
   if (strings.length === 0) return <p className="hint">No strings in this file.</p>;
 
   const canApprove = permissionsQuery.data?.is_member ?? false;

@@ -42,6 +42,16 @@ export interface TreeResponse {
   files: TreeFile[];
 }
 
+export interface ProgressInfo {
+  translation_progress: number;
+  approval_progress: number;
+}
+
+export interface TreeProgressResponse {
+  directories: Record<number, ProgressInfo>;
+  files: Record<number, ProgressInfo>;
+}
+
 export interface TranslationInfo {
   string_id: number;
   id: number;
@@ -122,6 +132,11 @@ export const api = {
       { method: "POST" },
     ),
   getTree: (projectId: number) => request<TreeResponse>(`/projects/${projectId}/tree`),
+  getTreeProgress: (projectId: number, languageId: string, parentId?: number) =>
+    request<TreeProgressResponse>(
+      `/projects/${projectId}/tree-progress?language_id=${encodeURIComponent(languageId)}` +
+        (parentId != null ? `&parent_id=${parentId}` : ""),
+    ),
   getPermissions: (projectId: number) =>
     request<{ is_member: boolean; role: string | null }>(`/projects/${projectId}/permissions`),
   getFileStrings: (projectId: number, fileId: number, languageId: string) =>

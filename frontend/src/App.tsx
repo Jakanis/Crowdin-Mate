@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { api, type TreeFile } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
+import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
 
@@ -10,8 +11,15 @@ const TARGET_LANGUAGE_ID = "uk";
 
 export function App() {
   const queryClient = useQueryClient();
-  const [selectedFile, setSelectedFile] = useState<TreeFile | null>(null);
-  const [focusedStringId, setFocusedStringId] = useState<number | null>(null);
+
+  // Multiple files can be open at once (a quest-chain workflow: open
+  // several related files up front, work through them one by one) —
+  // openFiles is the tab strip, activeFileId which one is visible.
+  // Each open file gets its own focusedStringId so switching tabs
+  // doesn't disturb where you were in the others.
+  const [openFiles, setOpenFiles] = useState<TreeFile[]>([]);
+  const [activeFileId, setActiveFileId] = useState<number | null>(null);
+  const [focusedStringIdByFile, setFocusedStringIdByFile] = useState<Record<number, number | null>>({});
 
   const authStatus = useQuery({ queryKey: ["auth-status"], queryFn: api.authStatus });
 
@@ -26,29 +34,41 @@ export function App() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tree", CLASSICUA_PROJECT_ID] }),
   });
 
-  const stringsQuery = useQuery({
-    queryKey: ["file-strings", CLASSICUA_PROJECT_ID, selectedFile?.id, TARGET_LANGUAGE_ID],
-    queryFn: () => api.getFileStrings(CLASSICUA_PROJECT_ID, selectedFile!.id, TARGET_LANGUAGE_ID),
-    enabled: selectedFile != null,
+  // The active tab's strings, fetched here too (in addition to inside
+  // TranslationWorkspace) purely so the Sidebar's "Strings" tab can jump
+  // within it — React Query dedupes by queryKey, so this is not an extra
+  // network request beyond what TranslationWorkspace already needs.
+  const activeStringsQuery = useQuery({
+    queryKey: ["file-strings", CLASSICUA_PROJECT_ID, activeFileId, TARGET_LANGUAGE_ID],
+    queryFn: () => api.getFileStrings(CLASSICUA_PROJECT_ID, activeFileId as number, TARGET_LANGUAGE_ID),
+    enabled: activeFileId != null,
   });
-
-  const strings = stringsQuery.data?.strings ?? [];
-
-  // Default focus to the first string once its data has actually loaded —
-  // a plain `[selectedFile]` dependency doesn't work here since strings
-  // load asynchronously after the file is already selected, so that
-  // effect would fire once with an empty array and never re-run.
-  const initializedForFileId = useRef<number | null>(null);
-  useEffect(() => {
-    if (strings.length > 0 && initializedForFileId.current !== selectedFile?.id) {
-      setFocusedStringId(strings[0].id);
-      initializedForFileId.current = selectedFile?.id ?? null;
-    }
-  }, [selectedFile, strings]);
+  const activeStrings = activeStringsQuery.data?.strings ?? [];
 
   const handleSelectFile = (file: TreeFile) => {
-    setSelectedFile(file);
-    setFocusedStringId(null);
+    setOpenFiles((prev) => (prev.some((f) => f.id === file.id) ? prev : [...prev, file]));
+    setActiveFileId(file.id);
+  };
+
+  const handleCloseTab = (fileId: number) => {
+    setOpenFiles((prev) => {
+      const next = prev.filter((f) => f.id !== fileId);
+      if (activeFileId === fileId) {
+        const closedIndex = prev.findIndex((f) => f.id === fileId);
+        const fallback = next[closedIndex] ?? next[closedIndex - 1] ?? next[0] ?? null;
+        setActiveFileId(fallback?.id ?? null);
+      }
+      return next;
+    });
+    setFocusedStringIdByFile((prev) => {
+      const next = { ...prev };
+      delete next[fileId];
+      return next;
+    });
+  };
+
+  const setFocusedStringIdFor = (fileId: number, stringId: number | null) => {
+    setFocusedStringIdByFile((prev) => ({ ...prev, [fileId]: stringId }));
   };
 
   if (authStatus.isLoading) return <div className="app-shell">Loading…</div>;
@@ -79,34 +99,39 @@ export function App() {
           </aside>
         ) : (
           <Sidebar
+            projectId={CLASSICUA_PROJECT_ID}
+            languageId={TARGET_LANGUAGE_ID}
             directories={tree.data?.directories ?? []}
             files={tree.data?.files ?? []}
             onSelectFile={handleSelectFile}
-            selectedFile={selectedFile}
-            strings={strings}
-            focusedStringId={focusedStringId}
-            onFocusString={setFocusedStringId}
+            selectedFile={openFiles.find((f) => f.id === activeFileId) ?? null}
+            strings={activeStrings}
+            focusedStringId={activeFileId != null ? focusedStringIdByFile[activeFileId] ?? null : null}
+            onFocusString={(stringId) => activeFileId != null && setFocusedStringIdFor(activeFileId, stringId)}
           />
         )}
         <main className="app-main">
-          {selectedFile ? (
-            <>
-              <h2 className="file-title">{selectedFile.path}</h2>
+          <TabBar
+            openFiles={openFiles}
+            activeFileId={activeFileId}
+            onSelectTab={setActiveFileId}
+            onCloseTab={handleCloseTab}
+          />
+          {openFiles.length === 0 && <p className="hint">Select a file from the tree.</p>}
+          {activeFileId != null && (
+            <h2 className="file-title">{openFiles.find((f) => f.id === activeFileId)?.path}</h2>
+          )}
+          {openFiles.map((file) => (
+            <div key={file.id} className="workspace-tab-panel" hidden={file.id !== activeFileId}>
               <TranslationWorkspace
                 projectId={CLASSICUA_PROJECT_ID}
-                fileId={selectedFile.id}
+                fileId={file.id}
                 languageId={TARGET_LANGUAGE_ID}
-                strings={strings}
-                isLoading={stringsQuery.isLoading}
-                isError={stringsQuery.isError}
-                error={stringsQuery.error as Error | null}
-                focusedStringId={focusedStringId}
-                onFocusChange={setFocusedStringId}
+                focusedStringId={focusedStringIdByFile[file.id] ?? null}
+                onFocusChange={(stringId) => setFocusedStringIdFor(file.id, stringId)}
               />
-            </>
-          ) : (
-            <p className="hint">Select a file from the tree.</p>
-          )}
+            </div>
+          ))}
         </main>
       </div>
     </div>

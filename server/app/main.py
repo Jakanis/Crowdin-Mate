@@ -19,6 +19,7 @@ from app import config, offline_queue
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
+from app.sync.progress_sync import get_children_progress
 from app.sync.suggestions_sync import has_looked_up, sync_glossary_matches, sync_tm_matches
 from app.sync.tree_sync import sync_project_tree
 
@@ -167,6 +168,21 @@ async def get_tree(project_id: int):
             )
         ]
     return {"directories": directories, "files": files}
+
+
+@app.get("/projects/{project_id}/tree-progress")
+async def get_tree_progress(project_id: int, language_id: str, parent_id: int | None = None):
+    """Translation/approval progress for the direct children (both
+    subdirectories and files) of `parent_id` — or the project root if
+    omitted. Called once on initial tree load (root) and again every
+    time a folder is expanded, mirroring exactly which rows the tree
+    actually reveals at that moment. See progress_sync module docstring
+    for why this can't just be one bulk call."""
+    try:
+        result = await run_in_threadpool(get_children_progress, project_id, parent_id, language_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    return result
 
 
 @app.get("/projects/{project_id}/permissions")

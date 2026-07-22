@@ -52,6 +52,17 @@ body {
   flex-shrink: 0;
 }
 
+.sidebar-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-panel[hidden] {
+  display: none;
+}
+
 .sidebar-tabs button {
   border: none;
   background: none;
@@ -152,6 +163,75 @@ body {
   margin: 0 0 12px;
   opacity: 0.8;
   word-break: break-all;
+}
+
+/* --- open-file tab bar --- */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  margin: -16px -16px 12px;
+  padding: 8px 16px 0;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  font-size: 12px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: rgba(128, 128, 128, 0.05);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 200px;
+}
+
+.tab--active {
+  background: var(--tab-active-bg, #fff);
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tab--active {
+    background: #1e1e1e;
+  }
+}
+
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: 0.5;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.tab-close:hover {
+  opacity: 1;
+}
+
+.workspace-tab-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace-tab-panel[hidden] {
+  display: none;
 }
 
 .string-source {
@@ -501,12 +581,33 @@ body {
   text-overflow: ellipsis;
 }
 
-.tree-count {
+.tree-progress {
   margin-left: auto;
   padding-right: 8px;
-  opacity: 0.5;
-  font-size: 11px;
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.progress-badge {
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: 100px;
+  background: rgba(240, 180, 40, 0.15);
+  color: #a06800;
+  min-width: 30px;
+  text-align: center;
+}
+
+.progress-badge--approved {
+  background: rgba(58, 123, 213, 0.12);
+  color: #3a7bd5;
+}
+
+.progress-badge--full {
+  background: rgba(52, 168, 83, 0.15);
+  color: #2a8a44;
 }
 
 .token-setup {
