@@ -5,12 +5,18 @@ actually large data on a project like this — never bulk-fetched. This
 module fetches strings + translations for exactly one file, on demand,
 when the user opens it.
 
-Field shapes here were confirmed against live API responses, not assumed:
-translations use `translationId` (not `id`), carry no `updatedAt` or
-`isApproved` field at all, so unlike source_strings (which do have a
-reliable `updatedAt` to diff against) translations are simplest to just
-fully replace per file+language on every revalidation — cheap at the
-per-file scale this operates at (tens to low hundreds of strings).
+We deliberately fetch ALL translations per string (per-string
+`list_string_translations`) rather than the single "top" one that
+`list_language_translations` returns. The latter shows only the most
+recent submission, which is not necessarily the approved one — so a
+proofreader would see the wrong text. Approval status comes from the
+separate, file-scoped `list_translation_approvals` call (one paginated
+set for the whole file), whose rows point at the approved translationId.
+
+Cost: one translations call per string. Files in this project are small
+(single digits to low tens of strings), so this stays well within a
+second or two even before the local cache makes repeat opens instant.
+Field shapes were all confirmed against live API responses.
 """
 
 import logging
@@ -39,17 +45,35 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
         fileId=file_id,
     )
     strings = [_unwrap(s) for s in strings_resp.get("data", [])]
+    string_ids = [s["id"] for s in strings]
 
-    translations_resp = call_with_limits(
-        client.string_translations.with_fetch_all().list_language_translations,
+    # File-scoped approvals (one paginated set) → translationId -> approvalId.
+    approvals_resp = call_with_limits(
+        client.string_translations.with_fetch_all().list_translation_approvals,
         projectId=project_id,
-        languageId=language_id,
         fileId=file_id,
+        languageId=language_id,
     )
-    translations = [_unwrap(t) for t in translations_resp.get("data", [])]
+    approval_by_translation: dict[int, int] = {}
+    for a in approvals_resp.get("data", []):
+        a = _unwrap(a)
+        approval_by_translation[a["translationId"]] = a["id"]
+
+    # All translations for each string (per-string call).
+    translations: list[dict] = []
+    for sid in string_ids:
+        t_resp = call_with_limits(
+            client.string_translations.with_fetch_all().list_string_translations,
+            projectId=project_id,
+            stringId=sid,
+            languageId=language_id,
+        )
+        for t in t_resp.get("data", []):
+            t = _unwrap(t)
+            t["_string_id"] = sid  # this endpoint's rows don't carry stringId
+            translations.append(t)
 
     now = _now()
-    string_ids = [s["id"] for s in strings]
 
     with get_conn() as conn:
         for s in strings:
@@ -92,25 +116,36 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
 
         for t in translations:
             user = t.get("user") or {}
+            # list_string_translations rows use `id` for the translation id
+            # (confirmed live) — the same id the approvals list points at.
+            translation_id = t["id"]
+            approval_id = approval_by_translation.get(translation_id)
             conn.execute(
                 """
                 INSERT INTO translations
-                    (id, string_id, language_id, text, user_id, user_name, created_at, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, string_id, language_id, text, user_id, user_name,
+                     rating, is_approved, approval_id, created_at, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     text=excluded.text,
                     user_id=excluded.user_id,
                     user_name=excluded.user_name,
+                    rating=excluded.rating,
+                    is_approved=excluded.is_approved,
+                    approval_id=excluded.approval_id,
                     created_at=excluded.created_at,
                     synced_at=excluded.synced_at
                 """,
                 (
-                    t["translationId"],
-                    t["stringId"],
+                    translation_id,
+                    t["_string_id"],
                     language_id,
                     t.get("text", ""),
                     user.get("id"),
                     user.get("fullName") or user.get("username"),
+                    t.get("rating", 0) or 0,
+                    1 if approval_id is not None else 0,
+                    approval_id,
                     _iso(t.get("createdAt")),
                     now,
                 ),
@@ -122,10 +157,63 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
         )
 
     logger.info(
-        "Synced file %s content: %d strings, %d translations",
-        file_id, len(strings), len(translations),
+        "Synced file %s content: %d strings, %d translations, %d approved",
+        file_id, len(strings), len(translations), len(approval_by_translation),
     )
-    return {"file_id": file_id, "strings": len(strings), "translations": len(translations), "synced_at": now}
+    return {
+        "file_id": file_id,
+        "strings": len(strings),
+        "translations": len(translations),
+        "approvals": len(approval_by_translation),
+        "synced_at": now,
+    }
+
+
+def sync_string_comments(project_id: int, string_id: int) -> list[dict]:
+    """Fetch + cache all comments/issues for one string. Called lazily
+    when the user opens a string's comment panel (most strings have none,
+    so eagerly fetching per-string on every file open would be wasteful).
+    Returns the freshly-cached rows."""
+    client = get_client()
+    resp = call_with_limits(
+        client.string_comments.with_fetch_all().list_string_comments,
+        projectId=project_id,
+        stringId=string_id,
+    )
+    comments = [_unwrap(c) for c in resp.get("data", [])]
+    now = _now()
+
+    with get_conn() as conn:
+        # Replace the cached set for this string so deletions/resolutions
+        # upstream are reflected.
+        conn.execute("DELETE FROM comments WHERE string_id = ?", (string_id,))
+        for c in comments:
+            user = c.get("user") or {}
+            conn.execute(
+                """
+                INSERT INTO comments
+                    (id, string_id, project_id, language_id, text, user_id, user_name,
+                     type, issue_type, issue_status, is_resolved, created_at, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    c["id"],
+                    string_id,
+                    project_id,
+                    c.get("languageId"),
+                    c.get("text", ""),
+                    user.get("id"),
+                    user.get("fullName") or user.get("username"),
+                    c.get("type"),
+                    c.get("issueType"),
+                    c.get("issueStatus"),
+                    1 if c.get("resolvedAt") else 0,
+                    _iso(c.get("createdAt")),
+                    now,
+                ),
+            )
+
+    return comments
 
 
 def _iso(value) -> str | None:

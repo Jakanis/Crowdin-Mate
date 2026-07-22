@@ -22,10 +22,32 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+# Columns added to existing tables after their initial CREATE. schema.sql's
+# CREATE TABLE IF NOT EXISTS won't alter a table that already exists, so an
+# already-populated dev cache needs these applied explicitly. Each entry is
+# idempotent — we only add a column that isn't already present.
+_COLUMN_MIGRATIONS = {
+    "translations": [
+        ("rating", "INTEGER NOT NULL DEFAULT 0"),
+        ("is_approved", "INTEGER NOT NULL DEFAULT 0"),
+        ("approval_id", "INTEGER"),
+    ],
+}
+
+
+def _apply_column_migrations(conn: sqlite3.Connection) -> None:
+    for table, columns in _COLUMN_MIGRATIONS.items():
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
 def init_db() -> None:
     conn = _connect()
     try:
         conn.executescript(_SCHEMA_PATH.read_text())
+        _apply_column_migrations(conn)
         conn.commit()
     finally:
         conn.close()

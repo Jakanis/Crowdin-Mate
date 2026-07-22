@@ -79,6 +79,14 @@ body {
   line-height: 1.4;
 }
 
+.string-context {
+  font-size: 11px;
+  opacity: 0.45;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .string-target {
   width: 100%;
   font: inherit;
@@ -94,10 +102,153 @@ body {
   gap: 10px;
   margin-top: 6px;
   font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .string-meta {
   opacity: 0.5;
+}
+
+/* --- translation list --- */
+.translation-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.translation-item {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(128, 128, 128, 0.04);
+}
+
+.translation-item--approved {
+  border-color: rgba(52, 168, 83, 0.5);
+  background: rgba(52, 168, 83, 0.07);
+}
+
+.translation-text {
+  font-size: 13px;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.translation-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  opacity: 0.85;
+  flex-wrap: wrap;
+}
+
+.approved-badge {
+  color: #2a8a44;
+  font-weight: 600;
+}
+
+.translation-author {
+  opacity: 0.7;
+}
+
+.translation-rating {
+  opacity: 0.7;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #3a7bd5;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.link-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.add-translation-label {
+  display: block;
+  font-size: 11px;
+  opacity: 0.5;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* --- comments --- */
+.comments-toggle {
+  background: none;
+  border: none;
+  padding: 8px 0 0;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.7;
+  text-align: left;
+}
+
+.comments-panel {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 2px solid rgba(128, 128, 128, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment {
+  font-size: 12px;
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.comment-text {
+  white-space: pre-wrap;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+
+.issue-tag,
+.resolved-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 100px;
+}
+
+.issue-tag {
+  background: rgba(240, 180, 40, 0.2);
+  color: #a06800;
+}
+
+.resolved-tag {
+  background: rgba(52, 168, 83, 0.15);
+  color: #2a8a44;
+}
+
+.add-comment {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.add-comment textarea {
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+  resize: vertical;
 }
 
 .status-badge {

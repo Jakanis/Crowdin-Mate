@@ -58,6 +58,13 @@ CREATE TABLE IF NOT EXISTS source_strings (
 );
 CREATE INDEX IF NOT EXISTS idx_source_strings_file ON source_strings (file_id);
 
+-- Holds ALL submitted translations per string+language, not just the top
+-- one — a string commonly has several candidate translations from
+-- different contributors, and the proofreading workflow needs to see them
+-- all and which is approved. `is_approved`/`approval_id` are derived from
+-- the separate approvals resource (list_translation_approvals): a
+-- translation is approved iff an approval row points at its id, and
+-- approval_id is what's needed to later un-approve it.
 CREATE TABLE IF NOT EXISTS translations (
     id INTEGER PRIMARY KEY,              -- Crowdin's translationId
     string_id INTEGER NOT NULL,
@@ -65,11 +72,33 @@ CREATE TABLE IF NOT EXISTS translations (
     text TEXT NOT NULL,
     user_id INTEGER,
     user_name TEXT,
+    rating INTEGER NOT NULL DEFAULT 0,
+    is_approved INTEGER NOT NULL DEFAULT 0,
+    approval_id INTEGER,
     created_at TEXT,
     synced_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_translations_string_lang
     ON translations (string_id, language_id);
+
+-- String-level comments and issues. Fetched lazily per string (most
+-- strings have none), cached here once seen.
+CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY,
+    string_id INTEGER NOT NULL,
+    project_id INTEGER NOT NULL,
+    language_id TEXT,
+    text TEXT NOT NULL,
+    user_id INTEGER,
+    user_name TEXT,
+    type TEXT,                           -- 'comment' | 'issue'
+    issue_type TEXT,
+    issue_status TEXT,
+    is_resolved INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT,
+    synced_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_comments_string ON comments (string_id);
 
 CREATE TABLE IF NOT EXISTS translation_drafts (
     string_id INTEGER NOT NULL,

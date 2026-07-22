@@ -47,6 +47,9 @@ export interface TranslationInfo {
   id: number;
   text: string;
   user_name: string | null;
+  rating: number;
+  is_approved: number;
+  approval_id: number | null;
   created_at: string | null;
 }
 
@@ -64,8 +67,9 @@ export interface SourceString {
   max_length: number | null;
   has_plurals: number;
   is_hidden: number;
-  translation: TranslationInfo | null;
+  translations: TranslationInfo[];
   draft: DraftInfo | null;
+  comment_count: number;
 }
 
 export interface FileStringsResponse {
@@ -76,6 +80,17 @@ export interface SubmitTranslationResult {
   status: "synced" | "queued" | "rejected";
   reason?: string;
   translation?: { id: number; text: string; user_name: string | null };
+}
+
+export interface CommentInfo {
+  id: number;
+  text: string;
+  user_name: string | null;
+  type: string | null;
+  issue_type: string | null;
+  issue_status: string | null;
+  is_resolved: number;
+  created_at: string | null;
 }
 
 export const api = {
@@ -102,4 +117,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ language_id: languageId, text }),
     }),
+  approveTranslation: (projectId: number, translationId: number) =>
+    request<{ status: string; approval_id: number }>(
+      `/projects/${projectId}/translations/${translationId}/approve`,
+      { method: "POST" },
+    ),
+  unapproveTranslation: (projectId: number, translationId: number) =>
+    request<{ status: string }>(`/projects/${projectId}/translations/${translationId}/approve`, {
+      method: "DELETE",
+    }),
+  getComments: (projectId: number, stringId: number) =>
+    request<{ comments: CommentInfo[] }>(`/projects/${projectId}/strings/${stringId}/comments`),
+  addComment: (projectId: number, stringId: number, languageId: string, text: string) =>
+    request<{ status: string; count: number }>(
+      `/projects/${projectId}/strings/${stringId}/comments`,
+      { method: "POST", body: JSON.stringify({ text, language_id: languageId }) },
+    ),
 };

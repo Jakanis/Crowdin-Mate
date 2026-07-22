@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from app import config, offline_queue
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
-from app.sync.file_content_sync import sync_file_content
+from app.sync.file_content_sync import sync_file_content, sync_string_comments
 from app.sync.tree_sync import sync_project_tree
 
 logging.basicConfig(level=logging.INFO)
@@ -195,16 +195,37 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
                 (file_id,),
             )
         ]
-        translations = {
-            row["string_id"]: dict(row)
+        # All translations per string, approved first then newest — the
+        # order a proofreader wants (canonical text on top, latest
+        # candidates next).
+        translations_by_string: dict[int, list] = {}
+        for row in conn.execute(
+            """
+            SELECT t.string_id, t.id, t.text, t.user_name, t.rating,
+                   t.is_approved, t.approval_id, t.created_at
+            FROM translations t
+            JOIN source_strings s ON s.id = t.string_id
+            WHERE s.file_id = ? AND t.language_id = ?
+            ORDER BY t.is_approved DESC, t.created_at DESC
+            """,
+            (file_id, language_id),
+        ):
+            translations_by_string.setdefault(row["string_id"], []).append(dict(row))
+
+        # Comment counts per string (from whatever's cached; the panel
+        # fetches fresh on open). Lets the UI show a "has comments" hint
+        # without a per-string call up front.
+        comment_counts = {
+            row["string_id"]: row["n"]
             for row in conn.execute(
                 """
-                SELECT t.string_id, t.id, t.text, t.user_name, t.created_at
-                FROM translations t
-                JOIN source_strings s ON s.id = t.string_id
-                WHERE s.file_id = ? AND t.language_id = ?
+                SELECT c.string_id, COUNT(*) n
+                FROM comments c
+                JOIN source_strings s ON s.id = c.string_id
+                WHERE s.file_id = ?
+                GROUP BY c.string_id
                 """,
-                (file_id, language_id),
+                (file_id,),
             )
         }
         drafts = {
@@ -221,8 +242,9 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
         }
 
     for s in strings:
-        s["translation"] = translations.get(s["id"])
+        s["translations"] = translations_by_string.get(s["id"], [])
         s["draft"] = drafts.get(s["id"])
+        s["comment_count"] = comment_counts.get(s["id"], 0)
 
     return {"strings": strings}
 
@@ -330,3 +352,104 @@ def _extract_validation_message(exc: APIException) -> str:
         return payload["errors"][0]["error"]["errors"][0]["message"]
     except (ValueError, KeyError, IndexError, TypeError):
         return exc.message or "Rejected by Crowdin"
+
+
+@app.post("/projects/{project_id}/translations/{translation_id}/approve")
+async def approve_translation(project_id: int, translation_id: int):
+    """Approve a translation and record the resulting approval id locally
+    (needed to un-approve it later). Approving is idempotent-ish on
+    Crowdin's side but we just reflect whatever it returns."""
+    client = get_client()
+    try:
+        resp = await run_in_threadpool(
+            call_with_limits, client.string_translations.add_approval,
+            translationId=translation_id, projectId=project_id,
+        )
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    approval = resp.get("data", resp)
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE translations SET is_approved = 1, approval_id = ? WHERE id = ?",
+            (approval["id"], translation_id),
+        )
+    return {"status": "approved", "approval_id": approval["id"]}
+
+
+@app.delete("/projects/{project_id}/translations/{translation_id}/approve")
+async def unapprove_translation(project_id: int, translation_id: int):
+    """Remove an approval. Crowdin's remove endpoint is keyed by the
+    approval id, not the translation id, so we look up the one we stored."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT approval_id FROM translations WHERE id = ?", (translation_id,)
+        ).fetchone()
+
+    if row is None or row["approval_id"] is None:
+        raise HTTPException(status_code=404, detail="No stored approval for this translation")
+
+    client = get_client()
+    try:
+        await run_in_threadpool(
+            call_with_limits, client.string_translations.remove_approval,
+            approvalId=row["approval_id"], projectId=project_id,
+        )
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE translations SET is_approved = 0, approval_id = NULL WHERE id = ?",
+            (translation_id,),
+        )
+    return {"status": "unapproved"}
+
+
+@app.get("/projects/{project_id}/strings/{string_id}/comments")
+async def get_string_comments(project_id: int, string_id: int):
+    """Fetches fresh from Crowdin (comments are the least cache-critical
+    data and change independently of translations), caches, and returns."""
+    try:
+        await run_in_threadpool(sync_string_comments, project_id, string_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    with get_conn() as conn:
+        comments = [
+            dict(row) for row in conn.execute(
+                """
+                SELECT id, text, user_name, type, issue_type, issue_status,
+                       is_resolved, created_at
+                FROM comments WHERE string_id = ? ORDER BY created_at
+                """,
+                (string_id,),
+            )
+        ]
+    return {"comments": comments}
+
+
+class CommentIn(BaseModel):
+    text: str
+    language_id: str
+
+
+@app.post("/projects/{project_id}/strings/{string_id}/comments")
+async def add_string_comment(project_id: int, string_id: int, body: CommentIn):
+    """Post a plain comment (not an issue) on a string. Re-syncs the
+    string's comments afterward so the returned list includes the new one
+    with its server-assigned id and timestamp."""
+    from crowdin_api.api_resources.string_comments.enums import StringCommentType
+
+    client = get_client()
+    try:
+        await run_in_threadpool(
+            call_with_limits, client.string_comments.add_string_comment,
+            text=body.text, stringId=string_id, targetLanguageId=body.language_id,
+            type=StringCommentType.COMMENT, projectId=project_id,
+        )
+        comments = await run_in_threadpool(sync_string_comments, project_id, string_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    return {"status": "posted", "count": len(comments)}

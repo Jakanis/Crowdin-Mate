@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef, useState } from "react";
-import { api, type FileStringsResponse, type SourceString } from "../api/client";
+import { api, type SourceString, type TranslationInfo } from "../api/client";
 
 interface StringListProps {
   projectId: number;
@@ -21,8 +21,8 @@ export function StringList({ projectId, fileId, languageId }: StringListProps) {
   const virtualizer = useVirtualizer({
     count: strings.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 160,
-    overscan: 6,
+    estimateSize: () => 280,
+    overscan: 4,
   });
 
   if (query.isLoading) return <p className="hint">Loading strings…</p>;
@@ -56,6 +56,11 @@ export function StringList({ projectId, fileId, languageId }: StringListProps) {
   );
 }
 
+function bestTranslationText(s: SourceString): string {
+  const approved = s.translations.find((t) => t.is_approved);
+  return approved?.text ?? s.translations[0]?.text ?? "";
+}
+
 function StringRow({
   projectId,
   fileId,
@@ -68,12 +73,15 @@ function StringRow({
   s: SourceString;
 }) {
   const queryClient = useQueryClient();
-  const initialText = s.draft?.dirty ? s.draft.draft_text : (s.translation?.text ?? "");
-  const [text, setText] = useState(initialText);
+  const refetchStrings = () =>
+    queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
+
+  const [text, setText] = useState(s.draft?.dirty ? s.draft.draft_text : bestTranslationText(s));
   const [status, setStatus] = useState<"idle" | "saving" | "synced" | "queued" | "rejected" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showComments, setShowComments] = useState(false);
 
-  const mutation = useMutation({
+  const submit = useMutation({
     mutationFn: () => api.submitTranslation(projectId, s.id, languageId, text),
     onMutate: () => {
       setStatus("saving");
@@ -82,24 +90,7 @@ function StringRow({
     onSuccess: (result) => {
       setStatus(result.status);
       if (result.status === "rejected") setErrorMessage(result.reason ?? "Rejected by Crowdin");
-      queryClient.setQueryData<FileStringsResponse>(
-        ["file-strings", projectId, fileId, languageId],
-        (prev) => {
-          if (!prev) return prev;
-          return {
-            strings: prev.strings.map((row) =>
-              row.id === s.id
-                ? {
-                    ...row,
-                    translation: result.translation
-                      ? { string_id: row.id, id: result.translation.id, text: result.translation.text, user_name: result.translation.user_name, created_at: null }
-                      : row.translation,
-                  }
-                : row,
-            ),
-          };
-        },
-      );
+      if (result.status === "synced") refetchStrings();
     },
     onError: (err: Error) => {
       setStatus("error");
@@ -107,35 +98,165 @@ function StringRow({
     },
   });
 
-  const dirty = text !== (s.translation?.text ?? "");
+  const dirty = text.trim() !== "" && text !== bestTranslationText(s);
+
+  if (s.has_plurals) {
+    return (
+      <div className="string-row">
+        <div className="string-source">{s.text}</div>
+        <p className="hint">
+          <strong>{s.identifier ?? s.id}</strong> has plural forms — not yet editable here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="string-row">
-      {s.has_plurals ? (
-        <p className="hint">
-          <strong>{s.identifier ?? s.id}</strong> has plural forms — not yet editable here (Phase 2).
-        </p>
-      ) : (
-        <>
-          <div className="string-source">{s.text}</div>
-          <textarea
-            className="string-target"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={Math.min(8, Math.max(2, Math.ceil(text.length / 60)))}
-          />
-          <div className="string-row-footer">
-            <button onClick={() => mutation.mutate()} disabled={!dirty || mutation.isPending}>
-              {mutation.isPending ? "Saving…" : "Save"}
-            </button>
-            <StatusBadge status={status} />
-            {errorMessage && <span className="error">{errorMessage}</span>}
-            {s.translation?.user_name && status === "idle" && (
-              <span className="string-meta">last by {s.translation.user_name}</span>
-            )}
-          </div>
-        </>
+      <div className="string-source">{s.text}</div>
+      {s.context && <div className="string-context">{s.context}</div>}
+
+      {s.translations.length > 0 && (
+        <ul className="translation-list">
+          {s.translations.map((t) => (
+            <TranslationItem
+              key={t.id}
+              projectId={projectId}
+              t={t}
+              onChanged={refetchStrings}
+              onEdit={() => setText(t.text)}
+            />
+          ))}
+        </ul>
       )}
+
+      <div className="add-translation">
+        <label className="add-translation-label">New / edited translation</label>
+        <textarea
+          className="string-target"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={Math.min(8, Math.max(2, Math.ceil(text.length / 60)))}
+          placeholder="Type a translation and Save to submit it to Crowdin"
+        />
+        <div className="string-row-footer">
+          <button onClick={() => submit.mutate()} disabled={!dirty || submit.isPending}>
+            {submit.isPending ? "Saving…" : "Save as new translation"}
+          </button>
+          <StatusBadge status={status} />
+          {errorMessage && <span className="error">{errorMessage}</span>}
+        </div>
+      </div>
+
+      <button className="comments-toggle" onClick={() => setShowComments((v) => !v)}>
+        {showComments ? "▾" : "▸"} Comments{s.comment_count > 0 ? ` (${s.comment_count})` : ""}
+      </button>
+      {showComments && (
+        <CommentsPanel projectId={projectId} stringId={s.id} languageId={languageId} onPosted={refetchStrings} />
+      )}
+    </div>
+  );
+}
+
+function TranslationItem({
+  projectId,
+  t,
+  onChanged,
+  onEdit,
+}: {
+  projectId: number;
+  t: TranslationInfo;
+  onChanged: () => void;
+  onEdit: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  const approve = useMutation({
+    mutationFn: () =>
+      t.is_approved
+        ? api.unapproveTranslation(projectId, t.id)
+        : api.approveTranslation(projectId, t.id),
+    onSuccess: () => {
+      setError(null);
+      onChanged();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  return (
+    <li className={`translation-item${t.is_approved ? " translation-item--approved" : ""}`}>
+      <div className="translation-text">{t.text}</div>
+      <div className="translation-meta">
+        {t.is_approved && <span className="approved-badge">✓ Approved</span>}
+        {t.user_name && <span className="translation-author">{t.user_name}</span>}
+        {t.rating !== 0 && <span className="translation-rating">★ {t.rating}</span>}
+        <button className="link-button" onClick={onEdit}>
+          Edit
+        </button>
+        <button className="link-button" onClick={() => approve.mutate()} disabled={approve.isPending}>
+          {approve.isPending ? "…" : t.is_approved ? "Unapprove" : "Approve"}
+        </button>
+        {error && <span className="error">{error}</span>}
+      </div>
+    </li>
+  );
+}
+
+function CommentsPanel({
+  projectId,
+  stringId,
+  languageId,
+  onPosted,
+}: {
+  projectId: number;
+  stringId: number;
+  languageId: string;
+  onPosted: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [text, setText] = useState("");
+
+  const query = useQuery({
+    queryKey: ["comments", projectId, stringId],
+    queryFn: () => api.getComments(projectId, stringId),
+  });
+
+  const post = useMutation({
+    mutationFn: () => api.addComment(projectId, stringId, languageId, text),
+    onSuccess: () => {
+      setText("");
+      queryClient.invalidateQueries({ queryKey: ["comments", projectId, stringId] });
+      onPosted();
+    },
+  });
+
+  return (
+    <div className="comments-panel">
+      {query.isLoading && <p className="hint">Loading comments…</p>}
+      {query.isError && <p className="error">{(query.error as Error).message}</p>}
+      {query.data && query.data.comments.length === 0 && <p className="hint">No comments yet.</p>}
+      {query.data?.comments.map((c) => (
+        <div key={c.id} className="comment">
+          <div className="comment-meta">
+            <strong>{c.user_name ?? "Unknown"}</strong>
+            {c.type === "issue" && <span className="issue-tag">issue</span>}
+            {c.is_resolved ? <span className="resolved-tag">resolved</span> : null}
+          </div>
+          <div className="comment-text">{c.text}</div>
+        </div>
+      ))}
+      <div className="add-comment">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={2}
+          placeholder="Add a comment…"
+        />
+        <button onClick={() => post.mutate()} disabled={!text.trim() || post.isPending}>
+          {post.isPending ? "Posting…" : "Post"}
+        </button>
+        {post.isError && <span className="error">{(post.error as Error).message}</span>}
+      </div>
     </div>
   );
 }
