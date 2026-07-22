@@ -5,6 +5,7 @@ the Crowdin PAT and must never be reachable from the network.
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -345,12 +346,15 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
         strings = [
             dict(row) for row in conn.execute(
                 """
-                SELECT id, identifier, text, context, max_length, has_plurals, is_hidden
+                SELECT id, identifier, text, context, max_length, has_plurals, is_hidden, label_ids_json
                 FROM source_strings WHERE file_id = ? ORDER BY id
                 """,
                 (file_id,),
             )
         ]
+        label_titles = {
+            row["id"]: row["title"] for row in conn.execute("SELECT id, title FROM labels WHERE project_id = ?", (project_id,))
+        }
         # All translations per string, approved first then newest — the
         # order a proofreader wants (canonical text on top, latest
         # candidates next).
@@ -401,6 +405,8 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
         s["translations"] = translations_by_string.get(s["id"], [])
         s["draft"] = drafts.get(s["id"])
         s["comment_count"] = comment_counts.get(s["id"], 0)
+        label_ids = json.loads(s.pop("label_ids_json") or "[]")
+        s["labels"] = [{"id": lid, "title": label_titles[lid]} for lid in label_ids if lid in label_titles]
 
     return {"strings": strings}
 
@@ -526,8 +532,6 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
 def _extract_validation_message(exc: APIException) -> str:
     """Crowdin's validation errors are nested JSON in `context`, not
     `exc.message` — pull out the human-readable bit if present."""
-    import json
-
     try:
         payload = json.loads(exc.context)
         return payload["errors"][0]["error"]["errors"][0]["message"]

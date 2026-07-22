@@ -70,6 +70,11 @@ export interface DraftInfo {
   dirty: number;
 }
 
+export interface StringLabel {
+  id: number;
+  title: string;
+}
+
 export interface SourceString {
   id: number;
   identifier: string | null;
@@ -81,6 +86,7 @@ export interface SourceString {
   translations: TranslationInfo[];
   draft: DraftInfo | null;
   comment_count: number;
+  labels: StringLabel[];
 }
 
 export interface FileStringsResponse {

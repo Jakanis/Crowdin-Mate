@@ -97,7 +97,27 @@ export function ComfortableView({
     <div className="comfortable-view">
       <div className="comfortable-scroll">
         <div className="string-source">{s.text}</div>
-        {s.context && <div className="string-context">{s.context}</div>}
+        {(s.context || s.identifier || s.labels.length > 0) && (
+          <div className="string-meta-block">
+            {/* Crowdin's own context field is often just a copy of the
+                identifier for these XML-sourced strings (TITLE/OBJECTIVE/
+                etc.) — only show it as prose when it actually adds
+                something beyond the identifier badge below. */}
+            {s.context && s.context !== s.identifier && <div className="string-context">{s.context}</div>}
+            <div className="string-meta-row">
+              {s.identifier && (
+                <span className="string-identifier" title="String key">
+                  🔑 {s.identifier}
+                </span>
+              )}
+              {s.labels.map((label) => (
+                <span key={label.id} className="string-label-tag">
+                  {label.title}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <TranslationEditor
           key={s.id}

@@ -658,9 +658,34 @@ body {
 .string-context {
   font-size: calc(12px * var(--ui-scale));
   opacity: 0.45;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.string-meta-block {
+  margin-bottom: 8px;
+}
+
+.string-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.string-identifier {
+  font-size: calc(11px * var(--ui-scale));
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.string-label-tag {
+  font-size: calc(11px * var(--ui-scale));
+  padding: 1px 8px;
+  border-radius: 100px;
+  background: var(--accent-bg);
+  color: var(--accent);
 }
 
 .string-target {

@@ -32,6 +32,9 @@ _COLUMN_MIGRATIONS = {
         ("is_approved", "INTEGER NOT NULL DEFAULT 0"),
         ("approval_id", "INTEGER"),
     ],
+    "source_strings": [
+        ("label_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ],
 }
 
 

@@ -19,6 +19,7 @@ second or two even before the local cache makes repeat opens instant.
 Field shapes were all confirmed against live API responses.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -81,14 +82,15 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
                 """
                 INSERT INTO source_strings
                     (id, file_id, project_id, identifier, text, context,
-                     max_length, has_plurals, is_hidden, updated_at, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     max_length, has_plurals, is_hidden, label_ids_json, updated_at, synced_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     text=excluded.text,
                     context=excluded.context,
                     max_length=excluded.max_length,
                     has_plurals=excluded.has_plurals,
                     is_hidden=excluded.is_hidden,
+                    label_ids_json=excluded.label_ids_json,
                     updated_at=excluded.updated_at,
                     synced_at=excluded.synced_at
                 """,
@@ -102,6 +104,9 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
                     s.get("maxLength"),
                     1 if s.get("hasPlurals") else 0,
                     1 if s.get("isHidden") else 0,
+                    # Already present in this same list_strings response
+                    # (confirmed live) — no extra API call for it.
+                    json.dumps(s.get("labelIds") or []),
                     _iso(s.get("updatedAt")),
                     now,
                 ),

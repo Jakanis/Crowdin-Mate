@@ -53,10 +53,23 @@ CREATE TABLE IF NOT EXISTS source_strings (
     max_length INTEGER,
     has_plurals INTEGER NOT NULL DEFAULT 0,
     is_hidden INTEGER NOT NULL DEFAULT 0,
+    label_ids_json TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT,
     synced_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_source_strings_file ON source_strings (file_id);
+
+-- Project-wide label definitions (Crowdin: Strings > Labels) — small,
+-- rarely changes, synced wholesale alongside the tree crawl rather than
+-- per-file. label_ids_json above is the only per-string cost, and it's
+-- already present in the same list_strings response file_content_sync
+-- fetches anyway, so this is free beyond the once-per-sync labels call.
+CREATE TABLE IF NOT EXISTS labels (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    synced_at TEXT NOT NULL
+);
 
 -- Holds ALL submitted translations per string+language, not just the top
 -- one — a string commonly has several candidate translations from

@@ -57,6 +57,9 @@ def sync_project_tree(project_id: int) -> dict:
     )
     files = [_unwrap(f) for f in files_resp.get("data", [])]
 
+    labels_resp = call_with_limits(client.labels.with_fetch_all().list_labels, projectId=project_id)
+    labels = [_unwrap(item) for item in labels_resp.get("data", [])]
+
     now = _now()
     with get_conn() as conn:
         # Snapshot each file's previously-known updatedAt before the
@@ -147,9 +150,19 @@ def sync_project_tree(project_id: int) -> dict:
                 ),
             )
 
+        for label in labels:
+            conn.execute(
+                """
+                INSERT INTO labels (id, project_id, title, synced_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET title=excluded.title, synced_at=excluded.synced_at
+                """,
+                (label["id"], project_id, label.get("title", ""), now),
+            )
+
     logger.info(
-        "Synced project %s tree: %d directories, %d files, %d changed since last sync",
-        project_id, len(directories), len(files), len(changed_file_ids),
+        "Synced project %s tree: %d directories, %d files, %d labels, %d changed since last sync",
+        project_id, len(directories), len(files), len(labels), len(changed_file_ids),
     )
     return {
         "project_id": project_id,
