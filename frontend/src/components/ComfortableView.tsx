@@ -9,6 +9,7 @@ interface ComfortableViewProps {
   focusedIndex: number;
   onFocusChange: (index: number) => void;
   canApprove: boolean;
+  autoAdvance: boolean;
 }
 
 /** Matches Crowdin's own "Comfortable" editor view: one string at a time,
@@ -21,9 +22,12 @@ export function ComfortableView({
   focusedIndex,
   onFocusChange,
   canApprove,
+  autoAdvance,
 }: ComfortableViewProps) {
   const s = strings[focusedIndex];
   if (!s) return null;
+
+  const isLast = focusedIndex === strings.length - 1;
 
   return (
     <div className="comfortable-view">
@@ -38,6 +42,7 @@ export function ComfortableView({
           languageId={languageId}
           s={s}
           canApprove={canApprove}
+          onSaved={autoAdvance && !isLast ? () => onFocusChange(focusedIndex + 1) : undefined}
         />
       </div>
 

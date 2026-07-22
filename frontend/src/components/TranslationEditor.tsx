@@ -8,6 +8,11 @@ interface TranslationEditorProps {
   languageId: string;
   s: SourceString;
   canApprove: boolean;
+  /** Called after a successful save (synced or durably queued while
+   * offline) — Comfortable view uses this to auto-advance to the next
+   * string, matching Crowdin's own "Automatically move to next string"
+   * setting. Not passed in Side-by-Side, where "next" isn't meaningful. */
+  onSaved?: () => void;
 }
 
 function bestTranslationText(s: SourceString): string {
@@ -24,7 +29,7 @@ function bestTranslationText(s: SourceString): string {
  * (one row, expanded) layouts — the editing behavior is identical, only
  * the surrounding layout differs.
  */
-export function TranslationEditor({ projectId, fileId, languageId, s, canApprove }: TranslationEditorProps) {
+export function TranslationEditor({ projectId, fileId, languageId, s, canApprove, onSaved }: TranslationEditorProps) {
   const queryClient = useQueryClient();
   const refetchStrings = () =>
     queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
@@ -62,6 +67,10 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
       setStatus(result.status);
       if (result.status === "rejected") setErrorMessage(result.reason ?? "Rejected by Crowdin");
       if (result.status === "synced") refetchStrings();
+      // Queued counts as "saved" here too — the whole point of the
+      // offline queue is that the edit is durable even without a
+      // network, so auto-advance shouldn't block on connectivity.
+      if (result.status === "synced" || result.status === "queued") onSaved?.();
     },
     onError: (err: Error) => {
       setStatus("error");

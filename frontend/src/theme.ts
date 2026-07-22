@@ -48,6 +48,26 @@ export function useTheme() {
   return { preference, resolvedTheme, setPreference };
 }
 
+const AUTO_ADVANCE_KEY = "classicua-auto-advance";
+
+// Mirrors Crowdin's own "Automatically move to next string" editor
+// setting — same default (on), same meaning: only fires in Comfortable
+// view (Side-by-Side already shows every row at once, so "next" isn't a
+// meaningful action there), and only after a successful save.
+export function useAutoAdvance() {
+  const [enabled, setEnabledState] = useState<boolean>(() => {
+    const stored = localStorage.getItem(AUTO_ADVANCE_KEY);
+    return stored === null ? true : stored === "1";
+  });
+
+  const setEnabled = (next: boolean) => {
+    localStorage.setItem(AUTO_ADVANCE_KEY, next ? "1" : "0");
+    setEnabledState(next);
+  };
+
+  return { enabled, setEnabled };
+}
+
 export const UI_SCALE_STEPS = [0.9, 1, 1.1, 1.25, 1.4];
 const DEFAULT_SCALE = 1.1;
 

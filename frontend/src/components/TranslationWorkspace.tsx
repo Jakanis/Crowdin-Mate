@@ -11,6 +11,7 @@ interface TranslationWorkspaceProps {
   languageId: string;
   focusedStringId: number | null;
   onFocusChange: (stringId: number | null) => void;
+  autoAdvance: boolean;
 }
 
 type ViewMode = "comfortable" | "side-by-side";
@@ -27,6 +28,7 @@ export function TranslationWorkspace({
   languageId,
   focusedStringId,
   onFocusChange,
+  autoAdvance,
 }: TranslationWorkspaceProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
 
@@ -90,6 +92,7 @@ export function TranslationWorkspace({
             focusedIndex={focusedIndex}
             onFocusChange={(i) => onFocusChange(strings[i]?.id ?? null)}
             canApprove={canApprove}
+            autoAdvance={autoAdvance}
           />
         ) : (
           <SideBySideView

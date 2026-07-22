@@ -15,13 +15,20 @@ const SCALE_LABELS: Record<number, string> = {
   1.4: "X-Large",
 };
 
+interface SettingsMenuProps {
+  autoAdvance: boolean;
+  onAutoAdvanceChange: (enabled: boolean) => void;
+}
+
 /** Gear icon in the header opening a small popover — theme (with an
  * explicit light/dark choice always winning over the OS preference,
  * see theme.ts) and a UI-scale stepper standing in for a "font size"
  * setting: it zooms the whole app rather than rewriting every font-size
  * rule to rem, which scales text, icons and spacing together the same
- * way a browser's own Ctrl+/Ctrl- zoom would. */
-export function SettingsMenu() {
+ * way a browser's own Ctrl+/Ctrl- zoom would. autoAdvance is lifted to
+ * App.tsx rather than read via its own hook instance here — see the
+ * comment on useAutoAdvance's call site in App.tsx for why. */
+export function SettingsMenu({ autoAdvance, onAutoAdvanceChange }: SettingsMenuProps) {
   const [open, setOpen] = useState(false);
   const { preference, setPreference } = useTheme();
   const { scale, setScale } = useUiScale();
@@ -70,6 +77,16 @@ export function SettingsMenu() {
                   A+
                 </button>
               </div>
+            </div>
+            <div className="settings-section">
+              <label className="settings-checkbox">
+                <input
+                  type="checkbox"
+                  checked={autoAdvance}
+                  onChange={(e) => onAutoAdvanceChange(e.target.checked)}
+                />
+                Automatically move to next string
+              </label>
             </div>
           </div>
         </>

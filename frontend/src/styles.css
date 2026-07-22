@@ -224,6 +224,14 @@ body {
   opacity: 0.8;
 }
 
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .app-body {
   display: flex;
   flex: 1;

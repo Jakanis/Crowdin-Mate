@@ -6,6 +6,7 @@ import { SettingsMenu } from "./components/SettingsMenu";
 import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
+import { useAutoAdvance } from "./theme";
 
 const CLASSICUA_PROJECT_ID = 393919;
 const TARGET_LANGUAGE_ID = "uk";
@@ -38,6 +39,13 @@ export function App() {
   const [openFiles, setOpenFiles] = useState<TreeFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<number | null>(null);
   const [focusedStringIdByFile, setFocusedStringIdByFile] = useState<Record<number, number | null>>({});
+
+  // Lifted here (rather than each consumer calling useAutoAdvance() on
+  // its own) because unlike theme/UI-scale — whose effect lands on
+  // document.documentElement, so any component's hook instance sees it —
+  // this value is read directly, and separate hook instances don't share
+  // React state just because they share a localStorage key.
+  const autoAdvance = useAutoAdvance();
 
   const authStatus = useQuery({ queryKey: ["auth-status"], queryFn: api.authStatus });
 
@@ -147,7 +155,7 @@ export function App() {
           <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
             {syncMutation.isPending ? "Syncing…" : "Sync tree"}
           </button>
-          <SettingsMenu />
+          <SettingsMenu autoAdvance={autoAdvance.enabled} onAutoAdvanceChange={autoAdvance.setEnabled} />
         </div>
       </header>
 
@@ -188,6 +196,7 @@ export function App() {
                 languageId={TARGET_LANGUAGE_ID}
                 focusedStringId={focusedStringIdByFile[file.id] ?? null}
                 onFocusChange={(stringId) => setFocusedStringIdFor(file.id, stringId)}
+                autoAdvance={autoAdvance.enabled}
               />
             </div>
           ))}
