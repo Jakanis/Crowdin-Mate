@@ -130,6 +130,31 @@ async def retry_offline_queue_item(item_id: int):
     return {"drained": drained}
 
 
+@app.delete("/offline-queue/{item_id}")
+async def delete_offline_queue_item(item_id: int):
+    """Discards a queue item outright rather than retrying it — for the
+    genuinely un-fixable case (e.g. Crowdin's "Duplicate translation.
+    Please vote or approve the original." — retrying that forever can
+    never succeed, since the fix is to vote/approve the existing one,
+    not resubmit this one). Also clears the draft's dirty flag for the
+    same reason the terminal-failure path in offline_queue.py does: an
+    abandoned edit must stop being treated as the user's authoritative
+    pending translation, or it keeps silently overriding the real
+    current translation on every future visit to that string."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT string_id, language_id FROM offline_queue WHERE id = ?", (item_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="No such queue item")
+        conn.execute("DELETE FROM offline_queue WHERE id = ?", (item_id,))
+        conn.execute(
+            "UPDATE translation_drafts SET dirty = 0 WHERE string_id = ? AND language_id = ?",
+            (row["string_id"], row["language_id"]),
+        )
+    return {"ok": True}
+
+
 class TokenIn(BaseModel):
     token: str
 

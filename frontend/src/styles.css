@@ -397,6 +397,10 @@ body {
   word-break: break-word;
 }
 
+.offline-queue-discard {
+  color: var(--danger);
+}
+
 .app-body {
   display: flex;
   flex: 1;

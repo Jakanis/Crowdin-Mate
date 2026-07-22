@@ -167,6 +167,8 @@ export const api = {
   drainOfflineQueue: () => request<{ drained: number }>("/offline-queue/drain", { method: "POST" }),
   retryOfflineQueueItem: (itemId: number) =>
     request<{ drained: number }>(`/offline-queue/${itemId}/retry`, { method: "POST" }),
+  deleteOfflineQueueItem: (itemId: number) =>
+    request<{ ok: boolean }>(`/offline-queue/${itemId}`, { method: "DELETE" }),
   submitTranslation: (projectId: number, stringId: number, languageId: string, text: string) =>
     request<SubmitTranslationResult>(`/projects/${projectId}/strings/${stringId}/translations`, {
       method: "POST",

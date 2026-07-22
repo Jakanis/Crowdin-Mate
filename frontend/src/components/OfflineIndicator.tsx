@@ -59,6 +59,10 @@ export function OfflineIndicator() {
     mutationFn: (itemId: number) => api.retryOfflineQueueItem(itemId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["offline-queue"] }),
   });
+  const deleteMutation = useMutation({
+    mutationFn: (itemId: number) => api.deleteOfflineQueueItem(itemId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["offline-queue"] }),
+  });
 
   const hasQueueItems = items.length > 0;
 
@@ -95,13 +99,26 @@ export function OfflineIndicator() {
                         </span>
                         <span>{timeAgo(item.created_at)}</span>
                         {item.status === "failed" && (
-                          <button
-                            className="link-button"
-                            onClick={() => retryMutation.mutate(item.id)}
-                            disabled={retryMutation.isPending}
-                          >
-                            Retry
-                          </button>
+                          <>
+                            <button
+                              className="link-button"
+                              onClick={() => retryMutation.mutate(item.id)}
+                              disabled={retryMutation.isPending}
+                            >
+                              Retry
+                            </button>
+                            <button
+                              className="link-button offline-queue-discard"
+                              onClick={() => {
+                                if (confirm("Discard this translation? It will not be sent to Crowdin.")) {
+                                  deleteMutation.mutate(item.id);
+                                }
+                              }}
+                              disabled={deleteMutation.isPending}
+                            >
+                              Discard
+                            </button>
+                          </>
                         )}
                       </div>
                       {item.last_error && <div className="offline-queue-item-error">{item.last_error}</div>}
