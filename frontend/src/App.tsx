@@ -59,8 +59,9 @@ export function App() {
         <main className="app-main">
           {selectedFile ? (
             <p>
-              Selected: <strong>{selectedFile.path}</strong> ({selectedFile.strings_count ?? "?"} strings) —
-              string editing lands in Phase 1.
+              Selected: <strong>{selectedFile.path}</strong>
+              {selectedFile.strings_count != null && ` (${selectedFile.strings_count} strings)`} — string
+              editing lands in Phase 1.
             </p>
           ) : (
             <p className="hint">Select a file from the tree.</p>

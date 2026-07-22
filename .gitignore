@@ -7,6 +7,11 @@ venv/
 # Node
 node_modules/
 dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+vite-out.log
+vite-err.log
 
 # Local data / secrets (the PAT itself lives in the OS keyring, never here)
 *.sqlite3

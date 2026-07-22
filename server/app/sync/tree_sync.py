@@ -109,7 +109,10 @@ def sync_project_tree(project_id: int) -> dict:
                     f.get("directoryId"),
                     f.get("name", ""),
                     f.get("path", f.get("name", "")),
-                    f.get("status", {}).get("phrases") if isinstance(f.get("status"), dict) else None,
+                    # Crowdin's file object from list_files has no phrase count field
+                    # (confirmed against the live response) — this gets filled in
+                    # once Phase 1 syncs a file's actual source strings.
+                    None,
                     f.get("updatedAt"),
                     now,
                 ),
