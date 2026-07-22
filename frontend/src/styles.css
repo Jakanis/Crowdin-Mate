@@ -973,6 +973,7 @@ body {
 }
 
 .rail-icon {
+  position: relative;
   border: none;
   background: none;
   font-size: calc(16px * var(--ui-scale));
@@ -985,6 +986,21 @@ body {
 .rail-icon.active {
   background: var(--accent-bg);
   opacity: 1;
+}
+
+.rail-icon-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: calc(9px * var(--ui-scale));
+  line-height: 14px;
+  text-align: center;
 }
 
 .right-sidebar-panel {

@@ -1,4 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { api } from "../api/client";
 import { CommentsPanel } from "./CommentsPanel";
 import { GlossaryPanel } from "./GlossaryPanel";
 import { TmPanel } from "./TmPanel";
@@ -29,6 +31,22 @@ export function RightSidebar({ projectId, stringId, languageId, width, onResizeS
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("comments");
 
+  // Same queryKey CommentsPanel uses, so opening the tab reuses this
+  // fetch instead of firing a second one. A short staleTime keeps quick
+  // back-and-forth navigation (arrow keys, Prev/Next) from re-triggering
+  // a live Crowdin fetch for every string it passes through — this runs
+  // on every focus change now, not just when the tab is opened, so it's
+  // a much hotter path than before. Query itself is fire-and-forget: it
+  // never blocks rendering the translation editor, which loads via its
+  // own separate query.
+  const commentsQuery = useQuery({
+    queryKey: ["comments", projectId, stringId],
+    queryFn: () => api.getComments(projectId, stringId as number),
+    enabled: stringId != null,
+    staleTime: 60_000,
+  });
+  const commentCount = commentsQuery.data?.comments.length;
+
   const selectTab = (key: TabKey) => {
     if (!collapsed && key === activeTab) {
       setCollapsed(true);
@@ -49,6 +67,9 @@ export function RightSidebar({ projectId, stringId, languageId, width, onResizeS
             title={t.label}
           >
             {t.icon}
+            {t.key === "comments" && !!commentCount && (
+              <span className="rail-icon-badge">{commentCount}</span>
+            )}
           </button>
         ))}
       </div>
