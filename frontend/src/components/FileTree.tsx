@@ -185,7 +185,7 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
 
 // Matches Crowdin's own color convention: blue for translated, green for
 // approved. Approved is always a subset of translated, so both bar and
-// pie encode it as a single layered gradient — green from 0 to approved%,
+// pie encode it as a single layered indicator — green from 0 to approved%,
 // blue from approved% to translated%, a neutral track for the rest —
 // rather than two separate indicators. That layering also means "fully
 // translated and approved" naturally renders as solid green with no
@@ -201,6 +201,14 @@ function progressTitle(p: ProgressInfo): string {
   return `${p.translation_progress}% translated, ${p.approval_progress}% approved`;
 }
 
+function ProgressPercent({ progress }: { progress: ProgressInfo }) {
+  return (
+    <span className="progress-pct" title={progressTitle(progress)}>
+      {progress.translation_progress}%
+    </span>
+  );
+}
+
 function ProgressBar({ progress }: { progress: ProgressInfo }) {
   const { translation_progress: t, approval_progress: a } = progress;
 
@@ -212,18 +220,59 @@ function ProgressBar({ progress }: { progress: ProgressInfo }) {
     );
   }
 
-  const gradient = `linear-gradient(to right, ${APPROVED_COLOR} 0%, ${APPROVED_COLOR} ${a}%, ${TRANSLATED_COLOR} ${a}%, ${TRANSLATED_COLOR} ${t}%, ${TRACK_COLOR} ${t}%, ${TRACK_COLOR} 100%)`;
   return (
-    <span
-      className={`progress-bar${t === 100 ? " progress-bar--complete" : ""}`}
-      style={{ background: gradient }}
-      title={progressTitle(progress)}
-    />
+    <>
+      <ProgressPercent progress={progress} />
+      <span
+        className={`progress-bar${t === 100 ? " progress-bar--complete" : ""}`}
+        title={progressTitle(progress)}
+      >
+        <span style={{ width: `${a}%`, background: APPROVED_COLOR }} />
+        <span style={{ width: `${t - a}%`, background: TRANSLATED_COLOR }} />
+      </span>
+    </>
   );
 }
 
+// Built from stacked solid-stroke circles rather than a conic-gradient —
+// see the note above .progress-bar in styles.css for why. A circle
+// stroked at half its own radius, with stroke-width equal to that
+// radius, fills the wedge from center to edge exactly like a pie slice;
+// stroke-dasharray/dashoffset then trims that ring down to a percentage.
 function ProgressPie({ progress }: { progress: ProgressInfo }) {
   const { translation_progress: t, approval_progress: a } = progress;
-  const gradient = `conic-gradient(${APPROVED_COLOR} 0% ${a}%, ${TRANSLATED_COLOR} ${a}% ${t}%, ${TRACK_COLOR} ${t}% 100%)`;
-  return <span className="progress-pie" style={{ background: gradient }} title={progressTitle(progress)} />;
+  const size = 20;
+  const r = size / 4;
+  const circumference = 2 * Math.PI * r;
+  const dash = (pct: number) => `${(circumference * pct) / 100} ${circumference}`;
+
+  return (
+    <>
+      <ProgressPercent progress={progress} />
+      <svg className="progress-pie" viewBox={`0 0 ${size} ${size}`}>
+        <title>{progressTitle(progress)}</title>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TRACK_COLOR} strokeWidth={size / 2} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={TRANSLATED_COLOR}
+          strokeWidth={size / 2}
+          strokeDasharray={dash(t)}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={APPROVED_COLOR}
+          strokeWidth={size / 2}
+          strokeDasharray={dash(a)}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+    </>
+  );
 }
