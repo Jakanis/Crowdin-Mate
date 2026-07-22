@@ -21,6 +21,13 @@ export function TabBar({ openFiles, activeFileId, onSelectTab, onCloseTab }: Tab
           key={f.id}
           className={`tab${f.id === activeFileId ? " tab--active" : ""}`}
           onClick={() => onSelectTab(f.id)}
+          onMouseDown={(e) => {
+            // Chromium starts its middle-click autoscroll on mousedown,
+            // before click/auxclick ever fires — preventDefault() in the
+            // auxclick handler below is too late to stop it. Has to be
+            // stopped here instead.
+            if (e.button === 1) e.preventDefault();
+          }}
           onAuxClick={(e) => {
             // Middle-click closes the tab, matching real browser tabs —
             // auxclick is the correct event for non-primary buttons
