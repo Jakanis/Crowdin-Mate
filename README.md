@@ -14,10 +14,18 @@ for a file, confirmed round-tripping correctly to crowdin.com's own editor.
 ## Prerequisites
 
 - **Python 3.12+** and **Node.js 20+** (both installed).
-- **A Crowdin Personal Access Token** — create one at crowdin.com → your avatar → Settings →
-  API → **New Token**. You'll paste it directly into the app's own "Connect your Crowdin
-  account" screen once both servers are running; it's stored via your OS credential manager
-  (Windows Credential Manager here), never in a file in this repo.
+- **A way to authenticate with Crowdin** — either works, chosen from the app's own "Connect
+  your Crowdin account" screen once both servers are running; credentials are stored via your
+  OS credential manager (Windows Credential Manager here), never in a file in this repo:
+  - **OAuth (recommended)** — one-time setup: crowdin.com → your avatar → Settings → OAuth →
+    New Application, using callback URL `http://127.0.0.1:8000/oauth/callback` and as many
+    scopes as you can select (projects, files, translations, comments, TM, glossaries). Paste
+    the resulting Client ID/Secret into the app once; after that, "Connect with Crowdin" opens
+    a normal browser login/authorization page and the backend's own `/oauth/callback` route
+    catches the redirect. Access tokens auto-refresh (`server/app/oauth.py`) — no PAT to ever
+    regenerate.
+  - **Personal Access Token** — simpler for a quick one-off: crowdin.com → your avatar →
+    Settings → API → New Token, pasted directly into the app.
 
 ## Running it
 
@@ -54,6 +62,26 @@ npm run dev
 Opens on `http://localhost:5173`. First run shows the token screen; after connecting, click
 "Sync tree" once to crawl the ClassicUA project (393919) into the local cache — subsequent
 loads read from SQLite instantly.
+
+## Desktop app (packaged)
+
+Runs as a real native window instead of two dev servers + a browser tab:
+
+```bash
+# from frontend/ — builds the production bundle to frontend/dist
+npm run build
+
+# from server/ — spawns the backend in a background thread, opens frontend/dist
+# in a pywebview window pointed at it
+python desktop.py
+```
+
+`server/app/main.py` mounts `frontend/dist` as static files (registered *after* every API
+route, so it never shadows them) whenever that directory exists — absent in the normal dev
+workflow above, since Vite's own dev server serves the frontend then. Same port (8000), same
+OAuth redirect_uri, same SQLite cache under `~/.classicua-client` either way; only how it's
+launched differs. Rebuild (`npm run build`) after any frontend change — `desktop.py` serves
+whatever was last built, not live source.
 
 ## Architecture
 

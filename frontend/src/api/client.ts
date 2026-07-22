@@ -14,6 +14,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface AuthStatus {
   configured: boolean;
+  mode: "oauth" | "pat" | null;
+  oauth_client_configured: boolean;
 }
 
 export interface ProjectLanguage {
@@ -173,6 +175,12 @@ export const api = {
       body: JSON.stringify({ token }),
     }),
   clearToken: () => request<{ ok: boolean }>("/auth/token", { method: "DELETE" }),
+  setOAuthClient: (clientId: string, clientSecret: string) =>
+    request<{ ok: boolean }>("/auth/oauth/client", {
+      method: "POST",
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+    }),
+  getOAuthAuthorizeUrl: () => request<{ url: string }>("/auth/oauth/authorize-url"),
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   syncTree: (projectId: number) =>
     request<{ directories: number; files: number; synced_at: string; changed_file_ids: number[] }>(

@@ -1406,6 +1406,30 @@ body {
   font-size: calc(14px * var(--ui-scale));
 }
 
+.token-setup p {
+  font-size: calc(13.5px * var(--ui-scale));
+  opacity: 0.8;
+  line-height: 1.5;
+}
+
+.token-setup-redirect-uri {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.12);
+  font-size: calc(13px * var(--ui-scale));
+  word-break: break-all;
+  user-select: all;
+}
+
+.token-setup form.token-setup-oauth-client-form {
+  flex-direction: column;
+}
+
+.token-setup-switch {
+  margin-top: 18px;
+}
+
 /* --- translation workspace --- */
 .translation-workspace {
   flex: 1;

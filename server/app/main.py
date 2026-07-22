@@ -9,15 +9,17 @@ import json
 import logging
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 
 from crowdin_api.exceptions import APIException
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import config, offline_queue
+from app import config, oauth, offline_queue
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
@@ -162,41 +164,104 @@ class TokenIn(BaseModel):
     token: str
 
 
-@app.post("/auth/token")
-async def set_token(body: TokenIn):
-    """Store the PAT and validate it in one step. The token value itself
-    is never echoed back in the response."""
-    config.set_token(body.token)
-    try:
-        client = get_client()
-        user = await run_in_threadpool(call_with_limits, client.users.get_authenticated_user)
-    except APIException as exc:
-        config.clear_token()
-        raise HTTPException(status_code=401, detail=f"Token rejected by Crowdin: {exc.message}")
-
+async def _validate_and_stash_user() -> dict:
+    """Confirms whichever credential was just stored (PAT or fresh OAuth
+    tokens) actually works, and stashes the authenticated user's numeric
+    id — get_member_info(memberId=self) needs it for the permission
+    check below, and there's no "who am I in this project" endpoint that
+    takes the token alone. Shared by the PAT endpoint and the OAuth
+    callback so both end up in the same validated state."""
+    client = get_client()
+    user = await run_in_threadpool(call_with_limits, client.users.get_authenticated_user)
     user_data = user.get("data", user)
-    # Stashed for the permission check below — get_member_info(memberId=self)
-    # needs our own numeric id, and there's no "who am I in this project"
-    # endpoint that takes the token alone.
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO app_config (key, value) VALUES ('user_id', ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (str(user_data.get("id")),),
         )
+    return user_data
+
+
+@app.post("/auth/token")
+async def set_token(body: TokenIn):
+    """Store the PAT and validate it in one step. The token value itself
+    is never echoed back in the response."""
+    config.set_pat(body.token)
+    try:
+        user_data = await _validate_and_stash_user()
+    except APIException as exc:
+        config.clear_pat()
+        raise HTTPException(status_code=401, detail=f"Token rejected by Crowdin: {exc.message}")
     return {"ok": True, "username": user_data.get("username"), "name": user_data.get("fullName")}
 
 
 @app.get("/auth/status")
 async def auth_status():
     token = config.get_token()
-    return {"configured": token is not None}
+    oauth_client = config.get_oauth_client()
+    return {
+        "configured": token is not None,
+        "mode": "oauth" if config.get_oauth_tokens() is not None else ("pat" if token else None),
+        "oauth_client_configured": oauth_client is not None,
+    }
 
 
 @app.delete("/auth/token")
 async def delete_token():
     config.clear_token()
     return {"ok": True}
+
+
+class OAuthClientIn(BaseModel):
+    client_id: str
+    client_secret: str
+
+
+@app.post("/auth/oauth/client")
+async def set_oauth_client(body: OAuthClientIn):
+    """One-time setup: the user's own OAuth app credentials from Crowdin
+    account settings (Settings → OAuth → New Application). Registering
+    the app itself is something only the user can do — this just stores
+    what they created. Doesn't authenticate anything by itself; the
+    frontend follows up with GET /auth/oauth/authorize-url."""
+    config.set_oauth_client(body.client_id, body.client_secret)
+    return {"ok": True}
+
+
+@app.get("/auth/oauth/authorize-url")
+async def get_oauth_authorize_url():
+    try:
+        return {"url": oauth.build_authorize_url()}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/oauth/callback")
+async def oauth_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    """Crowdin redirects the user's browser here after they authorize
+    (or decline) the app — see oauth.REDIRECT_URI. Renders a plain HTML
+    page rather than JSON since a real browser tab lands here directly,
+    not a fetch() call. The frontend discovers success by polling
+    GET /auth/status, same as it already does after the PAT flow."""
+    def page(message: str) -> HTMLResponse:
+        return HTMLResponse(f"<html><body style='font-family: sans-serif; padding: 2em;'>"
+                             f"<p>{message}</p><p>You can close this tab.</p></body></html>")
+
+    if error:
+        return page(f"Crowdin authorization failed: {error}")
+    if not code or not state or not oauth.is_valid_state(state):
+        return page("Invalid or expired authorization request. Please try connecting again.")
+
+    try:
+        oauth.exchange_code(code)
+        await _validate_and_stash_user()
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user in the page, not just logs
+        config.clear_oauth()
+        logger.exception("OAuth callback failed")
+        return page(f"Could not complete login: {exc}")
+
+    return page("Connected to Crowdin successfully!")
 
 
 @app.get("/projects")
@@ -881,3 +946,15 @@ async def get_glossary_matches(project_id: int, string_id: int, language_id: str
             )
         ]
     return {"matches": matches}
+
+
+# Serves the built frontend (frontend/dist, from `npm run build`) for the
+# packaged desktop app — see desktop.py. Registered LAST and deliberately:
+# StaticFiles(html=True) mounted at "/" is a catch-all, and FastAPI
+# matches routes in registration order, so every API route above must
+# already exist before this or it would shadow them. Absent entirely in
+# the normal dev workflow (Vite's own dev server on :5173 serves the
+# frontend then, and this directory won't exist yet).
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if _FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="frontend")
