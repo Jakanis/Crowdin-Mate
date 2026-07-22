@@ -13,6 +13,8 @@ interface SidebarProps {
   strings: SourceString[];
   focusedStringId: number | null;
   onFocusString: (stringId: number) => void;
+  width: number;
+  onResizeStart: (e: React.MouseEvent) => void;
 }
 
 type Tab = "files" | "strings";
@@ -31,6 +33,8 @@ export function Sidebar({
   strings,
   focusedStringId,
   onFocusString,
+  width,
+  onResizeStart,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>("files");
@@ -46,7 +50,8 @@ export function Sidebar({
   }
 
   return (
-    <aside className="app-sidebar">
+    <>
+      <aside className="app-sidebar" style={{ width }}>
       <div className="sidebar-tabs">
         <button className={tab === "files" ? "active" : ""} onClick={() => setTab("files")}>
           Files
@@ -79,6 +84,8 @@ export function Sidebar({
       <div className="sidebar-panel" hidden={!(tab === "strings" && selectedFile != null)}>
         <FileStringsList strings={strings} focusedStringId={focusedStringId} onSelect={onFocusString} />
       </div>
-    </aside>
+      </aside>
+      <div className="resize-handle" onMouseDown={onResizeStart} />
+    </>
   );
 }

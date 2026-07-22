@@ -8,6 +8,7 @@ import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
 import { useAutoAdvance } from "./theme";
+import { useResizableWidth } from "./useResizableWidth";
 import { useSyncTree } from "./useSyncTree";
 
 const CLASSICUA_PROJECT_ID = 393919;
@@ -54,6 +55,13 @@ export function App() {
   // this value is read directly, and separate hook instances don't share
   // React state just because they share a localStorage key.
   const autoAdvance = useAutoAdvance();
+
+  // Left sidebar sits to the left of its drag handle (dragging right
+  // grows it, sign 1); the right TM/comments sidebar sits to the right
+  // of its handle (dragging left grows it, sign -1) — see
+  // useResizableWidth's doc comment.
+  const leftPanel = useResizableWidth("classicua-left-width", 340, 220, 640);
+  const rightPanel = useResizableWidth("classicua-right-width", 280, 200, 560);
 
   const authStatus = useQuery({ queryKey: ["auth-status"], queryFn: api.authStatus });
 
@@ -250,6 +258,8 @@ export function App() {
             strings={activeStrings}
             focusedStringId={activeFileId != null ? focusedStringIdByFile[activeFileId] ?? null : null}
             onFocusString={(stringId) => activeFileId != null && setFocusedStringIdFor(activeFileId, stringId)}
+            width={leftPanel.width}
+            onResizeStart={(e) => leftPanel.startResize(e, 1)}
           />
         )}
         <main className="app-main">
@@ -286,6 +296,8 @@ export function App() {
                 hasNextFile={hasNextFile}
                 hasPrevFile={hasPrevFile}
                 onNavigateFile={navigateFile}
+                rightPanelWidth={rightPanel.width}
+                onRightPanelResizeStart={(e) => rightPanel.startResize(e, -1)}
               />
             </div>
           ))}

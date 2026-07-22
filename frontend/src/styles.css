@@ -422,12 +422,34 @@ body {
 }
 
 .app-sidebar {
-  width: 340px;
   flex-shrink: 0;
-  border-right: 1px solid rgba(128, 128, 128, 0.3);
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.resize-handle {
+  flex-shrink: 0;
+  width: 5px;
+  cursor: col-resize;
+  position: relative;
+}
+
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: rgba(128, 128, 128, 0.3);
+}
+
+.resize-handle:hover::after,
+.resize-handle:active::after {
+  left: 0;
+  width: 5px;
+  background: var(--accent);
 }
 
 .sidebar-tabs {
@@ -864,7 +886,6 @@ body {
 }
 
 .right-sidebar-panel {
-  width: 280px;
   flex-shrink: 0;
   padding-left: 12px;
   display: flex;

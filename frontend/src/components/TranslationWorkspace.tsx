@@ -15,6 +15,8 @@ interface TranslationWorkspaceProps {
   hasNextFile: boolean;
   hasPrevFile: boolean;
   onNavigateFile: (direction: "next" | "prev") => void;
+  rightPanelWidth: number;
+  onRightPanelResizeStart: (e: React.MouseEvent) => void;
 }
 
 type ViewMode = "comfortable" | "side-by-side";
@@ -35,6 +37,8 @@ export function TranslationWorkspace({
   hasNextFile,
   hasPrevFile,
   onNavigateFile,
+  rightPanelWidth,
+  onRightPanelResizeStart,
 }: TranslationWorkspaceProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
 
@@ -118,7 +122,13 @@ export function TranslationWorkspace({
           />
         )}
 
-        <RightSidebar projectId={projectId} stringId={focusedStringId} languageId={languageId} />
+        <RightSidebar
+          projectId={projectId}
+          stringId={focusedStringId}
+          languageId={languageId}
+          width={rightPanelWidth}
+          onResizeStart={onRightPanelResizeStart}
+        />
       </div>
     </div>
   );

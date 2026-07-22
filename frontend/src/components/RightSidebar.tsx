@@ -7,6 +7,8 @@ interface RightSidebarProps {
   projectId: number;
   stringId: number | null;
   languageId: string;
+  width: number;
+  onResizeStart: (e: React.MouseEvent) => void;
 }
 
 // One entry per tab — the icon rail, collapse behavior, and panel chrome
@@ -23,7 +25,7 @@ type TabKey = (typeof TABS)[number]["key"];
 /** Right sidebar, matching Crowdin's own icon-rail layout: a vertical
  * strip of tab icons, one panel visible at a time, collapsible to just
  * the rail to reclaim width for the editor. */
-export function RightSidebar({ projectId, stringId, languageId }: RightSidebarProps) {
+export function RightSidebar({ projectId, stringId, languageId, width, onResizeStart }: RightSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("comments");
 
@@ -52,7 +54,9 @@ export function RightSidebar({ projectId, stringId, languageId }: RightSidebarPr
       </div>
 
       {!collapsed && (
-        <aside className="right-sidebar-panel">
+        <>
+          <div className="resize-handle" onMouseDown={onResizeStart} />
+          <aside className="right-sidebar-panel" style={{ width }}>
           <h3 className="right-sidebar-title">{TABS.find((t) => t.key === activeTab)!.label}</h3>
           {activeTab === "comments" && (
             <CommentsPanel projectId={projectId} stringId={stringId} languageId={languageId} />
@@ -63,7 +67,8 @@ export function RightSidebar({ projectId, stringId, languageId }: RightSidebarPr
           {activeTab === "glossary" && (
             <GlossaryPanel projectId={projectId} stringId={stringId} languageId={languageId} />
           )}
-        </aside>
+          </aside>
+        </>
       )}
     </div>
   );
