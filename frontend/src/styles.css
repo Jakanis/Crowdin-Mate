@@ -909,19 +909,36 @@ body {
   color: var(--success);
 }
 
-.add-comment {
+.add-comment-form {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
   flex-shrink: 0;
 }
 
-.add-comment textarea {
-  flex: 1;
+.add-comment-form textarea {
   font: inherit;
   font-size: 13px;
   padding: 4px 6px;
   resize: vertical;
+}
+
+.add-comment-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.add-comment-options select {
+  font: inherit;
+  font-size: 12px;
+}
+
+.add-comment {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .status-badge {

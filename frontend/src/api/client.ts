@@ -93,6 +93,8 @@ export interface SubmitTranslationResult {
   translation?: { id: number; text: string; user_name: string | null };
 }
 
+export type IssueType = "general_question" | "translation_mistake" | "context_request" | "source_mistake";
+
 export interface CommentInfo {
   id: number;
   text: string;
@@ -197,10 +199,20 @@ export const api = {
     }),
   getComments: (projectId: number, stringId: number) =>
     request<{ comments: CommentInfo[] }>(`/projects/${projectId}/strings/${stringId}/comments`),
-  addComment: (projectId: number, stringId: number, languageId: string, text: string) =>
+  addComment: (projectId: number, stringId: number, languageId: string, text: string, issueType?: IssueType) =>
     request<{ status: string; count: number }>(
       `/projects/${projectId}/strings/${stringId}/comments`,
-      { method: "POST", body: JSON.stringify({ text, language_id: languageId }) },
+      { method: "POST", body: JSON.stringify({ text, language_id: languageId, issue_type: issueType ?? null }) },
+    ),
+  resolveComment: (projectId: number, stringId: number, commentId: number) =>
+    request<{ status: string }>(
+      `/projects/${projectId}/strings/${stringId}/comments/${commentId}/resolve`,
+      { method: "POST" },
+    ),
+  unresolveComment: (projectId: number, stringId: number, commentId: number) =>
+    request<{ status: string }>(
+      `/projects/${projectId}/strings/${stringId}/comments/${commentId}/resolve`,
+      { method: "DELETE" },
     ),
   getTmMatches: (projectId: number, stringId: number, languageId: string) =>
     request<{ matches: TmMatch[] }>(

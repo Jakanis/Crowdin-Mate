@@ -672,27 +672,72 @@ async def get_string_comments(project_id: int, string_id: int):
 class CommentIn(BaseModel):
     text: str
     language_id: str
+    # None -> plain comment. Otherwise one of Crowdin's issue types
+    # (general_question/translation_mistake/context_request/source_mistake)
+    # and the comment posts as an issue instead.
+    issue_type: str | None = None
 
 
 @app.post("/projects/{project_id}/strings/{string_id}/comments")
 async def add_string_comment(project_id: int, string_id: int, body: CommentIn):
-    """Post a plain comment (not an issue) on a string. Re-syncs the
+    """Post a comment, or an issue if issue_type is set. Re-syncs the
     string's comments afterward so the returned list includes the new one
     with its server-assigned id and timestamp."""
-    from crowdin_api.api_resources.string_comments.enums import StringCommentType
+    from crowdin_api.api_resources.string_comments.enums import StringCommentIssueType, StringCommentType
 
     client = get_client()
+    kwargs: dict = dict(
+        text=body.text, stringId=string_id, targetLanguageId=body.language_id, projectId=project_id,
+    )
+    if body.issue_type:
+        kwargs["type"] = StringCommentType.ISSUE
+        kwargs["issueType"] = StringCommentIssueType(body.issue_type)
+    else:
+        kwargs["type"] = StringCommentType.COMMENT
+
     try:
-        await run_in_threadpool(
-            call_with_limits, client.string_comments.add_string_comment,
-            text=body.text, stringId=string_id, targetLanguageId=body.language_id,
-            type=StringCommentType.COMMENT, projectId=project_id,
-        )
+        await run_in_threadpool(call_with_limits, client.string_comments.add_string_comment, **kwargs)
         comments = await run_in_threadpool(sync_string_comments, project_id, string_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
 
     return {"status": "posted", "count": len(comments)}
+
+
+async def _set_comment_issue_status(project_id: int, string_id: int, comment_id: int, resolved: bool) -> None:
+    from crowdin_api.api_resources.enums import PatchOperation
+    from crowdin_api.api_resources.string_comments.enums import StringCommentIssueStatus, StringCommentPatchPath
+
+    client = get_client()
+    try:
+        await run_in_threadpool(
+            call_with_limits, client.string_comments.edit_string_comment,
+            stringCommentId=comment_id, projectId=project_id,
+            data=[
+                {
+                    "op": PatchOperation.REPLACE,
+                    "path": StringCommentPatchPath.ISSUE_STATUS,
+                    "value": (
+                        StringCommentIssueStatus.RESOLVED if resolved else StringCommentIssueStatus.UNRESOLVED
+                    ),
+                }
+            ],
+        )
+        await run_in_threadpool(sync_string_comments, project_id, string_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+
+@app.post("/projects/{project_id}/strings/{string_id}/comments/{comment_id}/resolve")
+async def resolve_comment(project_id: int, string_id: int, comment_id: int):
+    await _set_comment_issue_status(project_id, string_id, comment_id, resolved=True)
+    return {"status": "resolved"}
+
+
+@app.delete("/projects/{project_id}/strings/{string_id}/comments/{comment_id}/resolve")
+async def unresolve_comment(project_id: int, string_id: int, comment_id: int):
+    await _set_comment_issue_status(project_id, string_id, comment_id, resolved=False)
+    return {"status": "unresolved"}
 
 
 def _get_source_text_and_language(project_id: int, string_id: int) -> tuple[str, str]:
