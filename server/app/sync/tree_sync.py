@@ -26,6 +26,17 @@ def _unwrap(item: dict) -> dict:
     return item.get("data", item) if isinstance(item, dict) else item
 
 
+def _iso(value) -> str | None:
+    """The SDK parses timestamp fields into datetime objects (or leaves
+    them None) rather than raw strings — normalize to ISO text so we're
+    not relying on sqlite3's deprecated implicit datetime adapter."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return value.isoformat()
+
+
 def sync_project_tree(project_id: int) -> dict:
     client = get_client()
 
@@ -85,7 +96,7 @@ def sync_project_tree(project_id: int) -> dict:
                     d.get("directoryId"),
                     d.get("name", ""),
                     d.get("path", d.get("name", "")),
-                    d.get("updatedAt"),
+                    _iso(d.get("updatedAt")),
                     now,
                 ),
             )
@@ -113,7 +124,7 @@ def sync_project_tree(project_id: int) -> dict:
                     # (confirmed against the live response) — this gets filled in
                     # once Phase 1 syncs a file's actual source strings.
                     None,
-                    f.get("updatedAt"),
+                    _iso(f.get("updatedAt")),
                     now,
                 ),
             )
@@ -128,6 +139,6 @@ def sync_project_tree(project_id: int) -> dict:
 def _target_languages_json(project: dict) -> str:
     import json
 
-    langs = project.get("targetLanguages") or []
-    ids = [lang.get("id") for lang in langs if isinstance(lang, dict) and lang.get("id")]
-    return json.dumps(ids)
+    # Confirmed directly on the project object as a flat list of ids
+    # (e.g. ["uk"]) — simpler than deriving it from targetLanguages[].id.
+    return json.dumps(project.get("targetLanguageIds") or [])

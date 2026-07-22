@@ -47,6 +47,83 @@ body {
 .app-main {
   flex: 1;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.file-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  opacity: 0.8;
+  word-break: break-all;
+}
+
+.string-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.string-row {
+  padding: 12px 4px 16px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.string-source {
+  font-size: 13px;
+  white-space: pre-wrap;
+  opacity: 0.75;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.string-target {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.string-row-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.string-meta {
+  opacity: 0.5;
+}
+
+.status-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+.status-badge--saving {
+  opacity: 0.6;
+}
+
+.status-badge--synced {
+  background: rgba(52, 168, 83, 0.15);
+  color: #2a8a44;
+}
+
+.status-badge--queued {
+  background: rgba(240, 180, 40, 0.15);
+  color: #a06800;
+}
+
+.status-badge--error,
+.status-badge--rejected {
+  background: rgba(220, 60, 60, 0.15);
+  color: #d14343;
 }
 
 .hint {

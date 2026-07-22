@@ -42,6 +42,42 @@ export interface TreeResponse {
   files: TreeFile[];
 }
 
+export interface TranslationInfo {
+  string_id: number;
+  id: number;
+  text: string;
+  user_name: string | null;
+  created_at: string | null;
+}
+
+export interface DraftInfo {
+  string_id: number;
+  draft_text: string;
+  dirty: number;
+}
+
+export interface SourceString {
+  id: number;
+  identifier: string | null;
+  text: string;
+  context: string | null;
+  max_length: number | null;
+  has_plurals: number;
+  is_hidden: number;
+  translation: TranslationInfo | null;
+  draft: DraftInfo | null;
+}
+
+export interface FileStringsResponse {
+  strings: SourceString[];
+}
+
+export interface SubmitTranslationResult {
+  status: "synced" | "queued" | "rejected";
+  reason?: string;
+  translation?: { id: number; text: string; user_name: string | null };
+}
+
 export const api = {
   authStatus: () => request<AuthStatus>("/auth/status"),
   setToken: (token: string) =>
@@ -57,4 +93,13 @@ export const api = {
       { method: "POST" },
     ),
   getTree: (projectId: number) => request<TreeResponse>(`/projects/${projectId}/tree`),
+  getFileStrings: (projectId: number, fileId: number, languageId: string) =>
+    request<FileStringsResponse>(
+      `/projects/${projectId}/files/${fileId}/strings?language_id=${encodeURIComponent(languageId)}`,
+    ),
+  submitTranslation: (projectId: number, stringId: number, languageId: string, text: string) =>
+    request<SubmitTranslationResult>(`/projects/${projectId}/strings/${stringId}/translations`, {
+      method: "POST",
+      body: JSON.stringify({ language_id: languageId, text }),
+    }),
 };

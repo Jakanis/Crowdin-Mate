@@ -36,6 +36,13 @@ CREATE INDEX IF NOT EXISTS idx_files_project_directory
     ON files (project_id, directory_id);
 
 -- Phase 1: source strings + translations for whichever files have been opened.
+-- Field shapes below were confirmed against a live API response (see the
+-- Phase 1 spike), not assumed from docs — notably: translations use
+-- `translationId` as their id (not `id`), have no `updatedAt` or
+-- `isApproved` field at all (approvals are a separate resource, deferred
+-- to Phase 3), and source strings carry `hasPlurals`/`maxLength`, which
+-- the Phase 1 UI surfaces but does not yet build a full plural-form editor
+-- around.
 CREATE TABLE IF NOT EXISTS source_strings (
     id INTEGER PRIMARY KEY,
     file_id INTEGER NOT NULL,
@@ -43,6 +50,8 @@ CREATE TABLE IF NOT EXISTS source_strings (
     identifier TEXT,
     text TEXT NOT NULL,
     context TEXT,
+    max_length INTEGER,
+    has_plurals INTEGER NOT NULL DEFAULT 0,
     is_hidden INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT,
     synced_at TEXT NOT NULL
@@ -50,14 +59,13 @@ CREATE TABLE IF NOT EXISTS source_strings (
 CREATE INDEX IF NOT EXISTS idx_source_strings_file ON source_strings (file_id);
 
 CREATE TABLE IF NOT EXISTS translations (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY,              -- Crowdin's translationId
     string_id INTEGER NOT NULL,
     language_id TEXT NOT NULL,
     text TEXT NOT NULL,
     user_id INTEGER,
-    is_approved INTEGER NOT NULL DEFAULT 0,
+    user_name TEXT,
     created_at TEXT,
-    updated_at TEXT,
     synced_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_translations_string_lang

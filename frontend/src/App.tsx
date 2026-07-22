@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type TreeFile } from "./api/client";
 import { FileTree } from "./components/FileTree";
+import { StringList } from "./components/StringList";
 import { TokenSetup } from "./components/TokenSetup";
 
 const CLASSICUA_PROJECT_ID = 393919;
+const TARGET_LANGUAGE_ID = "uk";
 
 export function App() {
   const queryClient = useQueryClient();
@@ -58,11 +60,14 @@ export function App() {
         </aside>
         <main className="app-main">
           {selectedFile ? (
-            <p>
-              Selected: <strong>{selectedFile.path}</strong>
-              {selectedFile.strings_count != null && ` (${selectedFile.strings_count} strings)`} — string
-              editing lands in Phase 1.
-            </p>
+            <>
+              <h2 className="file-title">{selectedFile.path}</h2>
+              <StringList
+                projectId={CLASSICUA_PROJECT_ID}
+                fileId={selectedFile.id}
+                languageId={TARGET_LANGUAGE_ID}
+              />
+            </>
           ) : (
             <p className="hint">Select a file from the tree.</p>
           )}
