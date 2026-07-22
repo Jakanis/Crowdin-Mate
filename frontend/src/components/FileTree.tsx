@@ -95,27 +95,71 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   }, [directories, files]);
 
   const trimmedQuery = query.trim().toLowerCase();
+  const searching = trimmedQuery.length > 0;
 
   // Search is a plain case-insensitive substring match against each
   // file's full path — "Valley/The Great Retri" matches
   // "/quests_tbc/Outland/Shadowmoon Valley/The Great Retribution_10817.xml"
   // the same way pasting a chunk of a path copied from elsewhere would.
-  // Flattens the result (no folder rows, full path as the label) rather
-  // than trying to expand the tree down to each match, since matches can
-  // land in unrelated folders scattered across the whole project.
-  const searchRows = useMemo(() => {
-    if (!trimmedQuery) return null;
-    return files
-      .filter((f) => matchesQuery(f, trimmedQuery))
-      .sort((a, b) => a.path.localeCompare(b.path))
-      .map((f): Row => ({
-        kind: "file",
-        id: f.id,
-        depth: 0,
-        name: f.path.replace(/^\//, ""),
-        stringsCount: f.strings_count,
-      }));
-  }, [files, trimmedQuery]);
+  // Keeps the real tree shape rather than flattening to a bare list:
+  // walks the same parent/child maps as the normal tree, but only
+  // descends into directories that are an ancestor of some match (force-
+  // shown as expanded regardless of the user's real expand/collapse
+  // state) and only lists files that match. Folders with no matching
+  // descendant are skipped entirely rather than shown collapsed.
+  const searchResult = useMemo(() => {
+    if (!searching) return null;
+
+    const matchedFiles = files.filter((f) => matchesQuery(f, trimmedQuery));
+    const matchedFileIds = new Set(matchedFiles.map((f) => f.id));
+    const dirsById = new Map(directories.map((d) => [d.id, d]));
+    const ancestorDirIds = new Set<number>();
+    for (const f of matchedFiles) {
+      let dirId = f.directory_id;
+      while (dirId != null && !ancestorDirIds.has(dirId)) {
+        ancestorDirIds.add(dirId);
+        dirId = dirsById.get(dirId)?.parent_id ?? null;
+      }
+    }
+
+    const out: Row[] = [];
+    const walk = (parentId: number | null, depth: number) => {
+      for (const dir of childDirsByParent.get(parentId) ?? []) {
+        if (!ancestorDirIds.has(dir.id)) continue;
+        out.push({ kind: "dir", id: dir.id, depth, name: dir.name, expanded: true });
+        walk(dir.id, depth + 1);
+        for (const file of childFilesByDir.get(dir.id) ?? []) {
+          if (matchedFileIds.has(file.id)) {
+            out.push({
+              kind: "file",
+              id: file.id,
+              depth: depth + 1,
+              name: file.name,
+              stringsCount: file.strings_count,
+            });
+          }
+        }
+      }
+    };
+
+    walk(null, 0);
+    for (const file of childFilesByDir.get(null) ?? []) {
+      if (matchedFileIds.has(file.id)) {
+        out.push({ kind: "file", id: file.id, depth: 0, name: file.name, stringsCount: file.strings_count });
+      }
+    }
+
+    return { rows: out, ancestorDirIds, matchCount: matchedFiles.length };
+  }, [files, directories, childDirsByParent, childFilesByDir, trimmedQuery, searching]);
+
+  // Prefetch progress for every folder revealed by the search the same
+  // way expanding it by hand would, so bars/pies aren't blank just
+  // because the folder was force-shown rather than manually toggled.
+  useEffect(() => {
+    if (!searchResult) return;
+    for (const dirId of searchResult.ancestorDirIds) fetchProgressFor(dirId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchResult]);
 
   const treeRows = useMemo(() => {
     const out: Row[] = [];
@@ -148,7 +192,7 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
     return out;
   }, [childDirsByParent, childFilesByDir, expanded]);
 
-  const rows = searchRows ?? treeRows;
+  const rows = searchResult ? searchResult.rows : treeRows;
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -185,9 +229,11 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
           </button>
         )}
       </div>
-      {searchRows && (
+      {searchResult && (
         <div className="file-tree-search-status">
-          {searchRows.length === 0 ? "No files match" : `${searchRows.length} match${searchRows.length === 1 ? "" : "es"}`}
+          {searchResult.matchCount === 0
+            ? "No files match"
+            : `${searchResult.matchCount} match${searchResult.matchCount === 1 ? "" : "es"}`}
         </div>
       )}
       <div ref={parentRef} className="file-tree-scroll">
@@ -209,7 +255,9 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
                   paddingLeft: `${row.depth * 16 + 8}px`,
                 }}
                 onClick={() =>
-                  row.kind === "dir" ? toggleDir(row.id) : onSelectFile?.(files.find((f) => f.id === row.id)!)
+                  row.kind === "dir"
+                    ? !searching && toggleDir(row.id)
+                    : onSelectFile?.(files.find((f) => f.id === row.id)!)
                 }
               >
                 {row.kind === "dir" ? (
