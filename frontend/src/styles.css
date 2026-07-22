@@ -88,8 +88,27 @@
   box-sizing: border-box;
 }
 
+/* zoom lives on the root element, not .app-shell below. CSS zoom on a
+   non-root element scales that element's rendered box AFTER its own
+   height:100vh is computed against the real (unzoomed) viewport, so at
+   --ui-scale 1.1 the box would render 10% taller than the screen and
+   overflow, producing a whole-page scrollbar with the header partly
+   pushed off-screen (reported on Edge). Zoom on the root behaves like
+   the browser's own Ctrl+/Ctrl- page zoom instead — descendants' vh/vw
+   units resolve against the already-zoomed effective viewport, so
+   height:100vh keeps meaning "fill the screen" at any scale. overflow:
+   hidden on both is a second guard: this app is a fixed-viewport shell
+   with scrolling handled internally by specific panels, never the page. */
+html {
+  height: 100%;
+  overflow: hidden;
+  zoom: var(--ui-scale);
+}
+
 body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg);
   color: var(--fg);
 }
@@ -98,7 +117,6 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  zoom: var(--ui-scale);
 }
 
 .app-header {
