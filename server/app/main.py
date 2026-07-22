@@ -363,7 +363,22 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
         # Permanent (validation errors, e.g. Crowdin's "duplicate
         # translation" check) — retrying won't ever help, so surface it
         # to the user immediately instead of silently queuing forever.
+        #
+        # Clear dirty here too: this draft was written unconditionally at
+        # the top of this function before the live call, and a rejection
+        # means it will never successfully sync as-is. Leaving dirty=1
+        # would make get_file_strings keep serving this dead-end text as
+        # if it were the user's authoritative pending edit on every
+        # future visit to this string, silently overriding whatever the
+        # real current translation actually is — confirmed live, this is
+        # exactly what happened to a draft from early testing that got
+        # stuck this way for the rest of the session.
         logger.info("Translation submit rejected for string %s: %s", string_id, exc.message)
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE translation_drafts SET dirty = 0 WHERE string_id = ? AND language_id = ?",
+                (string_id, body.language_id),
+            )
         return {"status": "rejected", "reason": _extract_validation_message(exc)}
 
     # add_translation's response shape uses `id` for the new translation

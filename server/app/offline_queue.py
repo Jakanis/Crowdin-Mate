@@ -98,5 +98,15 @@ def drain_once(max_items: int = 20) -> int:
                     """,
                     (_now(), str(exc), "failed" if terminal else "pending", row["id"]),
                 )
+                if terminal:
+                    # Same reasoning as the direct-submit rejection path
+                    # in main.py: a terminal failure will never sync as-is,
+                    # so the draft must stop being treated as the user's
+                    # authoritative pending edit, or it silently overrides
+                    # the real current translation on every future visit.
+                    conn.execute(
+                        "UPDATE translation_drafts SET dirty = 0 WHERE string_id = ? AND language_id = ?",
+                        (row["string_id"], row["language_id"]),
+                    )
 
     return succeeded

@@ -71,6 +71,22 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
 
   const dirty = text.trim() !== "" && text !== bestTranslationText(s);
 
+  // Focus the edit box the moment a candidate is picked, cursor at the
+  // end, so you can click a candidate and start typing immediately
+  // instead of needing a second click into the field. Deferred to the
+  // next frame since the textarea's DOM value only reflects the new text
+  // after this render commits — selecting a range against the stale
+  // value would misplace the cursor.
+  const selectCandidate = (candidateText: string) => {
+    setText(candidateText);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.selectionStart = el.selectionEnd = candidateText.length;
+    });
+  };
+
   if (s.has_plurals) {
     return (
       <p className="hint">
@@ -105,7 +121,7 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
               t={t}
               canApprove={canApprove}
               onChanged={refetchStrings}
-              onSelect={() => setText(t.text)}
+              onSelect={() => selectCandidate(t.text)}
               selected={text === t.text}
             />
           ))}
