@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UI_SCALE_STEPS, useTheme, useUiScale, type ThemePreference } from "../theme";
+import { UI_SCALE_STEPS, useCrowdinPalette, useTheme, useUiScale, type ThemePreference } from "../theme";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
@@ -32,6 +32,7 @@ export function SettingsMenu({ autoAdvance, onAutoAdvanceChange }: SettingsMenuP
   const [open, setOpen] = useState(false);
   const { preference, setPreference } = useTheme();
   const { scale, setScale } = useUiScale();
+  const crowdinPalette = useCrowdinPalette();
 
   const scaleIndex = UI_SCALE_STEPS.indexOf(scale);
 
@@ -86,6 +87,16 @@ export function SettingsMenu({ autoAdvance, onAutoAdvanceChange }: SettingsMenuP
                   onChange={(e) => onAutoAdvanceChange(e.target.checked)}
                 />
                 Automatically move to next string
+              </label>
+            </div>
+            <div className="settings-section">
+              <label className="settings-checkbox">
+                <input
+                  type="checkbox"
+                  checked={crowdinPalette.enabled}
+                  onChange={(e) => crowdinPalette.setEnabled(e.target.checked)}
+                />
+                Use Crowdin colors
               </label>
             </div>
           </div>

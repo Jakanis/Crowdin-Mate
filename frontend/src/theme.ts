@@ -68,6 +68,31 @@ export function useAutoAdvance() {
   return { enabled, setEnabled };
 }
 
+const PALETTE_KEY = "classicua-crowdin-palette";
+
+// Swaps our own accent/success/warning/danger tokens for crowdin.com's
+// actual editor colors (pulled live via getComputedStyle on their
+// CSS custom properties, both themes). Self-contained like useTheme —
+// the effect (data-palette on the root) is what styles.css's
+// :root[data-palette="crowdin"] blocks key off, so it doesn't matter
+// that this hook's own boolean state isn't shared across instances.
+export function useCrowdinPalette() {
+  const [enabled, setEnabledState] = useState<boolean>(() => {
+    const stored = localStorage.getItem(PALETTE_KEY) === "1";
+    if (stored) document.documentElement.dataset.palette = "crowdin";
+    return stored;
+  });
+
+  const setEnabled = (next: boolean) => {
+    localStorage.setItem(PALETTE_KEY, next ? "1" : "0");
+    if (next) document.documentElement.dataset.palette = "crowdin";
+    else delete document.documentElement.dataset.palette;
+    setEnabledState(next);
+  };
+
+  return { enabled, setEnabled };
+}
+
 export const UI_SCALE_STEPS = [0.9, 1, 1.1, 1.25, 1.4];
 const DEFAULT_SCALE = 1.1;
 

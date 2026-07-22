@@ -84,6 +84,83 @@
   --progress-approved: #1f9d52;
 }
 
+/* "Use Crowdin colors" setting — the real editor's own palette, pulled
+   live via getComputedStyle on crowdin.com's CSS custom properties
+   (--crowdin-primary, --crowdin-translate-bg-color, etc.) in both of
+   its themes, rather than approximated. Notably Crowdin's own light
+   theme uses green as its primary accent, not blue — a deliberate
+   choice on their end, kept here rather than "corrected". Same
+   specificity pattern as the base theme tokens above (system-default
+   via the media query, explicit override via the higher-specificity
+   [data-theme=...] attribute combos), just additionally gated on
+   [data-palette="crowdin"], and placed after the base blocks so it
+   wins the specificity tie when both apply. */
+:root[data-palette="crowdin"] {
+  --bg: #f5f7f8;
+  --bg-elevated: #ffffff;
+  --fg: rgba(38, 50, 56, 0.87);
+  --accent: #43a047;
+  --accent-bg: rgba(67, 160, 71, 0.15);
+  --success: #6dc271;
+  --success-bg: rgba(109, 194, 113, 0.15);
+  --warning: #c79d1c;
+  --warning-bg: rgba(199, 157, 28, 0.15);
+  --danger: #dc5242;
+  --danger-bg: rgba(220, 82, 66, 0.15);
+  --progress-translated: #9cc7ff;
+  --progress-approved: #6dc271;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-palette="crowdin"] {
+    --bg: #21252b;
+    --bg-elevated: #373e48;
+    --fg: rgba(255, 255, 255, 0.87);
+    --accent: #6494ed;
+    --accent-bg: rgba(100, 148, 237, 0.15);
+    --success: #6dc271;
+    --success-bg: rgba(109, 194, 113, 0.15);
+    --warning: #cc9a06;
+    --warning-bg: rgba(204, 154, 6, 0.15);
+    --danger: #fa644a;
+    --danger-bg: rgba(250, 100, 74, 0.15);
+    --progress-translated: #5b89c6;
+    --progress-approved: #6dc271;
+  }
+}
+
+:root[data-theme="light"][data-palette="crowdin"] {
+  --bg: #f5f7f8;
+  --bg-elevated: #ffffff;
+  --fg: rgba(38, 50, 56, 0.87);
+  --accent: #43a047;
+  --accent-bg: rgba(67, 160, 71, 0.15);
+  --success: #6dc271;
+  --success-bg: rgba(109, 194, 113, 0.15);
+  --warning: #c79d1c;
+  --warning-bg: rgba(199, 157, 28, 0.15);
+  --danger: #dc5242;
+  --danger-bg: rgba(220, 82, 66, 0.15);
+  --progress-translated: #9cc7ff;
+  --progress-approved: #6dc271;
+}
+
+:root[data-theme="dark"][data-palette="crowdin"] {
+  --bg: #21252b;
+  --bg-elevated: #373e48;
+  --fg: rgba(255, 255, 255, 0.87);
+  --accent: #6494ed;
+  --accent-bg: rgba(100, 148, 237, 0.15);
+  --success: #6dc271;
+  --success-bg: rgba(109, 194, 113, 0.15);
+  --warning: #cc9a06;
+  --warning-bg: rgba(204, 154, 6, 0.15);
+  --danger: #fa644a;
+  --danger-bg: rgba(250, 100, 74, 0.15);
+  --progress-translated: #5b89c6;
+  --progress-approved: #6dc271;
+}
+
 * {
   box-sizing: border-box;
 }
