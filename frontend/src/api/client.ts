@@ -127,7 +127,7 @@ export const api = {
   clearToken: () => request<{ ok: boolean }>("/auth/token", { method: "DELETE" }),
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   syncTree: (projectId: number) =>
-    request<{ directories: number; files: number; synced_at: string }>(
+    request<{ directories: number; files: number; synced_at: string; changed_file_ids: number[] }>(
       `/projects/${projectId}/sync-tree`,
       { method: "POST" },
     ),
@@ -142,6 +142,11 @@ export const api = {
   getFileStrings: (projectId: number, fileId: number, languageId: string) =>
     request<FileStringsResponse>(
       `/projects/${projectId}/files/${fileId}/strings?language_id=${encodeURIComponent(languageId)}`,
+    ),
+  resyncFile: (projectId: number, fileId: number, languageId: string) =>
+    request<{ file_id: number; strings: number; translations: number; approvals: number; synced_at: string }>(
+      `/projects/${projectId}/files/${fileId}/resync?language_id=${encodeURIComponent(languageId)}`,
+      { method: "POST" },
     ),
   submitTranslation: (projectId: number, stringId: number, languageId: string, text: string) =>
     request<SubmitTranslationResult>(`/projects/${projectId}/strings/${stringId}/translations`, {

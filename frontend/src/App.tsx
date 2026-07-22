@@ -7,6 +7,7 @@ import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
 import { useAutoAdvance } from "./theme";
+import { useSyncTree } from "./useSyncTree";
 
 const CLASSICUA_PROJECT_ID = 393919;
 const TARGET_LANGUAGE_ID = "uk";
@@ -93,9 +94,41 @@ export function App() {
     localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(payload));
   }, [openFiles, activeFileId, focusedStringIdByFile]);
 
-  const syncMutation = useMutation({
-    mutationFn: () => api.syncTree(CLASSICUA_PROJECT_ID),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tree", CLASSICUA_PROJECT_ID] }),
+  const sync = useSyncTree(CLASSICUA_PROJECT_ID);
+
+  // Files whose content may be stale versus Crowdin (flagged by sync's
+  // changed_file_ids — see tree_sync.py) among the tabs actually open
+  // right now. Accumulates across multiple syncs rather than replacing,
+  // and only clears a file once the user explicitly reloads or
+  // dismisses it — a later sync with no new changes shouldn't silently
+  // un-flag a file the user hasn't dealt with yet.
+  const [staleFileIds, setStaleFileIds] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (sync.changedFileIds.length === 0) return;
+    setStaleFileIds((prev) => {
+      const next = new Set(prev);
+      for (const id of sync.changedFileIds) {
+        if (openFiles.some((f) => f.id === id)) next.add(id);
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sync.changedFileIds]);
+
+  const clearStale = (fileId: number) => {
+    setStaleFileIds((prev) => {
+      const next = new Set(prev);
+      next.delete(fileId);
+      return next;
+    });
+  };
+
+  const resyncMutation = useMutation({
+    mutationFn: (fileId: number) => api.resyncFile(CLASSICUA_PROJECT_ID, fileId, TARGET_LANGUAGE_ID),
+    onSuccess: (_result, fileId) => {
+      queryClient.invalidateQueries({ queryKey: ["file-strings", CLASSICUA_PROJECT_ID, fileId, TARGET_LANGUAGE_ID] });
+      clearStale(fileId);
+    },
   });
 
   // The active tab's strings, fetched here too (in addition to inside
@@ -152,8 +185,13 @@ export function App() {
       <header className="app-header">
         <h1>ClassicUA · Ukrainian</h1>
         <div className="app-header-actions">
-          <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
-            {syncMutation.isPending ? "Syncing…" : "Sync tree"}
+          {sync.progress != null && (
+            <span className="sync-progress" title="Estimated from previous sync durations">
+              <span className="sync-progress-fill" style={{ width: `${sync.progress * 100}%` }} />
+            </span>
+          )}
+          <button onClick={sync.trigger} disabled={sync.isPending}>
+            {sync.isPending ? "Syncing…" : "Sync tree"}
           </button>
           <SettingsMenu autoAdvance={autoAdvance.enabled} onAutoAdvanceChange={autoAdvance.setEnabled} />
         </div>
@@ -187,6 +225,17 @@ export function App() {
           {openFiles.length === 0 && <p className="hint">Select a file from the tree.</p>}
           {activeFileId != null && (
             <h2 className="file-title">{openFiles.find((f) => f.id === activeFileId)?.path}</h2>
+          )}
+          {activeFileId != null && staleFileIds.has(activeFileId) && (
+            <div className="stale-file-banner">
+              This file changed on Crowdin since it was opened.
+              <button onClick={() => resyncMutation.mutate(activeFileId)} disabled={resyncMutation.isPending}>
+                {resyncMutation.isPending ? "Reloading…" : "Reload"}
+              </button>
+              <button className="link-button" onClick={() => clearStale(activeFileId)}>
+                Dismiss
+              </button>
+            </div>
           )}
           {openFiles.map((file) => (
             <div key={file.id} className="workspace-tab-panel" hidden={file.id !== activeFileId}>

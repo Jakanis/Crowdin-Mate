@@ -231,6 +231,21 @@ def _revalidate_file_content(project_id: int, file_id: int, language_id: str) ->
         logger.exception("Background revalidation failed for file %s", file_id)
 
 
+@app.post("/projects/{project_id}/files/{file_id}/resync")
+async def resync_file_content(project_id: int, file_id: int, language_id: str):
+    """Explicit, synchronous re-fetch of one file's strings/translations —
+    used when the tree sync's changed_file_ids flags this file as updated
+    upstream and the user asks to reload it. Unlike the background
+    revalidation in get_file_strings below, the caller needs to know the
+    fresh content has actually landed before it refetches the strings
+    query, not just that a background task was scheduled."""
+    try:
+        result = await run_in_threadpool(sync_file_content, project_id, file_id, language_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    return result
+
+
 @app.get("/projects/{project_id}/files/{file_id}/strings")
 async def get_file_strings(project_id: int, file_id: int, language_id: str, background_tasks: BackgroundTasks):
     """Reads from the local cache first — instant even for a large file —

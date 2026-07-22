@@ -59,6 +59,18 @@ def sync_project_tree(project_id: int) -> dict:
 
     now = _now()
     with get_conn() as conn:
+        # Snapshot each file's previously-known updatedAt before the
+        # upsert below overwrites it — that's the only signal available
+        # for "did this file's source content change on Crowdin since we
+        # last looked" (Crowdin bumps a file's updatedAt on a new content
+        # revision, not just on rename/move). A file with no prior row is
+        # new, not "changed", so it's excluded rather than compared to None.
+        previous_updated_at: dict[int, str | None] = {
+            row["id"]: row["updated_at"]
+            for row in conn.execute(
+                "SELECT id, updated_at FROM files WHERE project_id = ?", (project_id,)
+            )
+        }
         conn.execute(
             """
             INSERT INTO projects (id, name, source_language, target_languages_json, last_full_sync_at)
@@ -101,7 +113,13 @@ def sync_project_tree(project_id: int) -> dict:
                 ),
             )
 
+        changed_file_ids: list[int] = []
         for f in files:
+            new_updated_at = _iso(f.get("updatedAt"))
+            old_updated_at = previous_updated_at.get(f["id"])
+            if old_updated_at is not None and new_updated_at != old_updated_at:
+                changed_file_ids.append(f["id"])
+
             conn.execute(
                 """
                 INSERT INTO files (id, project_id, directory_id, name, path, strings_count, updated_at, synced_at)
@@ -124,16 +142,22 @@ def sync_project_tree(project_id: int) -> dict:
                     # (confirmed against the live response) — this gets filled in
                     # once Phase 1 syncs a file's actual source strings.
                     None,
-                    _iso(f.get("updatedAt")),
+                    new_updated_at,
                     now,
                 ),
             )
 
     logger.info(
-        "Synced project %s tree: %d directories, %d files",
-        project_id, len(directories), len(files),
+        "Synced project %s tree: %d directories, %d files, %d changed since last sync",
+        project_id, len(directories), len(files), len(changed_file_ids),
     )
-    return {"project_id": project_id, "directories": len(directories), "files": len(files), "synced_at": now}
+    return {
+        "project_id": project_id,
+        "directories": len(directories),
+        "files": len(files),
+        "synced_at": now,
+        "changed_file_ids": changed_file_ids,
+    }
 
 
 def _target_languages_json(project: dict) -> str:

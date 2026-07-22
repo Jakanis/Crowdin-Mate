@@ -120,6 +120,40 @@ body {
   gap: 8px;
 }
 
+.sync-progress {
+  display: block;
+  width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(128, 128, 128, 0.2);
+}
+
+.sync-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s linear;
+}
+
+.stale-file-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.stale-file-banner button:not(.link-button) {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 .settings-menu {
   position: relative;
 }
