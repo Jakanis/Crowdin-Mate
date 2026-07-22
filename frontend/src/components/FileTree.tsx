@@ -294,14 +294,13 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
 // circle that no longer carries any information once there's nothing
 // left incomplete.
 //
-// The blue/green were originally near-identical in perceived brightness
-// (luminance ~0.45 vs ~0.44), which is exactly what makes two adjacent
-// hues "vibrate" against each other instead of reading as clearly
-// different. Picked a lighter, brighter blue and a much darker green
-// instead — same hue family, ~0.2 apart in luminance — which reads as
-// distinct at a glance without changing the general blue/green meaning.
-const TRANSLATED_COLOR = "#4a90e2";
-const APPROVED_COLOR = "#0e6b39";
+// Colors come from CSS variables (--progress-translated/--progress-
+// approved, defined in styles.css) rather than fixed hex here, so they
+// can differ between light and dark theme — a green tuned dark enough
+// to stay distinct from blue on a white background reads as almost
+// invisible on a near-black one, so each theme needs its own pair.
+const TRANSLATED_COLOR = "var(--progress-translated)";
+const APPROVED_COLOR = "var(--progress-approved)";
 const TRACK_COLOR = "rgba(128, 128, 128, 0.18)";
 
 function progressTitle(p: ProgressInfo): string {

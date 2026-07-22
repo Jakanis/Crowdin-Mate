@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type TreeFile } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
+import { SettingsMenu } from "./components/SettingsMenu";
 import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
@@ -87,9 +88,12 @@ export function App() {
     <div className="app-shell">
       <header className="app-header">
         <h1>ClassicUA · Ukrainian</h1>
-        <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
-          {syncMutation.isPending ? "Syncing…" : "Sync tree"}
-        </button>
+        <div className="app-header-actions">
+          <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+            {syncMutation.isPending ? "Syncing…" : "Sync tree"}
+          </button>
+          <SettingsMenu />
+        </div>
       </header>
 
       <div className="app-body">
