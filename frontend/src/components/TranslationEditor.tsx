@@ -62,6 +62,21 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
 
   return (
     <div className="translation-editor">
+      <textarea
+        className="string-target"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={Math.min(8, Math.max(2, Math.ceil(text.length / 60)))}
+        placeholder="Type a translation and Save to submit it to Crowdin"
+      />
+      <div className="string-row-footer">
+        <button onClick={() => submit.mutate()} disabled={!dirty || submit.isPending}>
+          {submit.isPending ? "Saving…" : "Save as new translation"}
+        </button>
+        <StatusBadge status={status} />
+        {errorMessage && <span className="error">{errorMessage}</span>}
+      </div>
+
       {s.translations.length > 0 && (
         <ul className="translation-list">
           {s.translations.map((t) => (
@@ -77,21 +92,6 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
           ))}
         </ul>
       )}
-
-      <textarea
-        className="string-target"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={Math.min(8, Math.max(2, Math.ceil(text.length / 60)))}
-        placeholder="Type a translation and Save to submit it to Crowdin"
-      />
-      <div className="string-row-footer">
-        <button onClick={() => submit.mutate()} disabled={!dirty || submit.isPending}>
-          {submit.isPending ? "Saving…" : "Save as new translation"}
-        </button>
-        <StatusBadge status={status} />
-        {errorMessage && <span className="error">{errorMessage}</span>}
-      </div>
     </div>
   );
 }
