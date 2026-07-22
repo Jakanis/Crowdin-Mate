@@ -21,6 +21,15 @@ export function TabBar({ openFiles, activeFileId, onSelectTab, onCloseTab }: Tab
           key={f.id}
           className={`tab${f.id === activeFileId ? " tab--active" : ""}`}
           onClick={() => onSelectTab(f.id)}
+          onAuxClick={(e) => {
+            // Middle-click closes the tab, matching real browser tabs —
+            // auxclick is the correct event for non-primary buttons
+            // (click only fires for the primary/left button).
+            if (e.button === 1) {
+              e.preventDefault();
+              onCloseTab(f.id);
+            }
+          }}
           title={f.path}
         >
           <span className="tab-name">{f.name}</span>

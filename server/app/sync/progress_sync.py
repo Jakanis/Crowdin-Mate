@@ -75,10 +75,18 @@ def sync_file_progress(project_id: int, file_id: int, language_id: str) -> dict 
     if row is None:
         return None
 
+    # File-level progress is counted in strings, not words — unlike
+    # directory-level, which stays on Crowdin's own word-based
+    # translationProgress/approvalProgress. The `phrases` breakdown
+    # (confirmed live: {"total", "translated", "approved"}) is already
+    # present in the same response we're fetching anyway, so this costs
+    # nothing extra — no additional API call.
+    phrases = row.get("phrases") or {}
+    total = phrases.get("total", 0)
     now = _now()
     progress = {
-        "translation_progress": row.get("translationProgress", 0),
-        "approval_progress": row.get("approvalProgress", 0),
+        "translation_progress": round(phrases.get("translated", 0) / total * 100) if total else 100,
+        "approval_progress": round(phrases.get("approved", 0) / total * 100) if total else 100,
     }
     with get_conn() as conn:
         conn.execute(

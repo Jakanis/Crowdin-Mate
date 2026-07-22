@@ -169,7 +169,12 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
                 <span className="tree-caret tree-caret--file" />
               )}
               <span className="tree-name">{row.name}</span>
-              {progress && <ProgressBadges progress={progress} />}
+              {progress &&
+                (row.kind === "dir" ? (
+                  <ProgressBar progress={progress} />
+                ) : (
+                  <ProgressPie progress={progress} />
+                ))}
             </div>
           );
         })}
@@ -178,21 +183,47 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   );
 }
 
-function ProgressBadges({ progress }: { progress: ProgressInfo }) {
+// Matches Crowdin's own color convention: blue for translated, green for
+// approved. Approved is always a subset of translated, so both bar and
+// pie encode it as a single layered gradient — green from 0 to approved%,
+// blue from approved% to translated%, a neutral track for the rest —
+// rather than two separate indicators. That layering also means "fully
+// translated and approved" naturally renders as solid green with no
+// special-casing needed... except we still collapse it to a small mark
+// below, since the goal is decluttering an otherwise-solid-color pill/
+// circle that no longer carries any information once there's nothing
+// left incomplete.
+const TRANSLATED_COLOR = "#3a7bd5";
+const APPROVED_COLOR = "#2a8a44";
+const TRACK_COLOR = "rgba(128, 128, 128, 0.18)";
+
+function progressTitle(p: ProgressInfo): string {
+  return `${p.translation_progress}% translated, ${p.approval_progress}% approved`;
+}
+
+function ProgressBar({ progress }: { progress: ProgressInfo }) {
+  const { translation_progress: t, approval_progress: a } = progress;
+
+  if (t === 100 && a === 100) {
+    return (
+      <span className="progress-mark" title={progressTitle(progress)}>
+        ✓
+      </span>
+    );
+  }
+
+  const gradient = `linear-gradient(to right, ${APPROVED_COLOR} 0%, ${APPROVED_COLOR} ${a}%, ${TRANSLATED_COLOR} ${a}%, ${TRANSLATED_COLOR} ${t}%, ${TRACK_COLOR} ${t}%, ${TRACK_COLOR} 100%)`;
   return (
-    <span className="tree-progress">
-      <span
-        className={`progress-badge${progress.translation_progress === 100 ? " progress-badge--full" : ""}`}
-        title="Translated"
-      >
-        {progress.translation_progress}%
-      </span>
-      <span
-        className={`progress-badge progress-badge--approved${progress.approval_progress === 100 ? " progress-badge--full" : ""}`}
-        title="Approved"
-      >
-        {progress.approval_progress}%
-      </span>
-    </span>
+    <span
+      className={`progress-bar${t === 100 ? " progress-bar--complete" : ""}`}
+      style={{ background: gradient }}
+      title={progressTitle(progress)}
+    />
   );
+}
+
+function ProgressPie({ progress }: { progress: ProgressInfo }) {
+  const { translation_progress: t, approval_progress: a } = progress;
+  const gradient = `conic-gradient(${APPROVED_COLOR} 0% ${a}%, ${TRANSLATED_COLOR} ${a}% ${t}%, ${TRACK_COLOR} ${t}% 100%)`;
+  return <span className="progress-pie" style={{ background: gradient }} title={progressTitle(progress)} />;
 }

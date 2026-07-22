@@ -178,9 +178,7 @@ body {
 
 .tab {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 12px;
+  align-items: stretch;
   font-size: 12px;
   border: 1px solid rgba(128, 128, 128, 0.25);
   border-bottom: none;
@@ -190,6 +188,10 @@ body {
   white-space: nowrap;
   flex-shrink: 0;
   max-width: 200px;
+  /* padding lives on .tab-name / .tab-close individually so the close
+     button's hit area can reach the tab's full height and right edge,
+     instead of being a tiny glyph floating in the middle. */
+  padding: 0;
 }
 
 .tab--active {
@@ -207,20 +209,30 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  padding: 6px 4px 6px 12px;
 }
 
 .tab-close {
   border: none;
   background: none;
   cursor: pointer;
-  opacity: 0.5;
-  font-size: 14px;
+  opacity: 0.45;
+  font-size: 16px;
   line-height: 1;
-  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  padding: 0 8px 0 4px;
+  border-radius: 0 5px 0 0;
 }
 
 .tab-close:hover {
   opacity: 1;
+  background: rgba(220, 60, 60, 0.15);
+  color: #d14343;
 }
 
 .workspace-tab-panel {
@@ -583,33 +595,37 @@ body {
   text-overflow: ellipsis;
 }
 
-.tree-progress {
+/* --- tree progress: single bar (folders) / pie (files) --- */
+.progress-bar {
+  margin-left: auto;
+  margin-right: 8px;
+  flex-shrink: 0;
+  width: 48px;
+  height: 8px;
+  border-radius: 100px;
+  border: 1px solid transparent;
+}
+
+.progress-bar--complete {
+  border-color: #3a7bd5;
+}
+
+.progress-pie {
+  margin-left: auto;
+  margin-right: 8px;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.progress-mark {
   margin-left: auto;
   padding-right: 8px;
-  display: flex;
-  gap: 4px;
   flex-shrink: 0;
-}
-
-.progress-badge {
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  padding: 1px 5px;
-  border-radius: 100px;
-  background: rgba(240, 180, 40, 0.15);
-  color: #a06800;
-  min-width: 30px;
-  text-align: center;
-}
-
-.progress-badge--approved {
-  background: rgba(58, 123, 213, 0.12);
-  color: #3a7bd5;
-}
-
-.progress-badge--full {
-  background: rgba(52, 168, 83, 0.15);
   color: #2a8a44;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .token-setup {
