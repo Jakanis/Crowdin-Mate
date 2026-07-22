@@ -1210,6 +1210,19 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.comfortable-pager-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pager-hint {
+  font-size: 11px;
+  opacity: 0.7;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 /* --- side-by-side view --- */
 .side-by-side-scroll {
   flex: 1;

@@ -169,6 +169,22 @@ export function App() {
     setFocusedStringIdByFile((prev) => ({ ...prev, [fileId]: stringId }));
   };
 
+  // "Next file"/"previous file" means the adjacent open tab, not some
+  // project-wide file order — matches the quest-chain workflow this was
+  // built for (open the whole chain as tabs up front, work through them
+  // one by one). ComfortableView arms on the first press at the last/
+  // first string and only actually switches on a second press, so
+  // hasNextFile/hasPrevFile need to be known up front to decide whether
+  // that arming should happen at all.
+  const activeTabIndex = openFiles.findIndex((f) => f.id === activeFileId);
+  const hasNextFile = activeTabIndex !== -1 && activeTabIndex < openFiles.length - 1;
+  const hasPrevFile = activeTabIndex > 0;
+  const navigateFile = (direction: "next" | "prev") => {
+    const targetIndex = activeTabIndex + (direction === "next" ? 1 : -1);
+    const target = openFiles[targetIndex];
+    if (target) setActiveFileId(target.id);
+  };
+
   if (authStatus.isLoading) return <div className="app-shell">Loading…</div>;
 
   if (!authStatus.data?.configured) {
@@ -248,6 +264,9 @@ export function App() {
                 focusedStringId={focusedStringIdByFile[file.id] ?? null}
                 onFocusChange={(stringId) => setFocusedStringIdFor(file.id, stringId)}
                 autoAdvance={autoAdvance.enabled}
+                hasNextFile={hasNextFile}
+                hasPrevFile={hasPrevFile}
+                onNavigateFile={navigateFile}
               />
             </div>
           ))}

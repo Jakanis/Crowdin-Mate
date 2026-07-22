@@ -12,6 +12,9 @@ interface TranslationWorkspaceProps {
   focusedStringId: number | null;
   onFocusChange: (stringId: number | null) => void;
   autoAdvance: boolean;
+  hasNextFile: boolean;
+  hasPrevFile: boolean;
+  onNavigateFile: (direction: "next" | "prev") => void;
 }
 
 type ViewMode = "comfortable" | "side-by-side";
@@ -29,6 +32,9 @@ export function TranslationWorkspace({
   focusedStringId,
   onFocusChange,
   autoAdvance,
+  hasNextFile,
+  hasPrevFile,
+  onNavigateFile,
 }: TranslationWorkspaceProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
 
@@ -95,6 +101,9 @@ export function TranslationWorkspace({
             canApprove={canApprove}
             currentUserId={currentUserId}
             autoAdvance={autoAdvance}
+            hasNextFile={hasNextFile}
+            hasPrevFile={hasPrevFile}
+            onNavigateFile={onNavigateFile}
           />
         ) : (
           <SideBySideView
