@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type TreeFile } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsMenu } from "./components/SettingsMenu";
@@ -9,6 +9,23 @@ import { TranslationWorkspace } from "./components/TranslationWorkspace";
 
 const CLASSICUA_PROJECT_ID = 393919;
 const TARGET_LANGUAGE_ID = "uk";
+
+const TABS_STORAGE_KEY = "classicua-open-tabs";
+
+interface PersistedTabs {
+  openFileIds: number[];
+  activeFileId: number | null;
+  focusedStringIdByFile: Record<number, number | null>;
+}
+
+function loadPersistedTabs(): PersistedTabs | null {
+  try {
+    const raw = localStorage.getItem(TABS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as PersistedTabs) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function App() {
   const queryClient = useQueryClient();
@@ -29,6 +46,44 @@ export function App() {
     queryFn: () => api.getTree(CLASSICUA_PROJECT_ID),
     enabled: authStatus.data?.configured === true,
   });
+
+  // Restore whichever tabs were open last session, once the tree data
+  // needed to turn saved file ids back into real TreeFile objects has
+  // loaded. Guarded by a ref (not state) so this runs exactly once —
+  // "Sync tree" refetches tree.data with a new reference, and re-running
+  // hydration on that would stomp whatever tabs the user has open by then.
+  const hydratedTabs = useRef(false);
+  useEffect(() => {
+    if (hydratedTabs.current || !tree.data) return;
+    hydratedTabs.current = true;
+
+    const persisted = loadPersistedTabs();
+    if (!persisted) return;
+    const filesById = new Map(tree.data.files.map((f) => [f.id, f]));
+    const restoredFiles = persisted.openFileIds
+      .map((id) => filesById.get(id))
+      .filter((f): f is TreeFile => f != null);
+    if (restoredFiles.length === 0) return;
+
+    setOpenFiles(restoredFiles);
+    setActiveFileId(
+      restoredFiles.some((f) => f.id === persisted.activeFileId) ? persisted.activeFileId : restoredFiles[0].id,
+    );
+    setFocusedStringIdByFile(persisted.focusedStringIdByFile ?? {});
+  }, [tree.data]);
+
+  // Persist on every change, but only after hydration above has had its
+  // chance to run — otherwise the initial empty state would overwrite
+  // last session's saved tabs before they ever get restored.
+  useEffect(() => {
+    if (!hydratedTabs.current) return;
+    const payload: PersistedTabs = {
+      openFileIds: openFiles.map((f) => f.id),
+      activeFileId,
+      focusedStringIdByFile,
+    };
+    localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(payload));
+  }, [openFiles, activeFileId, focusedStringIdByFile]);
 
   const syncMutation = useMutation({
     mutationFn: () => api.syncTree(CLASSICUA_PROJECT_ID),
