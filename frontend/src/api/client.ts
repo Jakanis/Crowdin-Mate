@@ -108,6 +108,8 @@ export const api = {
       { method: "POST" },
     ),
   getTree: (projectId: number) => request<TreeResponse>(`/projects/${projectId}/tree`),
+  getPermissions: (projectId: number) =>
+    request<{ is_member: boolean; role: string | null }>(`/projects/${projectId}/permissions`),
   getFileStrings: (projectId: number, fileId: number, languageId: string) =>
     request<FileStringsResponse>(
       `/projects/${projectId}/files/${fileId}/strings?language_id=${encodeURIComponent(languageId)}`,

@@ -95,6 +95,15 @@ async def set_token(body: TokenIn):
         raise HTTPException(status_code=401, detail=f"Token rejected by Crowdin: {exc.message}")
 
     user_data = user.get("data", user)
+    # Stashed for the permission check below — get_member_info(memberId=self)
+    # needs our own numeric id, and there's no "who am I in this project"
+    # endpoint that takes the token alone.
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO app_config (key, value) VALUES ('user_id', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(user_data.get("id")),),
+        )
     return {"ok": True, "username": user_data.get("username"), "name": user_data.get("fullName")}
 
 
@@ -157,6 +166,45 @@ async def get_tree(project_id: int):
             )
         ]
     return {"directories": directories, "files": files}
+
+
+@app.get("/projects/{project_id}/permissions")
+async def get_permissions(project_id: int):
+    """Whether the current account can approve translations in this
+    project — gates the Approve/Unapprove buttons in the UI.
+
+    There's no direct "can I approve" flag in Crowdin's API, and the
+    obvious endpoint (list_project_members, searching for yourself)
+    requires manager-level access — confirmed live, it 403s for a
+    translator token. get_member_info scoped to a single already-known
+    member id has no such restriction, so we look ourselves up by the id
+    stashed at token-set time.
+
+    Role name alone isn't a reliable signal either: on non-Enterprise
+    Crowdin, a "translator" role commonly includes approve/vote rights
+    (confirmed live — this account is "translator" and successfully
+    approved a translation). So the real gate is just "are you actually a
+    member of this project," not a specific role string.
+    """
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM app_config WHERE key = 'user_id'").fetchone()
+
+    if row is None:
+        return {"is_member": False, "role": None}
+
+    client = get_client()
+    try:
+        resp = await run_in_threadpool(
+            call_with_limits, client.users.get_member_info,
+            memberId=int(row["value"]), projectId=project_id,
+        )
+    except APIException as exc:
+        if exc.http_status in (403, 404):
+            return {"is_member": False, "role": None}
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    member = resp.get("data", resp)
+    return {"is_member": True, "role": member.get("role")}
 
 
 def _revalidate_file_content(project_id: int, file_id: int, language_id: str) -> None:

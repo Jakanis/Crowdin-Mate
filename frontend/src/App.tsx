@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type TreeFile } from "./api/client";
 import { FileTree } from "./components/FileTree";
-import { StringList } from "./components/StringList";
 import { TokenSetup } from "./components/TokenSetup";
+import { TranslationWorkspace } from "./components/TranslationWorkspace";
 
 const CLASSICUA_PROJECT_ID = 393919;
 const TARGET_LANGUAGE_ID = "uk";
@@ -62,7 +62,7 @@ export function App() {
           {selectedFile ? (
             <>
               <h2 className="file-title">{selectedFile.path}</h2>
-              <StringList
+              <TranslationWorkspace
                 projectId={CLASSICUA_PROJECT_ID}
                 fileId={selectedFile.id}
                 languageId={TARGET_LANGUAGE_ID}

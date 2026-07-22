@@ -60,17 +60,6 @@ body {
   word-break: break-all;
 }
 
-.string-list-scroll {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.string-row {
-  padding: 12px 4px 16px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-}
-
 .string-source {
   font-size: 13px;
   white-space: pre-wrap;
@@ -124,11 +113,17 @@ body {
   border-radius: 6px;
   padding: 8px 10px;
   background: rgba(128, 128, 128, 0.04);
+  cursor: pointer;
 }
 
 .translation-item--approved {
   border-color: rgba(52, 168, 83, 0.5);
   background: rgba(52, 168, 83, 0.07);
+}
+
+.translation-item--selected {
+  outline: 2px solid #3a7bd5;
+  outline-offset: -1px;
 }
 
 .translation-text {
@@ -174,33 +169,32 @@ body {
   cursor: default;
 }
 
-.add-translation-label {
-  display: block;
-  font-size: 11px;
-  opacity: 0.5;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-/* --- comments --- */
-.comments-toggle {
-  background: none;
-  border: none;
-  padding: 8px 0 0;
-  cursor: pointer;
-  font-size: 12px;
-  opacity: 0.7;
-  text-align: left;
-}
-
-.comments-panel {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-left: 2px solid rgba(128, 128, 128, 0.3);
+/* --- comments sidebar (persistent, right-hand) --- */
+.comments-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(128, 128, 128, 0.25);
+  padding-left: 16px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   gap: 8px;
+}
+
+.comments-sidebar-title {
+  font-size: 13px;
+  font-weight: 650;
+  margin: 0;
+  opacity: 0.85;
+}
+
+.comments-sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .comment {
@@ -241,6 +235,7 @@ body {
   display: flex;
   gap: 8px;
   align-items: flex-start;
+  flex-shrink: 0;
 }
 
 .add-comment textarea {
@@ -347,4 +342,135 @@ body {
 .token-setup .error {
   color: #d14343;
   font-size: 13px;
+}
+
+/* --- translation workspace --- */
+.translation-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 10px;
+}
+
+.workspace-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.view-mode-toggle {
+  display: flex;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.view-mode-toggle button {
+  border: none;
+  background: none;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.view-mode-toggle button + button {
+  border-left: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+.view-mode-toggle button.active {
+  background: rgba(58, 123, 213, 0.15);
+  font-weight: 600;
+}
+
+.workspace-body {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* --- comfortable view --- */
+.comfortable-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.comfortable-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+.translation-editor {
+  display: flex;
+  flex-direction: column;
+}
+
+.comfortable-pager {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  font-size: 12px;
+}
+
+.comfortable-pager-count {
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- side-by-side view --- */
+.side-by-side-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.side-by-side-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 4px 4px 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.5;
+  position: sticky;
+  top: 0;
+  background: inherit;
+}
+
+.sbs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 10px 4px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  cursor: pointer;
+}
+
+.sbs-row--expanded {
+  cursor: default;
+  background: rgba(128, 128, 128, 0.04);
+}
+
+.sbs-source {
+  font-size: 13px;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+
+.sbs-translation-preview {
+  font-size: 13px;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  opacity: 0.75;
 }
