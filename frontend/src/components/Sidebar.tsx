@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { SourceString, TreeDirectory, TreeFile } from "../api/client";
 import { FileStringsList } from "./FileStringsList";
 import { FileTree } from "./FileTree";
+import { SearchPanel } from "./SearchPanel";
 
 interface SidebarProps {
   projectId: number;
@@ -13,11 +14,12 @@ interface SidebarProps {
   strings: SourceString[];
   focusedStringId: number | null;
   onFocusString: (stringId: number) => void;
+  onJumpToSearchResult: (fileId: number, stringId: number) => void;
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
 }
 
-type Tab = "files" | "strings";
+type Tab = "files" | "strings" | "search";
 
 /** Left sidebar, matching Crowdin's own FILES/STRINGS tabs — Files browses
  * the whole project tree, Strings lists every string in the currently
@@ -33,6 +35,7 @@ export function Sidebar({
   strings,
   focusedStringId,
   onFocusString,
+  onJumpToSearchResult,
   width,
   onResizeStart,
 }: SidebarProps) {
@@ -63,16 +66,19 @@ export function Sidebar({
         >
           Strings
         </button>
+        <button className={tab === "search" ? "active" : ""} onClick={() => setTab("search")}>
+          Search
+        </button>
         <button className="sidebar-collapse-btn" onClick={() => setCollapsed(true)} title="Hide sidebar">
           ◂
         </button>
       </div>
 
-      {/* Both panels stay mounted always, toggled via CSS rather than
-          conditional rendering — otherwise switching to Strings and back
-          would remount FileTree and lose its expanded-folders state and
-          scroll position. */}
-      <div className="sidebar-panel" hidden={!(tab === "files" || selectedFile == null)}>
+      {/* All panels stay mounted always, toggled via CSS rather than
+          conditional rendering — otherwise switching tabs and back would
+          remount FileTree (losing expanded-folders state) or SearchPanel
+          (losing the in-progress query) each time. */}
+      <div className="sidebar-panel" hidden={!(tab === "files" || (tab === "strings" && selectedFile == null))}>
         <FileTree
           projectId={projectId}
           languageId={languageId}
@@ -83,6 +89,9 @@ export function Sidebar({
       </div>
       <div className="sidebar-panel" hidden={!(tab === "strings" && selectedFile != null)}>
         <FileStringsList strings={strings} focusedStringId={focusedStringId} onSelect={onFocusString} />
+      </div>
+      <div className="sidebar-panel" hidden={tab !== "search"}>
+        <SearchPanel projectId={projectId} languageId={languageId} onJumpToResult={onJumpToSearchResult} />
       </div>
       </aside>
       <div className="resize-handle" onMouseDown={onResizeStart} />

@@ -7,6 +7,7 @@ the Crowdin PAT and must never be reachable from the network.
 import asyncio
 import json
 import logging
+import sqlite3
 from datetime import datetime, timezone
 
 from crowdin_api.exceptions import APIException
@@ -21,6 +22,7 @@ from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
 from app.sync.progress_sync import get_children_progress
+from app.sync import search_index
 from app.sync.suggestions_sync import has_looked_up, sync_glossary_matches, sync_tm_matches
 from app.sync.tree_sync import sync_project_tree
 
@@ -321,6 +323,67 @@ async def resync_file_content(project_id: int, file_id: int, language_id: str):
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
     return result
+
+
+@app.get("/projects/{project_id}/search")
+async def search_strings(project_id: int, q: str, language_id: str, limit: int = 50):
+    """Full-text search over whatever's cached locally — instant, no
+    Crowdin call. Coverage is only as wide as what's been synced (see
+    strings_fts in schema.sql): opened files, plus anything pulled in by
+    an explicit /search-index/build run. Query is treated as a literal
+    phrase with a prefix match on the trailing word (quoting sidesteps
+    FTS5's own query-syntax special characters), which reads sensibly
+    for search-as-you-type."""
+    q = q.strip()
+    if not q:
+        return {"results": []}
+
+    fts_query = '"' + q.replace('"', '""') + '"*'
+    with get_conn() as conn:
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    strings_fts.rowid AS string_id,
+                    ss.file_id,
+                    ss.identifier,
+                    f.path AS file_path,
+                    snippet(strings_fts, 1, '⟦', '⟧', '…', 12) AS source_snippet,
+                    snippet(strings_fts, 2, '⟦', '⟧', '…', 12) AS target_snippet
+                FROM strings_fts
+                JOIN source_strings ss ON ss.id = strings_fts.rowid
+                JOIN files f ON f.id = ss.file_id
+                WHERE strings_fts MATCH ? AND ss.project_id = ?
+                ORDER BY rank
+                LIMIT ?
+                """,
+                (fts_query, project_id, limit),
+            ).fetchall()
+        except sqlite3.OperationalError as exc:
+            raise HTTPException(status_code=400, detail=f"Bad search query: {exc}")
+
+    return {"results": [dict(r) for r in rows]}
+
+
+@app.post("/projects/{project_id}/search-index/build")
+async def build_search_index(project_id: int, language_id: str):
+    """Kicks off the (potentially hours-long) background job that syncs
+    every not-yet-cached file's content so search covers the whole
+    project, not just what's been opened. See search_index.py — safe to
+    call repeatedly; a build already in progress is left alone."""
+    started = search_index.start(project_id, language_id)
+    return {"started": started, **search_index.get_status(project_id)}
+
+
+@app.get("/projects/{project_id}/search-index/status")
+async def get_search_index_status(project_id: int):
+    return search_index.get_status(project_id)
+
+
+@app.post("/projects/{project_id}/search-index/stop")
+async def stop_search_index(project_id: int):
+    search_index.request_stop()
+    return search_index.get_status(project_id)
 
 
 @app.get("/projects/{project_id}/files/{file_id}/strings")

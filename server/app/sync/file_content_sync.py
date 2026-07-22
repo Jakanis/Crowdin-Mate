@@ -156,6 +156,25 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
                 ),
             )
 
+        # Keep the search index in step with what was just written. Rebuilt
+        # from scratch per string rather than patched — cheap at per-file
+        # scale, and sidesteps having to diff old vs new translation sets.
+        translation_texts_by_string: dict[int, list[str]] = {}
+        for t in translations:
+            translation_texts_by_string.setdefault(t["_string_id"], []).append(t.get("text", ""))
+
+        for s in strings:
+            conn.execute("DELETE FROM strings_fts WHERE rowid = ?", (s["id"],))
+            conn.execute(
+                "INSERT INTO strings_fts(rowid, identifier, source_text, target_text) VALUES (?, ?, ?, ?)",
+                (
+                    s["id"],
+                    s.get("identifier") or "",
+                    s.get("text") or "",
+                    " ".join(translation_texts_by_string.get(s["id"], [])),
+                ),
+            )
+
         conn.execute(
             "UPDATE files SET content_synced_at = ? WHERE id = ?",
             (now, file_id),

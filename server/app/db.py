@@ -46,11 +46,28 @@ def _apply_column_migrations(conn: sqlite3.Connection) -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
+def _backfill_search_index(conn: sqlite3.Connection) -> None:
+    """strings_fts is new — anything synced by an older run of this app
+    before it existed was never written there. Cheap self-healing pass
+    (a no-op once caught up) rather than a one-shot migration, so it also
+    recovers from e.g. a crash mid-write in sync_file_content."""
+    conn.execute(
+        """
+        INSERT INTO strings_fts(rowid, identifier, source_text, target_text)
+        SELECT ss.id, COALESCE(ss.identifier, ''), ss.text,
+               COALESCE((SELECT group_concat(t.text, ' ') FROM translations t WHERE t.string_id = ss.id), '')
+        FROM source_strings ss
+        WHERE ss.id NOT IN (SELECT rowid FROM strings_fts)
+        """
+    )
+
+
 def init_db() -> None:
     conn = _connect()
     try:
         conn.executescript(_SCHEMA_PATH.read_text())
         _apply_column_migrations(conn)
+        _backfill_search_index(conn)
         conn.commit()
     finally:
         conn.close()

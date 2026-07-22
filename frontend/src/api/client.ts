@@ -126,6 +126,23 @@ export interface GlossaryMatch {
   glossary_name: string | null;
 }
 
+export interface SearchResult {
+  string_id: number;
+  file_id: number;
+  identifier: string | null;
+  file_path: string;
+  source_snippet: string;
+  target_snippet: string;
+}
+
+export interface SearchIndexStatus {
+  total: number;
+  synced: number;
+  running: boolean;
+  errors: number;
+  current_file_path: string | null;
+}
+
 export interface OfflineQueueItem {
   id: number;
   operation_type: string;
@@ -174,6 +191,19 @@ export const api = {
       `/projects/${projectId}/files/${fileId}/resync?language_id=${encodeURIComponent(languageId)}`,
       { method: "POST" },
     ),
+  searchStrings: (projectId: number, q: string, languageId: string) =>
+    request<{ results: SearchResult[] }>(
+      `/projects/${projectId}/search?${new URLSearchParams({ q, language_id: languageId }).toString()}`,
+    ),
+  getSearchIndexStatus: (projectId: number) =>
+    request<SearchIndexStatus>(`/projects/${projectId}/search-index/status`),
+  buildSearchIndex: (projectId: number, languageId: string) =>
+    request<SearchIndexStatus & { started: boolean }>(
+      `/projects/${projectId}/search-index/build?language_id=${encodeURIComponent(languageId)}`,
+      { method: "POST" },
+    ),
+  stopSearchIndex: (projectId: number) =>
+    request<SearchIndexStatus>(`/projects/${projectId}/search-index/stop`, { method: "POST" }),
   getOfflineQueue: () => request<{ items: OfflineQueueItem[] }>("/offline-queue"),
   drainOfflineQueue: () => request<{ drained: number }>("/offline-queue/drain", { method: "POST" }),
   retryOfflineQueueItem: (itemId: number) =>

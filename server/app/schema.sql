@@ -209,3 +209,19 @@ CREATE TABLE IF NOT EXISTS app_config (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Full-text search over cached source + target string text. Only ever
+-- covers strings whose file content has actually been synced locally —
+-- this app never bulk-fetches string content by default (see
+-- file_content_sync.py) — either from ordinarily opening files, or the
+-- explicit background indexing job in search_index.py for whoever wants
+-- full-project coverage. Kept in sync explicitly, right alongside the
+-- writes in sync_file_content, rather than via FTS5 external-content
+-- triggers — simpler to reason about at this scale. rowid = string_id.
+-- target_text is every cached translation candidate for that string
+-- space-joined, so a match on any candidate's wording is found.
+CREATE VIRTUAL TABLE IF NOT EXISTS strings_fts USING fts5(
+    identifier,
+    source_text,
+    target_text
+);

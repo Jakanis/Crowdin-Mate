@@ -199,6 +199,13 @@ export function App() {
     if (target) setActiveFileId(target.id);
   };
 
+  const handleJumpToSearchResult = (fileId: number, stringId: number) => {
+    const file = tree.data?.files.find((f) => f.id === fileId);
+    if (!file) return;
+    handleSelectFile(file);
+    setFocusedStringIdFor(fileId, stringId);
+  };
+
   if (authStatus.isLoading) return <div className="app-shell">Loading…</div>;
 
   if (!authStatus.data?.configured) {
@@ -258,6 +265,7 @@ export function App() {
             strings={activeStrings}
             focusedStringId={activeFileId != null ? focusedStringIdByFile[activeFileId] ?? null : null}
             onFocusString={(stringId) => activeFileId != null && setFocusedStringIdFor(activeFileId, stringId)}
+            onJumpToSearchResult={handleJumpToSearchResult}
             width={leftPanel.width}
             onResizeStart={(e) => leftPanel.startResize(e, 1)}
           />
