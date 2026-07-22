@@ -282,21 +282,22 @@ async def get_permissions(project_id: int):
         row = conn.execute("SELECT value FROM app_config WHERE key = 'user_id'").fetchone()
 
     if row is None:
-        return {"is_member": False, "role": None}
+        return {"is_member": False, "role": None, "user_id": None}
 
+    user_id = int(row["value"])
     client = get_client()
     try:
         resp = await run_in_threadpool(
             call_with_limits, client.users.get_member_info,
-            memberId=int(row["value"]), projectId=project_id,
+            memberId=user_id, projectId=project_id,
         )
     except APIException as exc:
         if exc.http_status in (403, 404):
-            return {"is_member": False, "role": None}
+            return {"is_member": False, "role": None, "user_id": user_id}
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
 
     member = resp.get("data", resp)
-    return {"is_member": True, "role": member.get("role")}
+    return {"is_member": True, "role": member.get("role"), "user_id": user_id}
 
 
 def _revalidate_file_content(project_id: int, file_id: int, language_id: str) -> None:
@@ -356,7 +357,7 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
         translations_by_string: dict[int, list] = {}
         for row in conn.execute(
             """
-            SELECT t.string_id, t.id, t.text, t.user_name, t.rating,
+            SELECT t.string_id, t.id, t.text, t.user_id, t.user_name, t.rating,
                    t.is_approved, t.approval_id, t.created_at
             FROM translations t
             JOIN source_strings s ON s.id = t.string_id
@@ -584,6 +585,65 @@ async def unapprove_translation(project_id: int, translation_id: int):
             (translation_id,),
         )
     return {"status": "unapproved"}
+
+
+@app.delete("/projects/{project_id}/translations/{translation_id}")
+async def delete_translation_endpoint(project_id: int, translation_id: int):
+    """Own translations are always deletable; the frontend gates the
+    button itself for other people's (moderator/canApprove only) — same
+    split Crowdin's own editor uses, since "translator" role commonly
+    includes moderation rights on non-Enterprise projects (see the
+    get_permissions docstring above)."""
+    client = get_client()
+    try:
+        await run_in_threadpool(
+            call_with_limits, client.string_translations.delete_translation,
+            translationId=translation_id, projectId=project_id,
+        )
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    with get_conn() as conn:
+        conn.execute("DELETE FROM translations WHERE id = ?", (translation_id,))
+    return {"status": "deleted"}
+
+
+class VoteIn(BaseModel):
+    mark: str  # "up" | "down"
+
+
+@app.post("/projects/{project_id}/translations/{translation_id}/vote")
+async def vote_translation(project_id: int, translation_id: int, body: VoteIn):
+    from crowdin_api.api_resources.string_translations.enums import VoteMark
+
+    client = get_client()
+    try:
+        await run_in_threadpool(
+            call_with_limits, client.string_translations.add_vote,
+            mark=VoteMark.UP if body.mark == "up" else VoteMark.DOWN,
+            translationId=translation_id, projectId=project_id,
+        )
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    # add_vote's response is just the vote record, not the translation's
+    # aggregate tally — recompute rating from the authoritative vote list
+    # rather than guessing +1/-1 locally, so it can never drift from what
+    # Crowdin actually has (e.g. if the user had a prior opposite vote
+    # that this call implicitly replaced).
+    try:
+        votes_resp = await run_in_threadpool(
+            call_with_limits, client.string_translations.with_fetch_all().list_translation_votes,
+            translationId=translation_id, projectId=project_id,
+        )
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    votes = [v.get("data", v) for v in votes_resp.get("data", [])]
+    rating = sum(1 if v.get("mark") == "up" else -1 for v in votes)
+    with get_conn() as conn:
+        conn.execute("UPDATE translations SET rating = ? WHERE id = ?", (rating, translation_id))
+    return {"status": "voted", "rating": rating}
 
 
 @app.get("/projects/{project_id}/strings/{string_id}/comments")

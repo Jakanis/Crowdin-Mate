@@ -56,6 +56,7 @@ export interface TranslationInfo {
   string_id: number;
   id: number;
   text: string;
+  user_id: number | null;
   user_name: string | null;
   rating: number;
   is_approved: number;
@@ -153,7 +154,9 @@ export const api = {
         (parentId != null ? `&parent_id=${parentId}` : ""),
     ),
   getPermissions: (projectId: number) =>
-    request<{ is_member: boolean; role: string | null }>(`/projects/${projectId}/permissions`),
+    request<{ is_member: boolean; role: string | null; user_id: number | null }>(
+      `/projects/${projectId}/permissions`,
+    ),
   getFileStrings: (projectId: number, fileId: number, languageId: string) =>
     request<FileStringsResponse>(
       `/projects/${projectId}/files/${fileId}/strings?language_id=${encodeURIComponent(languageId)}`,
@@ -182,6 +185,15 @@ export const api = {
   unapproveTranslation: (projectId: number, translationId: number) =>
     request<{ status: string }>(`/projects/${projectId}/translations/${translationId}/approve`, {
       method: "DELETE",
+    }),
+  deleteTranslation: (projectId: number, translationId: number) =>
+    request<{ status: string }>(`/projects/${projectId}/translations/${translationId}`, {
+      method: "DELETE",
+    }),
+  voteTranslation: (projectId: number, translationId: number, mark: "up" | "down") =>
+    request<{ status: string; rating: number }>(`/projects/${projectId}/translations/${translationId}/vote`, {
+      method: "POST",
+      body: JSON.stringify({ mark }),
     }),
   getComments: (projectId: number, stringId: number) =>
     request<{ comments: CommentInfo[] }>(`/projects/${projectId}/strings/${stringId}/comments`),

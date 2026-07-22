@@ -9,6 +9,7 @@ interface ComfortableViewProps {
   focusedIndex: number;
   onFocusChange: (index: number) => void;
   canApprove: boolean;
+  currentUserId: number | null;
   autoAdvance: boolean;
 }
 
@@ -22,6 +23,7 @@ export function ComfortableView({
   focusedIndex,
   onFocusChange,
   canApprove,
+  currentUserId,
   autoAdvance,
 }: ComfortableViewProps) {
   const s = strings[focusedIndex];
@@ -42,6 +44,7 @@ export function ComfortableView({
           languageId={languageId}
           s={s}
           canApprove={canApprove}
+          currentUserId={currentUserId}
           onSaved={autoAdvance && !isLast ? () => onFocusChange(focusedIndex + 1) : undefined}
         />
       </div>

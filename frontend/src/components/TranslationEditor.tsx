@@ -8,6 +8,7 @@ interface TranslationEditorProps {
   languageId: string;
   s: SourceString;
   canApprove: boolean;
+  currentUserId: number | null;
   /** Called after a successful save (synced or durably queued while
    * offline) — Comfortable view uses this to auto-advance to the next
    * string, matching Crowdin's own "Automatically move to next string"
@@ -29,7 +30,15 @@ function bestTranslationText(s: SourceString): string {
  * (one row, expanded) layouts — the editing behavior is identical, only
  * the surrounding layout differs.
  */
-export function TranslationEditor({ projectId, fileId, languageId, s, canApprove, onSaved }: TranslationEditorProps) {
+export function TranslationEditor({
+  projectId,
+  fileId,
+  languageId,
+  s,
+  canApprove,
+  currentUserId,
+  onSaved,
+}: TranslationEditorProps) {
   const queryClient = useQueryClient();
   const refetchStrings = () =>
     queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
@@ -129,6 +138,7 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
               projectId={projectId}
               t={t}
               canApprove={canApprove}
+              currentUserId={currentUserId}
               onChanged={refetchStrings}
               onSelect={() => selectCandidate(t.text)}
               selected={text === t.text}
@@ -144,6 +154,7 @@ function TranslationItem({
   projectId,
   t,
   canApprove,
+  currentUserId,
   onChanged,
   onSelect,
   selected,
@@ -151,6 +162,7 @@ function TranslationItem({
   projectId: number;
   t: TranslationInfo;
   canApprove: boolean;
+  currentUserId: number | null;
   onChanged: () => void;
   onSelect: () => void;
   selected: boolean;
@@ -169,6 +181,30 @@ function TranslationItem({
     onError: (err: Error) => setError(err.message),
   });
 
+  const vote = useMutation({
+    mutationFn: (mark: "up" | "down") => api.voteTranslation(projectId, t.id, mark),
+    onSuccess: () => {
+      setError(null);
+      onChanged();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const del = useMutation({
+    mutationFn: () => api.deleteTranslation(projectId, t.id),
+    onSuccess: () => {
+      setError(null);
+      onChanged();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  // Own translations are always deletable; anyone else's needs
+  // moderator-ish rights — canApprove already stands in for that
+  // elsewhere (see get_permissions' docstring on why role name alone
+  // isn't a reliable signal).
+  const canDelete = t.user_id === currentUserId || canApprove;
+
   return (
     <li
       className={`translation-item${t.is_approved ? " translation-item--approved" : ""}${selected ? " translation-item--selected" : ""}`}
@@ -178,7 +214,31 @@ function TranslationItem({
       <div className="translation-meta">
         {t.is_approved && <span className="approved-badge">✓ Approved</span>}
         {t.user_name && <span className="translation-author">{t.user_name}</span>}
-        {t.rating !== 0 && <span className="translation-rating">★ {t.rating}</span>}
+        <span className="translation-votes">
+          <button
+            className="vote-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              vote.mutate("up");
+            }}
+            disabled={vote.isPending}
+            title="Vote up"
+          >
+            ▲
+          </button>
+          <span className="translation-rating">{t.rating}</span>
+          <button
+            className="vote-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              vote.mutate("down");
+            }}
+            disabled={vote.isPending}
+            title="Vote down"
+          >
+            ▼
+          </button>
+        </span>
         {canApprove && (
           <button
             className="link-button"
@@ -189,6 +249,18 @@ function TranslationItem({
             disabled={approve.isPending}
           >
             {approve.isPending ? "…" : t.is_approved ? "Unapprove" : "Approve"}
+          </button>
+        )}
+        {canDelete && (
+          <button
+            className="link-button link-button--danger"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm("Delete this translation? This can't be undone.")) del.mutate();
+            }}
+            disabled={del.isPending}
+          >
+            {del.isPending ? "…" : "Delete"}
           </button>
         )}
         {error && <span className="error">{error}</span>}

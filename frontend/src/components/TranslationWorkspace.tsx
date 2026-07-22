@@ -61,6 +61,7 @@ export function TranslationWorkspace({
   if (strings.length === 0) return <p className="hint">No strings in this file.</p>;
 
   const canApprove = permissionsQuery.data?.is_member ?? false;
+  const currentUserId = permissionsQuery.data?.user_id ?? null;
   const focusedIndex = Math.max(0, strings.findIndex((s) => s.id === focusedStringId));
 
   return (
@@ -92,6 +93,7 @@ export function TranslationWorkspace({
             focusedIndex={focusedIndex}
             onFocusChange={(i) => onFocusChange(strings[i]?.id ?? null)}
             canApprove={canApprove}
+            currentUserId={currentUserId}
             autoAdvance={autoAdvance}
           />
         ) : (
@@ -103,6 +105,7 @@ export function TranslationWorkspace({
             focusedStringId={focusedStringId}
             onFocusChange={onFocusChange}
             canApprove={canApprove}
+            currentUserId={currentUserId}
           />
         )}
 

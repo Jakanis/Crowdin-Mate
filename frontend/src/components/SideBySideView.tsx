@@ -11,6 +11,7 @@ interface SideBySideViewProps {
   focusedStringId: number | null;
   onFocusChange: (stringId: number) => void;
   canApprove: boolean;
+  currentUserId: number | null;
 }
 
 function bestTranslationText(s: SourceString): string {
@@ -31,6 +32,7 @@ export function SideBySideView({
   focusedStringId,
   onFocusChange,
   canApprove,
+  currentUserId,
 }: SideBySideViewProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -77,6 +79,7 @@ export function SideBySideView({
                       languageId={languageId}
                       s={s}
                       canApprove={canApprove}
+                      currentUserId={currentUserId}
                     />
                   ) : (
                     <div className="sbs-translation-preview">{bestTranslationText(s)}</div>
