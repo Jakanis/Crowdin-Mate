@@ -12,6 +12,12 @@ import { useSyncTree } from "./useSyncTree";
 
 const CLASSICUA_PROJECT_ID = 393919;
 const TARGET_LANGUAGE_ID = "uk";
+// Project slug + source language for building a live crowdin.com editor
+// link — not returned by our own /tree endpoint (which only serves the
+// local directory/file cache), and hardcoding matches how the project
+// id/target language above are already fixed to this one project.
+const CLASSICUA_PROJECT_SLUG = "classicua";
+const SOURCE_LANGUAGE_ID = "en";
 
 const TABS_STORAGE_KEY = "classicua-open-tabs";
 
@@ -196,12 +202,25 @@ export function App() {
   }
 
   const isEmpty = tree.data && tree.data.directories.length === 0 && tree.data.files.length === 0;
+  const crowdinFileUrl =
+    activeFileId != null
+      ? `https://crowdin.com/editor/${CLASSICUA_PROJECT_SLUG}/${activeFileId}/${SOURCE_LANGUAGE_ID}-${TARGET_LANGUAGE_ID}?view=comfortable`
+      : null;
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <h1>ClassicUA · Ukrainian</h1>
         <div className="app-header-actions">
+          <a
+            className="header-link-button"
+            href={crowdinFileUrl ?? "https://crowdin.com/project/classicua"}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={crowdinFileUrl ? "Open this file in Crowdin" : "Open project in Crowdin"}
+          >
+            Open in Crowdin ↗
+          </a>
           {sync.progress != null && (
             <span className="sync-progress" title="Estimated from previous sync durations">
               <span className="sync-progress-fill" style={{ width: `${sync.progress * 100}%` }} />
