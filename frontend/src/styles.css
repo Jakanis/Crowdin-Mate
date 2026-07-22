@@ -198,7 +198,7 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 14px;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.3);
 }
@@ -206,12 +206,30 @@ body {
 .app-header h1 {
   font-size: calc(16px * var(--ui-scale));
   margin: 0;
+  white-space: nowrap;
 }
 
 .app-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+}
+
+.project-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-picker select {
+  font-size: calc(12.5px * var(--ui-scale));
+  padding: 4px 6px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  max-width: 220px;
 }
 
 .header-link-button {

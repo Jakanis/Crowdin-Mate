@@ -2,27 +2,33 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 
-const DURATIONS_KEY = "classicua-sync-durations";
 const MAX_HISTORY = 5;
 const FALLBACK_ESTIMATE_MS = 20_000;
 const AUTO_SYNC_INTERVAL_MS = 10 * 60_000;
 
-function loadDurations(): number[] {
+// Per-project — different projects crawl at very different speeds
+// (file count varies a lot), so one project's history shouldn't skew
+// another's progress estimate.
+function durationsKey(projectId: number) {
+  return `classicua-sync-durations-${projectId}`;
+}
+
+function loadDurations(projectId: number): number[] {
   try {
-    const raw = localStorage.getItem(DURATIONS_KEY);
+    const raw = localStorage.getItem(durationsKey(projectId));
     return raw ? (JSON.parse(raw) as number[]) : [];
   } catch {
     return [];
   }
 }
 
-function recordDuration(ms: number) {
-  const durations = [...loadDurations(), ms].slice(-MAX_HISTORY);
-  localStorage.setItem(DURATIONS_KEY, JSON.stringify(durations));
+function recordDuration(projectId: number, ms: number) {
+  const durations = [...loadDurations(projectId), ms].slice(-MAX_HISTORY);
+  localStorage.setItem(durationsKey(projectId), JSON.stringify(durations));
 }
 
-function averageDuration(): number {
-  const durations = loadDurations();
+function averageDuration(projectId: number): number {
+  const durations = loadDurations(projectId);
   if (durations.length === 0) return FALLBACK_ESTIMATE_MS;
   return durations.reduce((a, b) => a + b, 0) / durations.length;
 }
@@ -53,7 +59,7 @@ export function useSyncTree(projectId: number) {
     mutationFn: () => api.syncTree(projectId),
     onMutate: () => {
       startRef.current = performance.now();
-      estimateRef.current = averageDuration();
+      estimateRef.current = averageDuration(projectId);
       setProgress(0);
       progressTimerRef.current = window.setInterval(() => {
         if (startRef.current == null) return;
@@ -67,7 +73,7 @@ export function useSyncTree(projectId: number) {
     },
     onSettled: () => {
       if (progressTimerRef.current != null) window.clearInterval(progressTimerRef.current);
-      if (startRef.current != null) recordDuration(performance.now() - startRef.current);
+      if (startRef.current != null) recordDuration(projectId, performance.now() - startRef.current);
       setProgress(1);
       window.setTimeout(() => setProgress(null), 500);
     },
@@ -80,10 +86,15 @@ export function useSyncTree(projectId: number) {
   mutateRef.current = mutation.mutate;
   const isPendingRef = useRef(mutation.isPending);
   isPendingRef.current = mutation.isPending;
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      if (!isPendingRef.current) mutateRef.current();
+      // projectId is 0 before a project's actually been picked (see
+      // App.tsx's useSyncTree(projectId ?? 0)) — skip rather than sync
+      // a bogus project id in that brief window.
+      if (!isPendingRef.current && projectIdRef.current) mutateRef.current();
     }, AUTO_SYNC_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, []);

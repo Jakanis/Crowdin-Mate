@@ -16,10 +16,17 @@ export interface AuthStatus {
   configured: boolean;
 }
 
+export interface ProjectLanguage {
+  id: string;
+  name: string;
+}
+
 export interface Project {
   id: number;
   name: string;
   identifier: string;
+  source_language_id: string;
+  target_languages: ProjectLanguage[];
 }
 
 export interface TreeDirectory {

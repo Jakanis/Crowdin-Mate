@@ -11,6 +11,10 @@ out as a separate, explicit job, never something that runs on its own.
 Resumable for free: progress is driven by files.content_synced_at IS
 NULL rather than an in-memory cursor, so stopping (or an app restart)
 just picks back up wherever it left off next time it's started.
+
+State is keyed by project_id (not a single global) — with multi-project
+support, switching projects mid-build must not show one project's
+progress/errors while actually building another's.
 """
 
 import logging
@@ -22,12 +26,14 @@ from app.sync.file_content_sync import sync_file_content
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_state = {
-    "running": False,
-    "errors": 0,
-    "current_file_path": None,
-    "stop_requested": False,
-}
+_states: dict[int, dict] = {}
+
+
+def _state_for(project_id: int) -> dict:
+    return _states.setdefault(
+        project_id,
+        {"running": False, "errors": 0, "current_file_path": None, "stop_requested": False},
+    )
 
 
 def get_status(project_id: int) -> dict:
@@ -44,7 +50,8 @@ def get_status(project_id: int) -> dict:
         ).fetchone()["c"]
 
     with _lock:
-        running_info = {k: v for k, v in _state.items() if k != "stop_requested"}
+        state = _state_for(project_id)
+        running_info = {k: v for k, v in state.items() if k != "stop_requested"}
 
     return {"total": total, "synced": synced, **running_info}
 
@@ -62,35 +69,39 @@ def _run(project_id: int, language_id: str) -> None:
 
     for f in pending:
         with _lock:
-            if _state["stop_requested"]:
+            state = _state_for(project_id)
+            if state["stop_requested"]:
                 break
-            _state["current_file_path"] = f["path"]
+            state["current_file_path"] = f["path"]
         try:
             sync_file_content(project_id, f["id"], language_id)
         except Exception:
             logger.exception("search index build: failed to sync file %s (%s)", f["id"], f["path"])
             with _lock:
-                _state["errors"] += 1
+                _state_for(project_id)["errors"] += 1
 
     with _lock:
-        _state["running"] = False
-        _state["current_file_path"] = None
+        state = _state_for(project_id)
+        state["running"] = False
+        state["current_file_path"] = None
     logger.info("search index build: finished (or stopped) for project %s", project_id)
 
 
 def start(project_id: int, language_id: str) -> bool:
-    """Returns False if a build is already running (project-agnostic —
-    this app only ever works with one project open at a time)."""
+    """Returns False if a build is already running for this project.
+    Different projects can build concurrently — each is an independent
+    thread against its own file set."""
     with _lock:
-        if _state["running"]:
+        state = _state_for(project_id)
+        if state["running"]:
             return False
-        _state.update(running=True, errors=0, current_file_path=None, stop_requested=False)
+        state.update(running=True, errors=0, current_file_path=None, stop_requested=False)
 
     thread = threading.Thread(target=_run, args=(project_id, language_id), daemon=True)
     thread.start()
     return True
 
 
-def request_stop() -> None:
+def request_stop(project_id: int) -> None:
     with _lock:
-        _state["stop_requested"] = True
+        _state_for(project_id)["stop_requested"] = True

@@ -210,7 +210,16 @@ async def list_projects():
     projects = []
     for item in resp.get("data", []):
         p = item.get("data", item)
-        projects.append({"id": p["id"], "name": p.get("name"), "identifier": p.get("identifier")})
+        projects.append({
+            "id": p["id"],
+            "name": p.get("name"),
+            "identifier": p.get("identifier"),
+            "source_language_id": p.get("sourceLanguageId"),
+            "target_languages": [
+                {"id": lang.get("id"), "name": lang.get("name")}
+                for lang in (p.get("targetLanguages") or [])
+            ],
+        })
     return {"projects": projects}
 
 
@@ -382,7 +391,7 @@ async def get_search_index_status(project_id: int):
 
 @app.post("/projects/{project_id}/search-index/stop")
 async def stop_search_index(project_id: int):
-    search_index.request_stop()
+    search_index.request_stop(project_id)
     return search_index.get_status(project_id)
 
 

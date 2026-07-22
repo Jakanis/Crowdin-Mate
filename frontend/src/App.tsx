@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { api, type TreeFile } from "./api/client";
+import { api, type Project, type TreeFile } from "./api/client";
 import { OfflineIndicator } from "./components/OfflineIndicator";
+import { ProjectPicker } from "./components/ProjectPicker";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { TabBar } from "./components/TabBar";
@@ -11,16 +12,18 @@ import { useAutoAdvance } from "./theme";
 import { useResizableWidth } from "./useResizableWidth";
 import { useSyncTree } from "./useSyncTree";
 
-const CLASSICUA_PROJECT_ID = 393919;
-const TARGET_LANGUAGE_ID = "uk";
-// Project slug + source language for building a live crowdin.com editor
-// link — not returned by our own /tree endpoint (which only serves the
-// local directory/file cache), and hardcoding matches how the project
-// id/target language above are already fixed to this one project.
-const CLASSICUA_PROJECT_SLUG = "classicua";
-const SOURCE_LANGUAGE_ID = "en";
+// This app started as a single-project (ClassicUA, 393919) tool — kept
+// as the preferred default when nothing's been selected yet, but any
+// project the token can see now works via the header's project picker.
+const DEFAULT_PROJECT_ID = 393919;
+const SELECTED_PROJECT_KEY = "classicua-selected-project";
 
-const TABS_STORAGE_KEY = "classicua-open-tabs";
+function tabsStorageKey(projectId: number) {
+  return `classicua-open-tabs-${projectId}`;
+}
+function selectedLanguageKey(projectId: number) {
+  return `classicua-selected-language-${projectId}`;
+}
 
 interface PersistedTabs {
   openFileIds: number[];
@@ -28,23 +31,37 @@ interface PersistedTabs {
   focusedStringIdByFile: Record<number, number | null>;
 }
 
-function loadPersistedTabs(): PersistedTabs | null {
+function loadPersistedTabs(projectId: number): PersistedTabs | null {
   try {
-    const raw = localStorage.getItem(TABS_STORAGE_KEY);
+    const raw = localStorage.getItem(tabsStorageKey(projectId));
     return raw ? (JSON.parse(raw) as PersistedTabs) : null;
   } catch {
     return null;
   }
 }
 
+function pickDefaultLanguage(project: Project): string {
+  const persisted = localStorage.getItem(selectedLanguageKey(project.id));
+  if (persisted && project.target_languages.some((l) => l.id === persisted)) return persisted;
+  if (project.target_languages.some((l) => l.id === "uk")) return "uk";
+  return project.target_languages[0]?.id ?? "uk";
+}
+
 export function App() {
   const queryClient = useQueryClient();
+
+  // Which project + target language is currently open. null until the
+  // project list has loaded and a default has been picked (see the
+  // effect below) — everything downstream waits on that.
+  const [projectId, setProjectId] = useState<number | null>(null);
+  const [languageId, setLanguageId] = useState<string | null>(null);
 
   // Multiple files can be open at once (a quest-chain workflow: open
   // several related files up front, work through them one by one) —
   // openFiles is the tab strip, activeFileId which one is visible.
   // Each open file gets its own focusedStringId so switching tabs
-  // doesn't disturb where you were in the others.
+  // doesn't disturb where you were in the others. All reset when the
+  // project switches — tabs are per-project (see handleSelectProject).
   const [openFiles, setOpenFiles] = useState<TreeFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<number | null>(null);
   const [focusedStringIdByFile, setFocusedStringIdByFile] = useState<Record<number, number | null>>({});
@@ -65,23 +82,67 @@ export function App() {
 
   const authStatus = useQuery({ queryKey: ["auth-status"], queryFn: api.authStatus });
 
-  const tree = useQuery({
-    queryKey: ["tree", CLASSICUA_PROJECT_ID],
-    queryFn: () => api.getTree(CLASSICUA_PROJECT_ID),
+  const projectsQuery = useQuery({
+    queryKey: ["projects"],
+    queryFn: api.listProjects,
     enabled: authStatus.data?.configured === true,
   });
+  const projects = projectsQuery.data?.projects ?? [];
+  const selectedProject = projects.find((p) => p.id === projectId) ?? null;
 
-  // Restore whichever tabs were open last session, once the tree data
-  // needed to turn saved file ids back into real TreeFile objects has
-  // loaded. Guarded by a ref (not state) so this runs exactly once —
-  // "Sync tree" refetches tree.data with a new reference, and re-running
-  // hydration on that would stomp whatever tabs the user has open by then.
-  const hydratedTabs = useRef(false);
+  // Reset everything that's scoped to "whichever project is open" —
+  // tabs, focus, stale flags — and persist the choice so next launch
+  // reopens the same project. hydratedTabsForProject below re-hydrates
+  // this new project's own saved tabs once tree.data for it arrives.
+  const handleSelectProject = (project: Project) => {
+    setProjectId(project.id);
+    setLanguageId(pickDefaultLanguage(project));
+    localStorage.setItem(SELECTED_PROJECT_KEY, String(project.id));
+    setOpenFiles([]);
+    setActiveFileId(null);
+    setFocusedStringIdByFile({});
+    setStaleFileIds(new Set());
+  };
+
+  const handleSelectLanguage = (langId: string) => {
+    if (projectId == null) return;
+    setLanguageId(langId);
+    localStorage.setItem(selectedLanguageKey(projectId), langId);
+  };
+
+  // Pick a default project once the list loads and nothing's selected
+  // yet — whatever was last used (if it still exists), else the
+  // original ClassicUA project this app was built for, else just the
+  // first project the token can see.
   useEffect(() => {
-    if (hydratedTabs.current || !tree.data) return;
-    hydratedTabs.current = true;
+    if (projectId != null || projects.length === 0) return;
+    const persistedId = Number(localStorage.getItem(SELECTED_PROJECT_KEY));
+    const initial =
+      projects.find((p) => p.id === persistedId) ??
+      projects.find((p) => p.id === DEFAULT_PROJECT_ID) ??
+      projects[0];
+    handleSelectProject(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects.length]);
 
-    const persisted = loadPersistedTabs();
+  const tree = useQuery({
+    queryKey: ["tree", projectId],
+    queryFn: () => api.getTree(projectId as number),
+    enabled: projectId != null,
+  });
+
+  // Restore whichever tabs were open last session for THIS project, once
+  // its tree data (needed to turn saved file ids back into real TreeFile
+  // objects) has loaded. Tracks which project id it last hydrated for
+  // (not a plain boolean) so switching projects re-runs this for the
+  // newly-selected one, while "Sync tree" refetching tree.data for the
+  // same project doesn't re-trigger it and stomp open tabs.
+  const hydratedTabsForProject = useRef<number | null>(null);
+  useEffect(() => {
+    if (projectId == null || !tree.data || hydratedTabsForProject.current === projectId) return;
+    hydratedTabsForProject.current = projectId;
+
+    const persisted = loadPersistedTabs(projectId);
     if (!persisted) return;
     const filesById = new Map(tree.data.files.map((f) => [f.id, f]));
     const restoredFiles = persisted.openFileIds
@@ -94,22 +155,22 @@ export function App() {
       restoredFiles.some((f) => f.id === persisted.activeFileId) ? persisted.activeFileId : restoredFiles[0].id,
     );
     setFocusedStringIdByFile(persisted.focusedStringIdByFile ?? {});
-  }, [tree.data]);
+  }, [projectId, tree.data]);
 
   // Persist on every change, but only after hydration above has had its
-  // chance to run — otherwise the initial empty state would overwrite
-  // last session's saved tabs before they ever get restored.
+  // chance to run for this project — otherwise the initial empty state
+  // would overwrite last session's saved tabs before they're restored.
   useEffect(() => {
-    if (!hydratedTabs.current) return;
+    if (projectId == null || hydratedTabsForProject.current !== projectId) return;
     const payload: PersistedTabs = {
       openFileIds: openFiles.map((f) => f.id),
       activeFileId,
       focusedStringIdByFile,
     };
-    localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(payload));
-  }, [openFiles, activeFileId, focusedStringIdByFile]);
+    localStorage.setItem(tabsStorageKey(projectId), JSON.stringify(payload));
+  }, [projectId, openFiles, activeFileId, focusedStringIdByFile]);
 
-  const sync = useSyncTree(CLASSICUA_PROJECT_ID);
+  const sync = useSyncTree(projectId ?? 0);
 
   // Files whose content may be stale versus Crowdin (flagged by sync's
   // changed_file_ids — see tree_sync.py) among the tabs actually open
@@ -139,9 +200,9 @@ export function App() {
   };
 
   const resyncMutation = useMutation({
-    mutationFn: (fileId: number) => api.resyncFile(CLASSICUA_PROJECT_ID, fileId, TARGET_LANGUAGE_ID),
+    mutationFn: (fileId: number) => api.resyncFile(projectId as number, fileId, languageId as string),
     onSuccess: (_result, fileId) => {
-      queryClient.invalidateQueries({ queryKey: ["file-strings", CLASSICUA_PROJECT_ID, fileId, TARGET_LANGUAGE_ID] });
+      queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
       clearStale(fileId);
     },
   });
@@ -151,9 +212,9 @@ export function App() {
   // within it — React Query dedupes by queryKey, so this is not an extra
   // network request beyond what TranslationWorkspace already needs.
   const activeStringsQuery = useQuery({
-    queryKey: ["file-strings", CLASSICUA_PROJECT_ID, activeFileId, TARGET_LANGUAGE_ID],
-    queryFn: () => api.getFileStrings(CLASSICUA_PROJECT_ID, activeFileId as number, TARGET_LANGUAGE_ID),
-    enabled: activeFileId != null,
+    queryKey: ["file-strings", projectId, activeFileId, languageId],
+    queryFn: () => api.getFileStrings(projectId as number, activeFileId as number, languageId as string),
+    enabled: activeFileId != null && projectId != null,
   });
   const activeStrings = activeStringsQuery.data?.strings ?? [];
 
@@ -216,20 +277,34 @@ export function App() {
     );
   }
 
+  if (projectId == null || languageId == null || selectedProject == null) {
+    return <div className="app-shell">Loading projects…</div>;
+  }
+
   const isEmpty = tree.data && tree.data.directories.length === 0 && tree.data.files.length === 0;
   const crowdinFileUrl =
     activeFileId != null
-      ? `https://crowdin.com/editor/${CLASSICUA_PROJECT_SLUG}/${activeFileId}/${SOURCE_LANGUAGE_ID}-${TARGET_LANGUAGE_ID}?view=comfortable`
+      ? `https://crowdin.com/editor/${selectedProject.identifier}/${activeFileId}/${selectedProject.source_language_id}-${languageId}?view=comfortable`
       : null;
+  const languageName = selectedProject.target_languages.find((l) => l.id === languageId)?.name ?? languageId;
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>ClassicUA · Ukrainian</h1>
+        <h1>
+          {selectedProject.name} · {languageName}
+        </h1>
+        <ProjectPicker
+          projects={projects}
+          selectedProject={selectedProject}
+          languageId={languageId}
+          onSelectProject={handleSelectProject}
+          onSelectLanguage={handleSelectLanguage}
+        />
         <div className="app-header-actions">
           <a
             className="header-link-button"
-            href={crowdinFileUrl ?? "https://crowdin.com/project/classicua"}
+            href={crowdinFileUrl ?? `https://crowdin.com/project/${selectedProject.identifier}`}
             target="_blank"
             rel="noopener noreferrer"
             title={crowdinFileUrl ? "Open this file in Crowdin" : "Open project in Crowdin"}
@@ -256,8 +331,8 @@ export function App() {
           </aside>
         ) : (
           <Sidebar
-            projectId={CLASSICUA_PROJECT_ID}
-            languageId={TARGET_LANGUAGE_ID}
+            projectId={projectId}
+            languageId={languageId}
             directories={tree.data?.directories ?? []}
             files={tree.data?.files ?? []}
             onSelectFile={handleSelectFile}
@@ -295,9 +370,9 @@ export function App() {
           {openFiles.map((file) => (
             <div key={file.id} className="workspace-tab-panel" hidden={file.id !== activeFileId}>
               <TranslationWorkspace
-                projectId={CLASSICUA_PROJECT_ID}
+                projectId={projectId}
                 fileId={file.id}
-                languageId={TARGET_LANGUAGE_ID}
+                languageId={languageId}
                 focusedStringId={focusedStringIdByFile[file.id] ?? null}
                 onFocusChange={(stringId) => setFocusedStringIdFor(file.id, stringId)}
                 autoAdvance={autoAdvance.enabled}
