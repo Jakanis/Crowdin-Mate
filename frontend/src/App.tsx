@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type TreeFile } from "./api/client";
-import { FileTree } from "./components/FileTree";
+import { Sidebar } from "./components/Sidebar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
 
@@ -11,6 +11,7 @@ const TARGET_LANGUAGE_ID = "uk";
 export function App() {
   const queryClient = useQueryClient();
   const [selectedFile, setSelectedFile] = useState<TreeFile | null>(null);
+  const [focusedStringId, setFocusedStringId] = useState<number | null>(null);
 
   const authStatus = useQuery({ queryKey: ["auth-status"], queryFn: api.authStatus });
 
@@ -24,6 +25,31 @@ export function App() {
     mutationFn: () => api.syncTree(CLASSICUA_PROJECT_ID),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tree", CLASSICUA_PROJECT_ID] }),
   });
+
+  const stringsQuery = useQuery({
+    queryKey: ["file-strings", CLASSICUA_PROJECT_ID, selectedFile?.id, TARGET_LANGUAGE_ID],
+    queryFn: () => api.getFileStrings(CLASSICUA_PROJECT_ID, selectedFile!.id, TARGET_LANGUAGE_ID),
+    enabled: selectedFile != null,
+  });
+
+  const strings = stringsQuery.data?.strings ?? [];
+
+  // Default focus to the first string once its data has actually loaded —
+  // a plain `[selectedFile]` dependency doesn't work here since strings
+  // load asynchronously after the file is already selected, so that
+  // effect would fire once with an empty array and never re-run.
+  const initializedForFileId = useRef<number | null>(null);
+  useEffect(() => {
+    if (strings.length > 0 && initializedForFileId.current !== selectedFile?.id) {
+      setFocusedStringId(strings[0].id);
+      initializedForFileId.current = selectedFile?.id ?? null;
+    }
+  }, [selectedFile, strings]);
+
+  const handleSelectFile = (file: TreeFile) => {
+    setSelectedFile(file);
+    setFocusedStringId(null);
+  };
 
   if (authStatus.isLoading) return <div className="app-shell">Loading…</div>;
 
@@ -47,17 +73,21 @@ export function App() {
       </header>
 
       <div className="app-body">
-        <aside className="app-sidebar">
-          {isEmpty ? (
+        {isEmpty ? (
+          <aside className="app-sidebar">
             <p className="hint">No cached tree yet — click "Sync tree" to crawl the project once.</p>
-          ) : (
-            <FileTree
-              directories={tree.data?.directories ?? []}
-              files={tree.data?.files ?? []}
-              onSelectFile={setSelectedFile}
-            />
-          )}
-        </aside>
+          </aside>
+        ) : (
+          <Sidebar
+            directories={tree.data?.directories ?? []}
+            files={tree.data?.files ?? []}
+            onSelectFile={handleSelectFile}
+            selectedFile={selectedFile}
+            strings={strings}
+            focusedStringId={focusedStringId}
+            onFocusString={setFocusedStringId}
+          />
+        )}
         <main className="app-main">
           {selectedFile ? (
             <>
@@ -66,6 +96,12 @@ export function App() {
                 projectId={CLASSICUA_PROJECT_ID}
                 fileId={selectedFile.id}
                 languageId={TARGET_LANGUAGE_ID}
+                strings={strings}
+                isLoading={stringsQuery.isLoading}
+                isError={stringsQuery.isError}
+                error={stringsQuery.error as Error | null}
+                focusedStringId={focusedStringId}
+                onFocusChange={setFocusedStringId}
               />
             </>
           ) : (

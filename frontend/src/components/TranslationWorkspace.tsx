@@ -1,26 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { api, type SourceString } from "../api/client";
 import { ComfortableView } from "./ComfortableView";
-import { CommentsPanel } from "./CommentsPanel";
+import { RightSidebar } from "./RightSidebar";
 import { SideBySideView } from "./SideBySideView";
 
 interface TranslationWorkspaceProps {
   projectId: number;
   fileId: number;
   languageId: string;
+  strings: SourceString[];
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  focusedStringId: number | null;
+  onFocusChange: (stringId: number | null) => void;
 }
 
 type ViewMode = "comfortable" | "side-by-side";
 
-export function TranslationWorkspace({ projectId, fileId, languageId }: TranslationWorkspaceProps) {
+export function TranslationWorkspace({
+  projectId,
+  fileId,
+  languageId,
+  strings,
+  isLoading,
+  isError,
+  error,
+  focusedStringId,
+  onFocusChange,
+}: TranslationWorkspaceProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
-  const [focusedStringId, setFocusedStringId] = useState<number | null>(null);
-
-  const stringsQuery = useQuery({
-    queryKey: ["file-strings", projectId, fileId, languageId],
-    queryFn: () => api.getFileStrings(projectId, fileId, languageId),
-  });
 
   const permissionsQuery = useQuery({
     queryKey: ["permissions", projectId],
@@ -28,25 +38,8 @@ export function TranslationWorkspace({ projectId, fileId, languageId }: Translat
     staleTime: 5 * 60_000,
   });
 
-  const strings = stringsQuery.data?.strings ?? [];
-
-  // Default focus to the first string once its data has actually loaded,
-  // so Comfortable always has something to show and the Comments panel
-  // isn't stuck showing "select a string." A plain `[fileId]` dependency
-  // doesn't work here — strings load asynchronously after fileId is
-  // already set, so that effect fires once with an empty array and never
-  // re-runs. Track the file we last initialized focus for instead, so
-  // this fires exactly once per file, whenever its strings actually land.
-  const initializedForFileId = useRef<number | null>(null);
-  useEffect(() => {
-    if (strings.length > 0 && initializedForFileId.current !== fileId) {
-      setFocusedStringId(strings[0].id);
-      initializedForFileId.current = fileId;
-    }
-  }, [fileId, strings]);
-
-  if (stringsQuery.isLoading) return <p className="hint">Loading strings…</p>;
-  if (stringsQuery.isError) return <p className="error">{(stringsQuery.error as Error).message}</p>;
+  if (isLoading) return <p className="hint">Loading strings…</p>;
+  if (isError) return <p className="error">{error?.message}</p>;
   if (strings.length === 0) return <p className="hint">No strings in this file.</p>;
 
   const canApprove = permissionsQuery.data?.is_member ?? false;
@@ -79,7 +72,7 @@ export function TranslationWorkspace({ projectId, fileId, languageId }: Translat
             languageId={languageId}
             strings={strings}
             focusedIndex={focusedIndex}
-            onFocusChange={(i) => setFocusedStringId(strings[i]?.id ?? null)}
+            onFocusChange={(i) => onFocusChange(strings[i]?.id ?? null)}
             canApprove={canApprove}
           />
         ) : (
@@ -89,12 +82,12 @@ export function TranslationWorkspace({ projectId, fileId, languageId }: Translat
             languageId={languageId}
             strings={strings}
             focusedStringId={focusedStringId}
-            onFocusChange={setFocusedStringId}
+            onFocusChange={onFocusChange}
             canApprove={canApprove}
           />
         )}
 
-        <CommentsPanel projectId={projectId} stringId={focusedStringId} languageId={languageId} />
+        <RightSidebar projectId={projectId} stringId={focusedStringId} languageId={languageId} />
       </div>
     </div>
   );

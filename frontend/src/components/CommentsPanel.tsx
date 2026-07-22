@@ -9,10 +9,11 @@ interface CommentsPanelProps {
 }
 
 /**
- * Persistent right-hand panel, matching Crowdin's own layout — always
- * visible, tracking whichever string currently has focus (the selected
- * string in Comfortable mode, or the expanded row in Side-by-Side),
- * rather than a per-row collapsible toggle.
+ * Content for the right sidebar's "Comments" tab — tracks whichever
+ * string currently has focus (the selected string in Comfortable mode,
+ * or the expanded row in Side-by-Side). The surrounding chrome (aside,
+ * icon rail, collapse) lives in RightSidebar; this just renders the tab
+ * body so it composes cleanly alongside future TM/Glossary tabs.
  */
 export function CommentsPanel({ projectId, stringId, languageId }: CommentsPanelProps) {
   const queryClient = useQueryClient();
@@ -33,19 +34,11 @@ export function CommentsPanel({ projectId, stringId, languageId }: CommentsPanel
   });
 
   if (stringId == null) {
-    return (
-      <aside className="comments-sidebar">
-        <h3 className="comments-sidebar-title">Comments</h3>
-        <p className="hint">Select a string to see its comments.</p>
-      </aside>
-    );
+    return <p className="hint">Select a string to see its comments.</p>;
   }
 
   return (
-    <aside className="comments-sidebar">
-      <h3 className="comments-sidebar-title">
-        Comments{query.data ? ` (${query.data.comments.length})` : ""}
-      </h3>
+    <>
       {query.isLoading && <p className="hint">Loading…</p>}
       {query.isError && <p className="error">{(query.error as Error).message}</p>}
       {query.data && query.data.comments.length === 0 && <p className="hint">No comments yet.</p>}
@@ -73,6 +66,6 @@ export function CommentsPanel({ projectId, stringId, languageId }: CommentsPanel
         </button>
         {post.isError && <span className="error">{(post.error as Error).message}</span>}
       </div>
-    </aside>
+    </>
   );
 }
