@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { CommentsPanel } from "./CommentsPanel";
+import { GlossaryPanel } from "./GlossaryPanel";
+import { TmPanel } from "./TmPanel";
 
 interface RightSidebarProps {
   projectId: number;
@@ -7,17 +9,20 @@ interface RightSidebarProps {
   languageId: string;
 }
 
-// One entry per tab. Adding TM suggestions / Glossary later is just
-// another entry here plus a case in the switch below — the icon rail,
-// collapse behavior, and panel chrome are already generic.
-const TABS = [{ key: "comments", label: "Comments", icon: "💬" }] as const;
+// One entry per tab — the icon rail, collapse behavior, and panel chrome
+// are all generic, so a new tab is just another entry here plus a case
+// in the render switch below.
+const TABS = [
+  { key: "comments", label: "Comments", icon: "💬" },
+  { key: "tm", label: "TM", icon: "🧠" },
+  { key: "glossary", label: "Glossary", icon: "📖" },
+] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
 
 /** Right sidebar, matching Crowdin's own icon-rail layout: a vertical
  * strip of tab icons, one panel visible at a time, collapsible to just
- * the rail to reclaim width for the editor. Currently only Comments
- * exists; TM suggestions and Glossary will land as more tabs here. */
+ * the rail to reclaim width for the editor. */
 export function RightSidebar({ projectId, stringId, languageId }: RightSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("comments");
@@ -51,6 +56,12 @@ export function RightSidebar({ projectId, stringId, languageId }: RightSidebarPr
           <h3 className="right-sidebar-title">{TABS.find((t) => t.key === activeTab)!.label}</h3>
           {activeTab === "comments" && (
             <CommentsPanel projectId={projectId} stringId={stringId} languageId={languageId} />
+          )}
+          {activeTab === "tm" && (
+            <TmPanel projectId={projectId} stringId={stringId} languageId={languageId} />
+          )}
+          {activeTab === "glossary" && (
+            <GlossaryPanel projectId={projectId} stringId={stringId} languageId={languageId} />
           )}
         </aside>
       )}

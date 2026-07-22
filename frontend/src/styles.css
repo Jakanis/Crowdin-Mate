@@ -264,6 +264,69 @@ body {
   cursor: default;
 }
 
+/* --- TM / glossary suggestion panels --- */
+.suggestion-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suggestion-item {
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.suggestion-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.suggestion-relevance {
+  font-weight: 700;
+  color: #2a8a44;
+  font-variant-numeric: tabular-nums;
+}
+
+.suggestion-source-name {
+  opacity: 0.5;
+}
+
+.suggestion-source {
+  opacity: 0.6;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.suggestion-target {
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.glossary-term-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.glossary-arrow {
+  opacity: 0.4;
+}
+
+.suggestion-description {
+  margin-top: 4px;
+  opacity: 0.6;
+  font-size: 11px;
+}
+
 /* --- right sidebar: icon rail + collapsible panel --- */
 .right-sidebar {
   flex-shrink: 0;

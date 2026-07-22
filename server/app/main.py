@@ -19,6 +19,7 @@ from app import config, offline_queue
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
+from app.sync.suggestions_sync import has_looked_up, sync_glossary_matches, sync_tm_matches
 from app.sync.tree_sync import sync_project_tree
 
 logging.basicConfig(level=logging.INFO)
@@ -501,3 +502,70 @@ async def add_string_comment(project_id: int, string_id: int, body: CommentIn):
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
 
     return {"status": "posted", "count": len(comments)}
+
+
+def _get_source_text_and_language(project_id: int, string_id: int) -> tuple[str, str]:
+    with get_conn() as conn:
+        string_row = conn.execute(
+            "SELECT text FROM source_strings WHERE id = ?", (string_id,)
+        ).fetchone()
+        project_row = conn.execute(
+            "SELECT source_language FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+
+    if string_row is None:
+        raise HTTPException(status_code=404, detail="Unknown string")
+    return string_row["text"], (project_row["source_language"] if project_row else "en")
+
+
+@app.get("/projects/{project_id}/strings/{string_id}/tm-matches")
+async def get_tm_matches(project_id: int, string_id: int, language_id: str):
+    """Cached indefinitely once fetched — a TM match for a given source
+    text doesn't change on its own the way comments or translations do,
+    so there's no background revalidation here, only an explicit re-fetch
+    if it's never been looked up before."""
+    if not has_looked_up(string_id, language_id, "tm"):
+        source_text, source_lang = _get_source_text_and_language(project_id, string_id)
+        try:
+            await run_in_threadpool(sync_tm_matches, project_id, string_id, source_text, source_lang, language_id)
+        except APIException as exc:
+            raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    with get_conn() as conn:
+        matches = [
+            dict(row) for row in conn.execute(
+                """
+                SELECT source_text, target_text, relevant, tm_name
+                FROM tm_matches WHERE string_id = ? AND language_id = ?
+                ORDER BY relevant DESC
+                """,
+                (string_id, language_id),
+            )
+        ]
+    return {"matches": matches}
+
+
+@app.get("/projects/{project_id}/strings/{string_id}/glossary-matches")
+async def get_glossary_matches(project_id: int, string_id: int, language_id: str):
+    """Same caching approach as TM matches — see docstring above."""
+    if not has_looked_up(string_id, language_id, "glossary"):
+        source_text, source_lang = _get_source_text_and_language(project_id, string_id)
+        try:
+            await run_in_threadpool(
+                sync_glossary_matches, project_id, string_id, source_text, source_lang, language_id
+            )
+        except APIException as exc:
+            raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    with get_conn() as conn:
+        matches = [
+            dict(row) for row in conn.execute(
+                """
+                SELECT source_term, target_term, description, glossary_name
+                FROM glossary_matches WHERE string_id = ? AND language_id = ?
+                ORDER BY source_term
+                """,
+                (string_id, language_id),
+            )
+        ]
+    return {"matches": matches}

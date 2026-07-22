@@ -100,6 +100,51 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 CREATE INDEX IF NOT EXISTS idx_comments_string ON comments (string_id);
 
+-- TM/glossary suggestions, fetched lazily per string (first lookup is as
+-- slow as Crowdin's own editor since it's the same live concordance-
+-- search call; cached so any revisit is instant). Both are fully
+-- replaced (delete-then-insert) per string on each fetch rather than
+-- upserted by a stable id — Crowdin's concordance search doesn't return
+-- a per-string-scoped stable identity worth tracking across refreshes,
+-- and re-querying is cheap at this per-string scale.
+CREATE TABLE IF NOT EXISTS tm_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    string_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    source_text TEXT NOT NULL,
+    target_text TEXT NOT NULL,
+    relevant INTEGER NOT NULL,
+    tm_name TEXT,
+    cached_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tm_matches_string_lang ON tm_matches (string_id, language_id);
+
+CREATE TABLE IF NOT EXISTS glossary_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    string_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    source_term TEXT NOT NULL,
+    target_term TEXT NOT NULL,
+    description TEXT,
+    glossary_name TEXT,
+    cached_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_glossary_matches_string_lang ON glossary_matches (string_id, language_id);
+
+-- Row count alone can't tell "never looked up" apart from "looked up,
+-- found zero matches" — and a string with no TM/glossary hits is the
+-- common case for unique prose in this project. Without this, an empty
+-- result would re-run the expensive concordance search on every single
+-- open. One row per (string_id, language_id, kind) marks that a lookup
+-- has actually happened, regardless of how many matches it found.
+CREATE TABLE IF NOT EXISTS suggestion_lookups (
+    string_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    kind TEXT NOT NULL,                  -- 'tm' | 'glossary'
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY (string_id, language_id, kind)
+);
+
 CREATE TABLE IF NOT EXISTS translation_drafts (
     string_id INTEGER NOT NULL,
     language_id TEXT NOT NULL,

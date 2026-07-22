@@ -93,6 +93,20 @@ export interface CommentInfo {
   created_at: string | null;
 }
 
+export interface TmMatch {
+  source_text: string;
+  target_text: string;
+  relevant: number;
+  tm_name: string | null;
+}
+
+export interface GlossaryMatch {
+  source_term: string;
+  target_term: string;
+  description: string | null;
+  glossary_name: string | null;
+}
+
 export const api = {
   authStatus: () => request<AuthStatus>("/auth/status"),
   setToken: (token: string) =>
@@ -134,5 +148,13 @@ export const api = {
     request<{ status: string; count: number }>(
       `/projects/${projectId}/strings/${stringId}/comments`,
       { method: "POST", body: JSON.stringify({ text, language_id: languageId }) },
+    ),
+  getTmMatches: (projectId: number, stringId: number, languageId: string) =>
+    request<{ matches: TmMatch[] }>(
+      `/projects/${projectId}/strings/${stringId}/tm-matches?language_id=${encodeURIComponent(languageId)}`,
+    ),
+  getGlossaryMatches: (projectId: number, stringId: number, languageId: string) =>
+    request<{ matches: GlossaryMatch[] }>(
+      `/projects/${projectId}/strings/${stringId}/glossary-matches?language_id=${encodeURIComponent(languageId)}`,
     ),
 };
