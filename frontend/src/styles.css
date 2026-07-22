@@ -604,17 +604,8 @@ body {
    sliver of the gradient's start color bleeds onto the opposite,
    rounded end. Flat solid segments clipped by the container's own
    border-radius/overflow never hit that code path. */
-.progress-pct {
-  margin-left: auto;
-  flex-shrink: 0;
-  width: 34px;
-  text-align: right;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.65;
-}
-
 .progress-bar {
+  margin-left: auto;
   margin-right: 8px;
   flex-shrink: 0;
   display: flex;
@@ -632,10 +623,11 @@ body {
 }
 
 .progress-bar--complete {
-  border-color: #3a7bd5;
+  border-color: #4a90e2;
 }
 
 .progress-pie {
+  margin-left: auto;
   margin-right: 8px;
   flex-shrink: 0;
   width: 20px;
@@ -646,9 +638,58 @@ body {
   margin-left: auto;
   padding-right: 8px;
   flex-shrink: 0;
-  color: #2a8a44;
+  color: #0e6b39;
   font-size: 13px;
   font-weight: 700;
+}
+
+.file-tree-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.file-tree-search {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.file-tree-search input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.file-tree-search-clear {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 15px;
+  opacity: 0.6;
+  padding: 2px 4px;
+}
+
+.file-tree-search-clear:hover {
+  opacity: 1;
+}
+
+.file-tree-search-status {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  opacity: 0.6;
 }
 
 .token-setup {

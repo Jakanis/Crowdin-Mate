@@ -10,6 +10,10 @@ interface FileTreeProps {
   onSelectFile?: (file: TreeFile) => void;
 }
 
+function matchesQuery(file: TreeFile, query: string): boolean {
+  return file.path.toLowerCase().includes(query);
+}
+
 type Row =
   | { kind: "dir"; id: number; depth: number; name: string; expanded: boolean }
   | { kind: "file"; id: number; depth: number; name: string; stringsCount: number | null };
@@ -26,6 +30,7 @@ const ROW_HEIGHT = 28;
  */
 export function FileTree({ projectId, languageId, directories, files, onSelectFile }: FileTreeProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [query, setQuery] = useState("");
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Translation/approval progress, merged in as it's fetched — root on
@@ -89,7 +94,30 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
     return { childDirsByParent, childFilesByDir };
   }, [directories, files]);
 
-  const rows = useMemo(() => {
+  const trimmedQuery = query.trim().toLowerCase();
+
+  // Search is a plain case-insensitive substring match against each
+  // file's full path — "Valley/The Great Retri" matches
+  // "/quests_tbc/Outland/Shadowmoon Valley/The Great Retribution_10817.xml"
+  // the same way pasting a chunk of a path copied from elsewhere would.
+  // Flattens the result (no folder rows, full path as the label) rather
+  // than trying to expand the tree down to each match, since matches can
+  // land in unrelated folders scattered across the whole project.
+  const searchRows = useMemo(() => {
+    if (!trimmedQuery) return null;
+    return files
+      .filter((f) => matchesQuery(f, trimmedQuery))
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .map((f): Row => ({
+        kind: "file",
+        id: f.id,
+        depth: 0,
+        name: f.path.replace(/^\//, ""),
+        stringsCount: f.strings_count,
+      }));
+  }, [files, trimmedQuery]);
+
+  const treeRows = useMemo(() => {
     const out: Row[] = [];
 
     const walk = (parentId: number | null, depth: number) => {
@@ -120,6 +148,8 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
     return out;
   }, [childDirsByParent, childFilesByDir, expanded]);
 
+  const rows = searchRows ?? treeRows;
+
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
@@ -141,43 +171,65 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   };
 
   return (
-    <div ref={parentRef} className="file-tree-scroll">
-      <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-        {virtualizer.getVirtualItems().map((virtualRow) => {
-          const row = rows[virtualRow.index];
-          const progress = row.kind === "dir" ? dirProgress.get(row.id) : fileProgress.get(row.id);
-          return (
-            <div
-              key={`${row.kind}-${row.id}`}
-              className={`tree-row tree-row--${row.kind}`}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start}px)`,
-                paddingLeft: `${row.depth * 16 + 8}px`,
-              }}
-              onClick={() =>
-                row.kind === "dir" ? toggleDir(row.id) : onSelectFile?.(files.find((f) => f.id === row.id)!)
-              }
-            >
-              {row.kind === "dir" ? (
-                <span className="tree-caret">{row.expanded ? "▾" : "▸"}</span>
-              ) : (
-                <span className="tree-caret tree-caret--file" />
-              )}
-              <span className="tree-name">{row.name}</span>
-              {progress &&
-                (row.kind === "dir" ? (
-                  <ProgressBar progress={progress} />
+    <div className="file-tree-panel">
+      <div className="file-tree-search">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search files by path…"
+        />
+        {query && (
+          <button className="file-tree-search-clear" onClick={() => setQuery("")} title="Clear search">
+            ×
+          </button>
+        )}
+      </div>
+      {searchRows && (
+        <div className="file-tree-search-status">
+          {searchRows.length === 0 ? "No files match" : `${searchRows.length} match${searchRows.length === 1 ? "" : "es"}`}
+        </div>
+      )}
+      <div ref={parentRef} className="file-tree-scroll">
+        <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const row = rows[virtualRow.index];
+            const progress = row.kind === "dir" ? dirProgress.get(row.id) : fileProgress.get(row.id);
+            return (
+              <div
+                key={`${row.kind}-${row.id}`}
+                className={`tree-row tree-row--${row.kind}`}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                  paddingLeft: `${row.depth * 16 + 8}px`,
+                }}
+                onClick={() =>
+                  row.kind === "dir" ? toggleDir(row.id) : onSelectFile?.(files.find((f) => f.id === row.id)!)
+                }
+              >
+                {row.kind === "dir" ? (
+                  <span className="tree-caret">{row.expanded ? "▾" : "▸"}</span>
                 ) : (
-                  <ProgressPie progress={progress} />
-                ))}
-            </div>
-          );
-        })}
+                  <span className="tree-caret tree-caret--file" />
+                )}
+                <span className="tree-name" title={row.name}>
+                  {row.name}
+                </span>
+                {progress &&
+                  (row.kind === "dir" ? (
+                    <ProgressBar progress={progress} />
+                  ) : (
+                    <ProgressPie progress={progress} />
+                  ))}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -193,20 +245,19 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
 // below, since the goal is decluttering an otherwise-solid-color pill/
 // circle that no longer carries any information once there's nothing
 // left incomplete.
-const TRANSLATED_COLOR = "#3a7bd5";
-const APPROVED_COLOR = "#2a8a44";
+//
+// The blue/green were originally near-identical in perceived brightness
+// (luminance ~0.45 vs ~0.44), which is exactly what makes two adjacent
+// hues "vibrate" against each other instead of reading as clearly
+// different. Picked a lighter, brighter blue and a much darker green
+// instead — same hue family, ~0.2 apart in luminance — which reads as
+// distinct at a glance without changing the general blue/green meaning.
+const TRANSLATED_COLOR = "#4a90e2";
+const APPROVED_COLOR = "#0e6b39";
 const TRACK_COLOR = "rgba(128, 128, 128, 0.18)";
 
 function progressTitle(p: ProgressInfo): string {
   return `${p.translation_progress}% translated, ${p.approval_progress}% approved`;
-}
-
-function ProgressPercent({ progress }: { progress: ProgressInfo }) {
-  return (
-    <span className="progress-pct" title={progressTitle(progress)}>
-      {progress.translation_progress}%
-    </span>
-  );
 }
 
 function ProgressBar({ progress }: { progress: ProgressInfo }) {
@@ -221,16 +272,13 @@ function ProgressBar({ progress }: { progress: ProgressInfo }) {
   }
 
   return (
-    <>
-      <ProgressPercent progress={progress} />
-      <span
-        className={`progress-bar${t === 100 ? " progress-bar--complete" : ""}`}
-        title={progressTitle(progress)}
-      >
-        <span style={{ width: `${a}%`, background: APPROVED_COLOR }} />
-        <span style={{ width: `${t - a}%`, background: TRANSLATED_COLOR }} />
-      </span>
-    </>
+    <span
+      className={`progress-bar${t === 100 ? " progress-bar--complete" : ""}`}
+      title={progressTitle(progress)}
+    >
+      <span style={{ width: `${a}%`, background: APPROVED_COLOR }} />
+      <span style={{ width: `${t - a}%`, background: TRANSLATED_COLOR }} />
+    </span>
   );
 }
 
@@ -247,32 +295,29 @@ function ProgressPie({ progress }: { progress: ProgressInfo }) {
   const dash = (pct: number) => `${(circumference * pct) / 100} ${circumference}`;
 
   return (
-    <>
-      <ProgressPercent progress={progress} />
-      <svg className="progress-pie" viewBox={`0 0 ${size} ${size}`}>
-        <title>{progressTitle(progress)}</title>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TRACK_COLOR} strokeWidth={size / 2} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={TRANSLATED_COLOR}
-          strokeWidth={size / 2}
-          strokeDasharray={dash(t)}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={APPROVED_COLOR}
-          strokeWidth={size / 2}
-          strokeDasharray={dash(a)}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </svg>
-    </>
+    <svg className="progress-pie" viewBox={`0 0 ${size} ${size}`}>
+      <title>{progressTitle(progress)}</title>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TRACK_COLOR} strokeWidth={size / 2} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={TRANSLATED_COLOR}
+        strokeWidth={size / 2}
+        strokeDasharray={dash(t)}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={APPROVED_COLOR}
+        strokeWidth={size / 2}
+        strokeDasharray={dash(a)}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+    </svg>
   );
 }
