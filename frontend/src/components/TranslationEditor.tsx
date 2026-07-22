@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type SourceString, type TranslationInfo } from "../api/client";
 
 interface TranslationEditorProps {
@@ -32,6 +32,25 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
   const [text, setText] = useState(s.draft?.dirty ? s.draft.draft_text : bestTranslationText(s));
   const [status, setStatus] = useState<"idle" | "saving" | "synced" | "queued" | "rejected" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fit the box to its content instead of a fixed row count (which was a
+  // crude char-count guess, capped at 8 rows with an internal scrollbar
+  // for anything longer). Re-measures on every text change, including
+  // programmatic ones like clicking a candidate to load its text.
+  //
+  // scrollHeight never includes border width, but with the project-wide
+  // box-sizing: border-box the `height` we set here does — omitting that
+  // undershoots by exactly the border width and leaves a 1-2px sliver
+  // clipped (confirmed by measuring scrollHeight vs clientHeight after
+  // the naive version). Add the border back in.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const { borderTopWidth, borderBottomWidth } = window.getComputedStyle(el);
+    el.style.height = `${el.scrollHeight + parseFloat(borderTopWidth) + parseFloat(borderBottomWidth)}px`;
+  }, [text]);
 
   const submit = useMutation({
     mutationFn: () => api.submitTranslation(projectId, s.id, languageId, text),
@@ -63,10 +82,10 @@ export function TranslationEditor({ projectId, fileId, languageId, s, canApprove
   return (
     <div className="translation-editor">
       <textarea
+        ref={textareaRef}
         className="string-target"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={Math.min(8, Math.max(2, Math.ceil(text.length / 60)))}
         placeholder="Type a translation and Save to submit it to Crowdin"
       />
       <div className="string-row-footer">
