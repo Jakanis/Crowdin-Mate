@@ -14,18 +14,21 @@ for a file, confirmed round-tripping correctly to crowdin.com's own editor.
 ## Prerequisites
 
 - **Python 3.12+** and **Node.js 20+** (both installed).
-- **A way to authenticate with Crowdin** — either works, chosen from the app's own "Connect
-  your Crowdin account" screen once both servers are running; credentials are stored via your
-  OS credential manager (Windows Credential Manager here), never in a file in this repo:
-  - **OAuth (recommended)** — one-time setup: crowdin.com → your avatar → Settings → OAuth →
-    New Application, using callback URL `http://localhost:8000/oauth/callback` and as many
-    scopes as you can select (projects, files, translations, comments, TM, glossaries). Paste
-    the resulting Client ID/Secret into the app once; after that, "Connect with Crowdin" opens
-    a normal browser login/authorization page and the backend's own `/oauth/callback` route
-    catches the redirect. Access tokens auto-refresh (`server/app/oauth.py`) — no PAT to ever
-    regenerate.
-  - **Personal Access Token** — simpler for a quick one-off: crowdin.com → your avatar →
-    Settings → API → New Token, pasted directly into the app.
+- **A way to authenticate with Crowdin** — pick either from the app's own "Connect your
+  Crowdin account" screen once both servers are running; credentials are stored via your OS
+  credential manager (Windows Credential Manager here), never in a file in this repo. There's
+  no shared/published OAuth app — each person registers their own if they choose that path,
+  same as everyone already does for a PAT:
+  - **OAuth** — one-time setup: crowdin.com → your avatar → Settings → OAuth → New
+    Application, using callback URL `http://localhost:8000/oauth/callback` and as many scopes
+    as you can select (projects, files, translations, comments, TM, glossaries). Paste the
+    resulting Client ID/Secret into the app once; after that, "Connect with Crowdin" opens a
+    normal browser login/authorization page and the backend's own `/oauth/callback` route
+    catches the redirect. Access tokens auto-refresh (`server/app/oauth.py`) — no token to
+    ever manually regenerate.
+  - **Personal Access Token** — no app registration at all: crowdin.com → your avatar →
+    Settings → API → New Token, pasted directly into the app. You're responsible for renewing
+    it yourself once it expires.
 
 ## Running it
 

@@ -1,25 +1,37 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
 const REDIRECT_URI = "http://localhost:8000/oauth/callback";
 const OAUTH_APPS_URL = "https://crowdin.com/settings#oauth-apps";
 const API_KEY_URL = "https://crowdin.com/settings#api-key";
 
+type Mode = "choose" | "oauth" | "pat";
+
 /**
- * OAuth (recommended) is the default path: the user creates a Crowdin
- * OAuth app once (Settings → OAuth → New Application — something only
- * they can do, it's their account), pastes the Client ID/Secret here,
- * then "Connect with Crowdin" opens the real authorization page in a
- * normal browser tab. The backend's own /oauth/callback route catches
- * the redirect and exchanges the code — this component just polls
- * auth-status until that's landed.
+ * Both auth methods are equally first-class here — deliberately NOT
+ * defaulting into one over the other, since each person's own account
+ * brings its own credentials either way (no shared/published OAuth
+ * app — every user registers their own, same as the PAT path already
+ * required). The initial screen is a neutral choice between them; only
+ * once someone's OAuth app was configured in an earlier session do we
+ * skip straight back to "Connect with Crowdin" for it, since re-showing
+ * the choice at that point would just be re-asking a question they
+ * already answered.
  *
- * The original manual-PAT flow stays as a fallback behind a toggle —
- * simpler for a quick one-off setup, no app registration required.
+ * OAuth: the user creates a Crowdin OAuth app once (Settings → OAuth →
+ * New Application — something only they can do, it's their account),
+ * pastes the Client ID/Secret here, then "Connect with Crowdin" opens
+ * the real authorization page in a normal browser tab. The backend's
+ * own /oauth/callback route catches the redirect and exchanges the
+ * code — this component just polls auth-status until that's landed.
+ *
+ * PAT: paste a token directly, no app registration at all — simpler
+ * for a quick one-off setup, at the cost of managing the token/its
+ * expiry yourself instead of Crowdin auto-refreshing it.
  */
 export function TokenSetup() {
-  const [mode, setMode] = useState<"oauth" | "pat">("oauth");
+  const [mode, setMode] = useState<Mode | null>(null);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [token, setToken] = useState("");
@@ -33,6 +45,14 @@ export function TokenSetup() {
     refetchInterval: connecting ? 1500 : false,
   });
 
+  // Decide the starting screen exactly once, the first time auth-status
+  // actually loads — not on every refetch, which would otherwise yank
+  // whoever's mid-setup back to a mode they didn't choose.
+  useEffect(() => {
+    if (mode !== null || !authStatus.data) return;
+    setMode(authStatus.data.oauth_client_configured ? "oauth" : "choose");
+  }, [authStatus.data, mode]);
+
   const clientMutation = useMutation({
     mutationFn: () => api.setOAuthClient(clientId.trim(), clientSecret.trim()),
     onSuccess: () => {
@@ -41,6 +61,20 @@ export function TokenSetup() {
     },
     onError: (err: Error) => setError(err.message),
   });
+
+  const patMutation = useMutation({
+    mutationFn: (t: string) => api.setToken(t),
+    onSuccess: () => {
+      setToken("");
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["auth-status"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  // Hooks above this line must always run regardless of `mode` (Rules
+  // of Hooks) — only the JSX below is conditional on it.
+  if (mode === null) return <div className="token-setup" />;
 
   const connect = async () => {
     setError(null);
@@ -54,21 +88,30 @@ export function TokenSetup() {
     }
   };
 
-  const patMutation = useMutation({
-    mutationFn: (t: string) => api.setToken(t),
-    onSuccess: () => {
-      setToken("");
-      setError(null);
-      queryClient.invalidateQueries({ queryKey: ["auth-status"] });
-    },
-    onError: (err: Error) => setError(err.message),
-  });
-
   return (
     <div className="token-setup">
       <h2>Connect your Crowdin account</h2>
 
-      {mode === "oauth" ? (
+      {mode === "choose" && (
+        <div className="token-setup-choice">
+          <button className="token-setup-choice-card" onClick={() => setMode("oauth")}>
+            <span className="token-setup-choice-title">OAuth</span>
+            <span className="token-setup-choice-desc">
+              Log in through Crowdin's own page instead of handling a token — it auto-refreshes, so you stay
+              connected. Needs a one-time OAuth app registration on your Crowdin account first.
+            </span>
+          </button>
+          <button className="token-setup-choice-card" onClick={() => setMode("pat")}>
+            <span className="token-setup-choice-title">Personal Access Token</span>
+            <span className="token-setup-choice-desc">
+              Paste a token and you're connected immediately, no setup — but you're responsible for renewing it
+              when it expires.
+            </span>
+          </button>
+        </div>
+      )}
+
+      {mode === "oauth" && (
         <>
           {!authStatus.data?.oauth_client_configured ? (
             <>
@@ -116,12 +159,14 @@ export function TokenSetup() {
             </>
           )}
           <p className="token-setup-switch">
-            <button className="link-button" onClick={() => setMode("pat")}>
-              Use a Personal Access Token instead
+            <button className="link-button" onClick={() => setMode("choose")}>
+              ← Choose a different method
             </button>
           </p>
         </>
-      ) : (
+      )}
+
+      {mode === "pat" && (
         <>
           <p>
             Paste a{" "}
@@ -148,8 +193,8 @@ export function TokenSetup() {
             </button>
           </form>
           <p className="token-setup-switch">
-            <button className="link-button" onClick={() => setMode("oauth")}>
-              Use OAuth instead (recommended)
+            <button className="link-button" onClick={() => setMode("choose")}>
+              ← Choose a different method
             </button>
           </p>
         </>

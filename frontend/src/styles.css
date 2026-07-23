@@ -1869,6 +1869,42 @@ body {
   margin-top: 18px;
 }
 
+.token-setup-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.token-setup-choice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.token-setup-choice-card:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.token-setup-choice-title {
+  font-weight: 600;
+  font-size: calc(14px * var(--ui-scale));
+}
+
+.token-setup-choice-desc {
+  font-size: calc(12.5px * var(--ui-scale));
+  opacity: 0.75;
+  line-height: 1.45;
+}
+
 /* --- translation workspace --- */
 .translation-workspace {
   flex: 1;
