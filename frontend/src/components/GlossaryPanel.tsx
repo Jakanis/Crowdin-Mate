@@ -8,8 +8,10 @@ interface GlossaryPanelProps {
 }
 
 /** Glossary tab: project glossary terms found in the focused string's
- * source text (word-level concordance search — multi-word terms aren't
- * caught by this, a known limitation). */
+ * source text (concordance search against the whole segment, so
+ * multi-word terms match too — see suggestions_sync.py). Same matches
+ * are also highlighted inline in the source text itself, see
+ * HighlightedSourceText.tsx. */
 export function GlossaryPanel({ projectId, stringId, languageId }: GlossaryPanelProps) {
   const query = useQuery({
     queryKey: ["glossary-matches", projectId, stringId, languageId],

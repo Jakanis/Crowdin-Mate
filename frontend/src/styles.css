@@ -857,6 +857,13 @@ body {
   line-height: 1.4;
 }
 
+.glossary-term-highlight {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
 .string-context {
   font-size: calc(12px * var(--ui-scale));
   opacity: 0.45;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SourceString } from "../api/client";
+import { HighlightedSourceText } from "./HighlightedSourceText";
 import { TranslationEditor } from "./TranslationEditor";
 
 interface ComfortableViewProps {
@@ -96,7 +97,13 @@ export function ComfortableView({
   return (
     <div className="comfortable-view">
       <div className="comfortable-scroll">
-        <div className="string-source">{s.text}</div>
+        <HighlightedSourceText
+          projectId={projectId}
+          stringId={s.id}
+          languageId={languageId}
+          text={s.text}
+          className="string-source"
+        />
         {(s.context || s.identifier || s.labels.length > 0) && (
           <div className="string-meta-block">
             {/* Crowdin's own context field is often just a copy of the

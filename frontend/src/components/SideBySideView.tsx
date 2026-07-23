@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef } from "react";
 import type { SourceString } from "../api/client";
+import { HighlightedSourceText } from "./HighlightedSourceText";
 import { TranslationEditor } from "./TranslationEditor";
 
 interface SideBySideViewProps {
@@ -70,7 +71,17 @@ export function SideBySideView({
                 className={`sbs-row${expanded ? " sbs-row--expanded" : ""}`}
                 onClick={() => !expanded && onFocusChange(s.id)}
               >
-                <div className="sbs-source">{s.text}</div>
+                {expanded ? (
+                  <HighlightedSourceText
+                    projectId={projectId}
+                    stringId={s.id}
+                    languageId={languageId}
+                    text={s.text}
+                    className="sbs-source"
+                  />
+                ) : (
+                  <div className="sbs-source">{s.text}</div>
+                )}
                 <div className="sbs-translation">
                   {expanded ? (
                     <TranslationEditor

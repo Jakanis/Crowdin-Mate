@@ -62,12 +62,34 @@ def _backfill_search_index(conn: sqlite3.Connection) -> None:
     )
 
 
+def _reset_stale_glossary_matches(conn: sqlite3.Connection) -> None:
+    """One-time cache bust: sync_glossary_matches used to search
+    single-word tokens (stopwords stripped) instead of the whole
+    segment, which could never find a multi-word glossary term (e.g. a
+    quest title). Cached results and "already looked up" markers from
+    that version are silently incomplete, not just stale, so they need
+    clearing rather than expiring naturally — gated by an app_config
+    flag so this runs exactly once, not on every startup."""
+    done = conn.execute(
+        "SELECT value FROM app_config WHERE key = 'glossary_algorithm_version'"
+    ).fetchone()
+    if done is not None and done["value"] == "2":
+        return
+    conn.execute("DELETE FROM glossary_matches")
+    conn.execute("DELETE FROM suggestion_lookups WHERE kind = 'glossary'")
+    conn.execute(
+        "INSERT INTO app_config (key, value) VALUES ('glossary_algorithm_version', '2') "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    )
+
+
 def init_db() -> None:
     conn = _connect()
     try:
         conn.executescript(_SCHEMA_PATH.read_text())
         _apply_column_migrations(conn)
         _backfill_search_index(conn)
+        _reset_stale_glossary_matches(conn)
         conn.commit()
     finally:
         conn.close()
