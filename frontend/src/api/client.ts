@@ -242,6 +242,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ language_id: languageId, text }),
     }),
+  saveDraft: (projectId: number, stringId: number, languageId: string, text: string) =>
+    request<{ status: string }>(`/projects/${projectId}/strings/${stringId}/draft`, {
+      method: "PUT",
+      body: JSON.stringify({ language_id: languageId, text }),
+    }),
   approveTranslation: (projectId: number, translationId: number) =>
     request<{ status: string; approval_id: number }>(
       `/projects/${projectId}/translations/${translationId}/approve`,

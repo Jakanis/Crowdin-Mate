@@ -557,13 +557,7 @@ class TranslationIn(BaseModel):
     text: str
 
 
-@app.post("/projects/{project_id}/strings/{string_id}/translations")
-async def submit_translation(project_id: int, string_id: int, body: TranslationIn):
-    """Writes the draft to SQLite first (durable regardless of what
-    happens next), then tries to push it to Crowdin immediately. On
-    failure it's queued in `offline_queue` and drained later — the
-    request still returns 200 with status "queued" rather than an error,
-    since the user's edit is never lost either way."""
+def _save_draft(string_id: int, language_id: str, text: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute(
@@ -575,8 +569,30 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
                 local_updated_at=excluded.local_updated_at,
                 dirty=1
             """,
-            (string_id, body.language_id, body.text, now),
+            (string_id, language_id, text, now),
         )
+
+
+@app.put("/projects/{project_id}/strings/{string_id}/draft")
+async def save_draft(project_id: int, string_id: int, body: TranslationIn):
+    """Purely local persistence of in-progress, unsubmitted edits — no
+    Crowdin call at all, unlike submit_translation below. Debounced from
+    the frontend as the user types (TranslationEditor), so navigating
+    away — or closing the app entirely — mid-edit doesn't lose what
+    they'd typed, matching Crowdin's own editor. Cleared (dirty=0) only
+    once a real submit succeeds or is permanently rejected."""
+    _save_draft(string_id, body.language_id, body.text)
+    return {"status": "saved"}
+
+
+@app.post("/projects/{project_id}/strings/{string_id}/translations")
+async def submit_translation(project_id: int, string_id: int, body: TranslationIn):
+    """Writes the draft to SQLite first (durable regardless of what
+    happens next), then tries to push it to Crowdin immediately. On
+    failure it's queued in `offline_queue` and drained later — the
+    request still returns 200 with status "queued" rather than an error,
+    since the user's edit is never lost either way."""
+    _save_draft(string_id, body.language_id, body.text)
 
     client = get_client()
     try:

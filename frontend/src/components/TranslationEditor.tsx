@@ -32,6 +32,8 @@ function bestTranslationText(s: SourceString): string {
   return approved?.text ?? s.translations[0]?.text ?? "";
 }
 
+const DRAFT_DEBOUNCE_MS = 600;
+
 /**
  * The translation-editing UI for one string: candidate list (click any
  * candidate to load its text into the edit box — this is how Crowdin's
@@ -53,6 +55,47 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   const [status, setStatus] = useState<"idle" | "saving" | "synced" | "queued" | "rejected" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-save the in-progress (unsubmitted) text locally as you type,
+  // matching Crowdin's own editor — leave a string half-translated,
+  // close the tab or the whole app, and it's still there when you come
+  // back. Purely local (saveDraft never calls Crowdin); get_file_strings
+  // already prefers this over the current translation whenever dirty,
+  // so nothing else needs to change to make it resumable.
+  const textRef = useRef(text);
+  textRef.current = text;
+  const lastSavedDraftRef = useRef(text);
+  const draftTimeoutRef = useRef<number | null>(null);
+
+  const flushDraft = () => {
+    if (textRef.current === lastSavedDraftRef.current) return;
+    lastSavedDraftRef.current = textRef.current;
+    api.saveDraft(projectId, s.id, languageId, textRef.current).catch(() => {
+      // Best-effort — local persistence failing isn't worth surfacing as
+      // a user-facing error; the in-memory text is still right there in
+      // the box for the rest of this session regardless.
+    });
+  };
+
+  useEffect(() => {
+    if (text === lastSavedDraftRef.current) return;
+    if (draftTimeoutRef.current != null) window.clearTimeout(draftTimeoutRef.current);
+    draftTimeoutRef.current = window.setTimeout(flushDraft, DRAFT_DEBOUNCE_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  // Separate mount-only effect so its cleanup fires exactly once, on
+  // unmount — switching strings/files remounts this component (it's
+  // keyed on s.id in ComfortableView/SideBySideView), and the debounce
+  // above would otherwise lose up to DRAFT_DEBOUNCE_MS of typing that
+  // never got to fire before the switch.
+  useEffect(() => {
+    return () => {
+      if (draftTimeoutRef.current != null) window.clearTimeout(draftTimeoutRef.current);
+      flushDraft();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fit the box to its content instead of a fixed row count (which was a
   // crude char-count guess, capped at 8 rows with an internal scrollbar
@@ -108,6 +151,22 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
       if (result.status === "synced") {
         refetchStrings();
         notifyProgressChanged(fileId);
+      }
+      if (result.status === "synced" || result.status === "rejected") {
+        // The backend clears dirty=0 for both outcomes (synced: no
+        // longer a pending edit; rejected: never going to sync as-is,
+        // see submit_translation's own docstring on why). A draft-save
+        // debounced from an earlier keystroke could still be pending
+        // right now and fire after this — left alone, it would call
+        // saveDraft and set dirty back to 1, resurrecting stale text as
+        // if it were still an unsubmitted edit. "queued" is excluded:
+        // that one's genuinely still unsynced, so the draft should stay
+        // exactly as pending as it already was.
+        if (draftTimeoutRef.current != null) {
+          window.clearTimeout(draftTimeoutRef.current);
+          draftTimeoutRef.current = null;
+        }
+        lastSavedDraftRef.current = text;
       }
       // Queued counts as "saved" here too — the whole point of the
       // offline queue is that the edit is durable even without a
