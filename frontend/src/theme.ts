@@ -137,6 +137,27 @@ export function useViewMode() {
   return { mode, setMode };
 }
 
+const TM_SUGGESTIONS_COLLAPSED_KEY = "classicua-tm-suggestions-collapsed";
+
+// Self-contained like useCrowdinPalette above — TranslationEditor calls
+// this once per mount (once per open string in Comfortable view, once
+// per visible row in Side-by-Side), and it's fine that toggling it in
+// one already-mounted instance doesn't retroactively reach across to
+// others: it's a "remembered default for next time," not a live
+// broadcast, matching every other simple preference toggle in this file.
+export function useTmSuggestionsCollapsed() {
+  const [collapsed, setCollapsedState] = useState<boolean>(
+    () => localStorage.getItem(TM_SUGGESTIONS_COLLAPSED_KEY) === "1",
+  );
+
+  const setCollapsed = (next: boolean) => {
+    localStorage.setItem(TM_SUGGESTIONS_COLLAPSED_KEY, next ? "1" : "0");
+    setCollapsedState(next);
+  };
+
+  return { collapsed, setCollapsed };
+}
+
 export type OpenTabsLayout = "top" | "sidebar";
 const OPEN_TABS_LAYOUT_KEY = "classicua-open-tabs-layout";
 

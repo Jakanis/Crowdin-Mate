@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { api, type SourceString, type TranslationInfo } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
+import { useTmSuggestionsCollapsed } from "../theme";
 import { TmSourceDiff } from "./TmSourceDiff";
 
 interface TranslationEditorProps {
@@ -216,6 +217,8 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     enabled: true,
   });
   const tmMatches = tmQuery.data?.matches ?? [];
+  const tmMaxRelevant = tmMatches.length > 0 ? Math.max(...tmMatches.map((m) => m.relevant)) : 0;
+  const { collapsed: suggestionsCollapsed, setCollapsed: setSuggestionsCollapsed } = useTmSuggestionsCollapsed();
 
   // Crowdin's own editor deletes a candidate immediately (no "are you
   // sure?" dialog) and instead offers a brief Undo — matching that here.
@@ -403,7 +406,21 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
 
       {tmMatches.length > 0 && (
         <div className="tm-suggestions-inline">
-          <h4 className="tm-suggestions-inline-title">Suggestions</h4>
+          <button
+            type="button"
+            className="tm-suggestions-inline-header"
+            onClick={() => setSuggestionsCollapsed(!suggestionsCollapsed)}
+            aria-expanded={!suggestionsCollapsed}
+          >
+            <span className={`tm-suggestions-inline-caret${suggestionsCollapsed ? "" : " tm-suggestions-inline-caret--open"}`}>
+              ▸
+            </span>
+            <h4 className="tm-suggestions-inline-title">Suggestions</h4>
+            <span className="tm-suggestions-inline-hint">
+              {tmMatches.length} match{tmMatches.length === 1 ? "" : "es"} · up to {tmMaxRelevant}%
+            </span>
+          </button>
+          {!suggestionsCollapsed && (
           <ul className="suggestion-list">
             {tmMatches.map((m, i) => {
               const isPerfect = m.relevant >= 100;
@@ -427,6 +444,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               );
             })}
           </ul>
+          )}
         </div>
       )}
     </div>

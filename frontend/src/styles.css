@@ -1498,13 +1498,43 @@ body {
   border-top: 1px solid rgba(128, 128, 128, 0.2);
 }
 
+.tm-suggestions-inline-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0 0 8px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tm-suggestions-inline-caret {
+  display: inline-block;
+  font-size: calc(10px * var(--ui-scale));
+  opacity: 0.55;
+  transition: transform 0.1s ease;
+}
+
+.tm-suggestions-inline-caret--open {
+  transform: rotate(90deg);
+}
+
 .tm-suggestions-inline-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: calc(11.5px * var(--ui-scale));
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.55;
+}
+
+.tm-suggestions-inline-hint {
+  font-size: calc(11.5px * var(--ui-scale));
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .suggestion-item--clickable {
