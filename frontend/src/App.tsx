@@ -9,7 +9,7 @@ import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
 import { useRightSidebarState } from "./rightSidebarState";
-import { useAutoAdvance } from "./theme";
+import { useAutoAdvance, useViewMode } from "./theme";
 import { useResizableWidth } from "./useResizableWidth";
 import { useSyncTree } from "./useSyncTree";
 
@@ -73,6 +73,12 @@ export function App() {
   // this value is read directly, and separate hook instances don't share
   // React state just because they share a localStorage key.
   const autoAdvance = useAutoAdvance();
+
+  // Same lifting rationale — read directly by TranslationWorkspace (one
+  // instance per open tab), so a per-instance hook wouldn't stay in
+  // sync across them. Now a global Settings preference, not a per-file
+  // toggle.
+  const viewMode = useViewMode();
 
   // Same lifting rationale as autoAdvance above — one RightSidebar
   // instance exists per open tab (all mounted at once), so its own
@@ -338,7 +344,12 @@ export function App() {
           <button onClick={sync.trigger} disabled={sync.isPending}>
             {sync.isPending ? "Syncing…" : "Sync tree"}
           </button>
-          <SettingsMenu autoAdvance={autoAdvance.enabled} onAutoAdvanceChange={autoAdvance.setEnabled} />
+          <SettingsMenu
+            autoAdvance={autoAdvance.enabled}
+            onAutoAdvanceChange={autoAdvance.setEnabled}
+            viewMode={viewMode.mode}
+            onViewModeChange={viewMode.setMode}
+          />
           <OfflineIndicator />
         </div>
       </header>
@@ -397,6 +408,7 @@ export function App() {
                 focusedStringId={focusedStringIdByFile[file.id] ?? null}
                 onFocusChange={(stringId) => setFocusedStringIdFor(file.id, stringId)}
                 autoAdvance={autoAdvance.enabled}
+                viewMode={viewMode.mode}
                 hasNextFile={hasNextFile}
                 hasPrevFile={hasPrevFile}
                 onNavigateFile={navigateFile}

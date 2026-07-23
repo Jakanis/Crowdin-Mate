@@ -2,7 +2,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef } from "react";
 import type { SourceString } from "../api/client";
 import { HighlightedSourceText } from "./HighlightedSourceText";
-import { TranslationEditor } from "./TranslationEditor";
+import { TranslationEditor, type TranslationEditorHandle } from "./TranslationEditor";
 
 interface SideBySideViewProps {
   projectId: number;
@@ -36,6 +36,10 @@ export function SideBySideView({
   currentUserId,
 }: SideBySideViewProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  // Only ever one expanded row (with a real TranslationEditor mounted)
+  // at a time, so one shared ref is enough — same idea as
+  // ComfortableView's editorRef.
+  const editorRef = useRef<TranslationEditorHandle>(null);
 
   const virtualizer = useVirtualizer({
     count: strings.length,
@@ -78,6 +82,7 @@ export function SideBySideView({
                     languageId={languageId}
                     text={s.text}
                     className="sbs-source"
+                    onTermClick={(targetText) => editorRef.current?.insertAtCursor(targetText)}
                   />
                 ) : (
                   <div className="sbs-source">{s.text}</div>
@@ -85,6 +90,7 @@ export function SideBySideView({
                 <div className="sbs-translation">
                   {expanded ? (
                     <TranslationEditor
+                      ref={editorRef}
                       projectId={projectId}
                       fileId={fileId}
                       languageId={languageId}

@@ -115,3 +115,24 @@ export function useUiScale() {
 
   return { scale, setScale };
 }
+
+export type ViewMode = "comfortable" | "side-by-side";
+const VIEW_MODE_KEY = "classicua-view-mode";
+
+// Global preference (moved out of per-file TranslationWorkspace state,
+// which meant switching layout in one open tab didn't affect any
+// other) — the same "value read directly by a distant component" case
+// useAutoAdvance is already lifted for. Lives in Settings now, not a
+// per-file toggle.
+export function useViewMode() {
+  const [mode, setModeState] = useState<ViewMode>(
+    () => (localStorage.getItem(VIEW_MODE_KEY) as ViewMode | null) ?? "comfortable",
+  );
+
+  const setMode = (next: ViewMode) => {
+    localStorage.setItem(VIEW_MODE_KEY, next);
+    setModeState(next);
+  };
+
+  return { mode, setMode };
+}

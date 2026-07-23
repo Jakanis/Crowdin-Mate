@@ -878,13 +878,8 @@ body {
   color: var(--bg-elevated);
 }
 
-.glossary-term-tooltip-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-}
-
 .glossary-term-tooltip {
+  display: none;
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -899,6 +894,13 @@ body {
   font-size: calc(13px * var(--ui-scale));
   white-space: normal;
   cursor: default;
+}
+
+/* Hover for mouse users, focus-within for keyboard nav (the term itself
+   is a tabIndex={0} <mark>, so tabbing to it focuses this wrapper). */
+.glossary-term-highlight-wrap:hover .glossary-term-tooltip,
+.glossary-term-highlight-wrap:focus-within .glossary-term-tooltip {
+  display: block;
 }
 
 .glossary-term-tooltip-source {
@@ -1529,36 +1531,13 @@ body {
   gap: 10px;
 }
 
+/* Now just a hairline separator above the source text — the
+   Comfortable/Side-by-Side toggle it used to hold moved to Settings
+   (a global preference, not per-tab). */
 .workspace-toolbar {
   flex-shrink: 0;
-  display: flex;
-  justify-content: flex-end;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-}
-
-.view-mode-toggle {
-  display: flex;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.view-mode-toggle button {
-  border: none;
-  background: none;
-  padding: 5px 12px;
-  font-size: calc(13px * var(--ui-scale));
-  cursor: pointer;
-}
-
-.view-mode-toggle button + button {
-  border-left: 1px solid rgba(128, 128, 128, 0.3);
-}
-
-.view-mode-toggle button.active {
-  background: var(--accent-bg);
-  font-weight: 600;
 }
 
 .workspace-body {

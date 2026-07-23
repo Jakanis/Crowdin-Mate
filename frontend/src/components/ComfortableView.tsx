@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { SourceString } from "../api/client";
 import { HighlightedSourceText } from "./HighlightedSourceText";
-import { TranslationEditor } from "./TranslationEditor";
+import { TranslationEditor, type TranslationEditorHandle } from "./TranslationEditor";
 
 interface ComfortableViewProps {
   projectId: number;
@@ -44,6 +44,7 @@ export function ComfortableView({
 }: ComfortableViewProps) {
   const [armed, setArmed] = useState<"next" | "prev" | null>(null);
   const armTimeoutRef = useRef<number | null>(null);
+  const editorRef = useRef<TranslationEditorHandle>(null);
 
   useEffect(() => () => {
     if (armTimeoutRef.current != null) window.clearTimeout(armTimeoutRef.current);
@@ -103,6 +104,7 @@ export function ComfortableView({
           languageId={languageId}
           text={s.text}
           className="string-source"
+          onTermClick={(targetText) => editorRef.current?.insertAtCursor(targetText)}
         />
         {(s.context || s.identifier || s.labels.length > 0) && (
           <div className="string-meta-block">
@@ -127,6 +129,7 @@ export function ComfortableView({
         )}
 
         <TranslationEditor
+          ref={editorRef}
           key={s.id}
           projectId={projectId}
           fileId={fileId}

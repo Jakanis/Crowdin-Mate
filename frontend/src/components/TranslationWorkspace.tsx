@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { api } from "../api/client";
+import type { ViewMode } from "../theme";
 import { ComfortableView } from "./ComfortableView";
 import { RightSidebar } from "./RightSidebar";
 import { SideBySideView } from "./SideBySideView";
@@ -13,6 +14,7 @@ interface TranslationWorkspaceProps {
   focusedStringId: number | null;
   onFocusChange: (stringId: number | null) => void;
   autoAdvance: boolean;
+  viewMode: ViewMode;
   hasNextFile: boolean;
   hasPrevFile: boolean;
   onNavigateFile: (direction: "next" | "prev") => void;
@@ -24,14 +26,16 @@ interface TranslationWorkspaceProps {
   onRightSidebarActiveTabChange: (tab: string) => void;
 }
 
-type ViewMode = "comfortable" | "side-by-side";
-
 /** One instance per open tab (see App.tsx) — each keeps its own strings
- * query and view-mode state, and stays mounted (hidden via CSS) even
- * when a different tab is active, so switching tabs never loses scroll
- * position or which view mode/string you had focused. React Query dedupes
- * the strings fetch by queryKey, so having one instance per open tab
- * costs no extra network requests beyond what each distinct file needs. */
+ * query and stays mounted (hidden via CSS) even when a different tab is
+ * active, so switching tabs never loses scroll position or which string
+ * you had focused. React Query dedupes the strings fetch by queryKey,
+ * so having one instance per open tab costs no extra network requests
+ * beyond what each distinct file needs. viewMode is a global Settings
+ * preference (useViewMode in theme.ts, lifted to App.tsx) rather than
+ * local state here — it used to be a per-file toggle in the toolbar
+ * below, which meant switching layout in one tab left every other tab
+ * on whatever it happened to already be showing. */
 export function TranslationWorkspace({
   projectId,
   fileId,
@@ -40,6 +44,7 @@ export function TranslationWorkspace({
   focusedStringId,
   onFocusChange,
   autoAdvance,
+  viewMode,
   hasNextFile,
   hasPrevFile,
   onNavigateFile,
@@ -50,8 +55,6 @@ export function TranslationWorkspace({
   rightSidebarActiveTab,
   onRightSidebarActiveTabChange,
 }: TranslationWorkspaceProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
-
   const stringsQuery = useQuery({
     queryKey: ["file-strings", projectId, fileId, languageId],
     queryFn: () => api.getFileStrings(projectId, fileId, languageId),
@@ -86,22 +89,12 @@ export function TranslationWorkspace({
 
   return (
     <div className="translation-workspace">
-      <div className="workspace-toolbar">
-        <div className="view-mode-toggle">
-          <button
-            className={viewMode === "comfortable" ? "active" : ""}
-            onClick={() => setViewMode("comfortable")}
-          >
-            Comfortable
-          </button>
-          <button
-            className={viewMode === "side-by-side" ? "active" : ""}
-            onClick={() => setViewMode("side-by-side")}
-          >
-            Side-by-Side
-          </button>
-        </div>
-      </div>
+      {/* Comfortable/Side-by-Side moved to Settings (a global preference,
+          not per-tab) — this bar is now just the hairline separator
+          above the source text; left empty rather than removed
+          entirely, since removing it would bring back the gap it was
+          added to fix. */}
+      <div className="workspace-toolbar" />
 
       <div className="workspace-body">
         {viewMode === "comfortable" ? (

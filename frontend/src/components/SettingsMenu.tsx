@@ -1,10 +1,15 @@
 import { useState } from "react";
-import { UI_SCALE_STEPS, useCrowdinPalette, useTheme, useUiScale, type ThemePreference } from "../theme";
+import { UI_SCALE_STEPS, useCrowdinPalette, useTheme, useUiScale, type ThemePreference, type ViewMode } from "../theme";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
+];
+
+const VIEW_MODE_OPTIONS: { value: ViewMode; label: string }[] = [
+  { value: "comfortable", label: "Comfortable" },
+  { value: "side-by-side", label: "Side-by-Side" },
 ];
 
 const SCALE_LABELS: Record<number, string> = {
@@ -18,6 +23,8 @@ const SCALE_LABELS: Record<number, string> = {
 interface SettingsMenuProps {
   autoAdvance: boolean;
   onAutoAdvanceChange: (enabled: boolean) => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
 }
 
 /** Gear icon in the header opening a small popover — theme (with an
@@ -25,10 +32,12 @@ interface SettingsMenuProps {
  * see theme.ts) and a UI-scale stepper standing in for a "font size"
  * setting: it zooms the whole app rather than rewriting every font-size
  * rule to rem, which scales text, icons and spacing together the same
- * way a browser's own Ctrl+/Ctrl- zoom would. autoAdvance is lifted to
- * App.tsx rather than read via its own hook instance here — see the
- * comment on useAutoAdvance's call site in App.tsx for why. */
-export function SettingsMenu({ autoAdvance, onAutoAdvanceChange }: SettingsMenuProps) {
+ * way a browser's own Ctrl+/Ctrl- zoom would. autoAdvance and viewMode
+ * are lifted to App.tsx rather than read via their own hook instances
+ * here — see the comment on useAutoAdvance's call site in App.tsx for
+ * why (viewMode used to be a per-file-tab toggle in the workspace
+ * toolbar; moved here as a global preference instead). */
+export function SettingsMenu({ autoAdvance, onAutoAdvanceChange, viewMode, onViewModeChange }: SettingsMenuProps) {
   const [open, setOpen] = useState(false);
   const { preference, setPreference } = useTheme();
   const { scale, setScale } = useUiScale();
@@ -53,6 +62,20 @@ export function SettingsMenu({ autoAdvance, onAutoAdvanceChange }: SettingsMenuP
                     key={opt.value}
                     className={preference === opt.value ? "active" : ""}
                     onClick={() => setPreference(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-section">
+              <div className="settings-label">Layout</div>
+              <div className="settings-segmented">
+                {VIEW_MODE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    className={viewMode === opt.value ? "active" : ""}
+                    onClick={() => onViewModeChange(opt.value)}
                   >
                     {opt.label}
                   </button>

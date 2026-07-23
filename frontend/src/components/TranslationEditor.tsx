@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { api, type SourceString, type TranslationInfo } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
 
@@ -17,6 +17,16 @@ interface TranslationEditorProps {
   onSaved?: () => void;
 }
 
+/** Exposed via ref so a sibling (HighlightedSourceText, several levels
+ * up through ComfortableView/SideBySideView) can insert a clicked
+ * glossary term's translation directly into this editor at the cursor,
+ * matching Crowdin's own behavior — the two components share no other
+ * relationship, so a ref is simpler here than threading a callback
+ * through every layout. */
+export interface TranslationEditorHandle {
+  insertAtCursor: (text: string) => void;
+}
+
 function bestTranslationText(s: SourceString): string {
   const approved = s.translations.find((t) => t.is_approved);
   return approved?.text ?? s.translations[0]?.text ?? "";
@@ -31,15 +41,10 @@ function bestTranslationText(s: SourceString): string {
  * (one row, expanded) layouts — the editing behavior is identical, only
  * the surrounding layout differs.
  */
-export function TranslationEditor({
-  projectId,
-  fileId,
-  languageId,
-  s,
-  canApprove,
-  currentUserId,
-  onSaved,
-}: TranslationEditorProps) {
+export const TranslationEditor = forwardRef<TranslationEditorHandle, TranslationEditorProps>(function TranslationEditor(
+  { projectId, fileId, languageId, s, canApprove, currentUserId, onSaved },
+  ref,
+) {
   const queryClient = useQueryClient();
   const refetchStrings = () =>
     queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
@@ -133,6 +138,32 @@ export function TranslationEditor({
     });
   };
 
+  // Insert at the current cursor (replacing any selection), same idea
+  // as selectCandidate but splicing into the existing text rather than
+  // replacing it outright. Reads selectionStart/End before setText —
+  // once the state update commits, the textarea's own selection has
+  // already collapsed to wherever the new value put it, so it has to be
+  // captured now and re-applied next frame like selectCandidate does.
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertAtCursor: (insertText: string) => {
+        const el = textareaRef.current;
+        const start = el?.selectionStart ?? text.length;
+        const end = el?.selectionEnd ?? text.length;
+        const next = text.slice(0, start) + insertText + text.slice(end);
+        setText(next);
+        const cursorPos = start + insertText.length;
+        requestAnimationFrame(() => {
+          if (!el) return;
+          el.focus();
+          el.selectionStart = el.selectionEnd = cursorPos;
+        });
+      },
+    }),
+    [text],
+  );
+
   if (s.has_plurals) {
     return (
       <p className="hint">
@@ -177,7 +208,7 @@ export function TranslationEditor({
       )}
     </div>
   );
-}
+});
 
 function TranslationItem({
   projectId,
