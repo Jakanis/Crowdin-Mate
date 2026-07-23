@@ -1,12 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, type TmMatch } from "../api/client";
+import { TmSourceDiff } from "./TmSourceDiff";
 
 interface TmPanelProps {
   projectId: number;
   stringId: number | null;
   languageId: string;
   sourceLanguageId: string;
+  /** The focused string's own source text — diffed against each fuzzy
+   * (< 100%) match's source below, matching Crowdin's own TM panel. Not
+   * used while searching (see TmPanel's own doc comment). */
+  sourceText: string | null;
   onJumpToMatch?: (fileId: number, stringId: number) => void;
 }
 
@@ -22,14 +27,31 @@ function timeAgo(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function TmMatchItem({ m, onJumpToMatch }: { m: TmMatch; onJumpToMatch?: (fileId: number, stringId: number) => void }) {
+function TmMatchItem({
+  m,
+  compareText,
+  onJumpToMatch,
+}: {
+  m: TmMatch;
+  compareText?: string | null;
+  onJumpToMatch?: (fileId: number, stringId: number) => void;
+}) {
+  const isPerfect = m.relevant >= 100;
   return (
     <div className="suggestion-item">
       <div className="suggestion-header">
-        <span className="suggestion-relevance">{m.relevant}%</span>
+        <span className={`suggestion-relevance${isPerfect ? " suggestion-relevance--perfect" : ""}`}>
+          {isPerfect ? "Perfect match" : `${m.relevant}%`}
+        </span>
         {m.tm_name && <span className="suggestion-source-name">{m.tm_name}</span>}
       </div>
-      <div className="suggestion-source">{m.source_text}</div>
+      <div className="suggestion-source">
+        {!isPerfect && compareText ? (
+          <TmSourceDiff currentText={compareText} matchText={m.source_text} />
+        ) : (
+          m.source_text
+        )}
+      </div>
       <div className="suggestion-target">{m.target_text}</div>
       {(m.matched_user_name || m.updated_at) && (
         <div className="suggestion-meta">
@@ -73,7 +95,7 @@ function TmMatchItem({ m, onJumpToMatch }: { m: TmMatch; onJumpToMatch?: (fileId
  * _augment_tm_matches_with_source in main.py). Falls back to the TM
  * segment's own updated_at when no local match is found (bulk-imported
  * entry, or the originating string isn't cached locally yet). */
-export function TmPanel({ projectId, stringId, languageId, sourceLanguageId, onJumpToMatch }: TmPanelProps) {
+export function TmPanel({ projectId, stringId, languageId, sourceLanguageId, sourceText, onJumpToMatch }: TmPanelProps) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
 
@@ -115,7 +137,7 @@ export function TmPanel({ projectId, stringId, languageId, sourceLanguageId, onJ
               <p className="hint">No matching TM segments.</p>
             )}
             {searchQuery.data?.matches.map((m, i) => (
-              <TmMatchItem key={i} m={m} onJumpToMatch={onJumpToMatch} />
+              <TmMatchItem key={i} m={m} compareText={debounced} onJumpToMatch={onJumpToMatch} />
             ))}
           </>
         ) : stringId == null ? (
@@ -127,7 +149,9 @@ export function TmPanel({ projectId, stringId, languageId, sourceLanguageId, onJ
         ) : stringMatchesQuery.data && stringMatchesQuery.data.matches.length === 0 ? (
           <p className="hint">No TM matches for this string.</p>
         ) : (
-          stringMatchesQuery.data?.matches.map((m, i) => <TmMatchItem key={i} m={m} onJumpToMatch={onJumpToMatch} />)
+          stringMatchesQuery.data?.matches.map((m, i) => (
+            <TmMatchItem key={i} m={m} compareText={sourceText} onJumpToMatch={onJumpToMatch} />
+          ))
         )}
       </div>
     </div>

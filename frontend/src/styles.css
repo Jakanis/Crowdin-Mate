@@ -1424,6 +1424,23 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.suggestion-relevance--perfect {
+  text-transform: uppercase;
+  font-size: calc(11px * var(--ui-scale));
+  letter-spacing: 0.03em;
+}
+
+.tm-diff-added {
+  background: color-mix(in srgb, var(--success) 30%, transparent);
+  border-radius: 2px;
+}
+
+.tm-diff-removed {
+  background: color-mix(in srgb, var(--danger) 30%, transparent);
+  text-decoration: line-through;
+  border-radius: 2px;
+}
+
 .suggestion-source-name {
   opacity: 0.5;
 }

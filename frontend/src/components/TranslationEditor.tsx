@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { api, type SourceString, type TranslationInfo } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
+import { TmSourceDiff } from "./TmSourceDiff";
 
 interface TranslationEditorProps {
   projectId: number;
@@ -404,16 +405,27 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         <div className="tm-suggestions-inline">
           <h4 className="tm-suggestions-inline-title">Suggestions</h4>
           <ul className="suggestion-list">
-            {tmMatches.map((m, i) => (
-              <li key={i} className="suggestion-item suggestion-item--clickable" onClick={() => selectCandidate(m.target_text)}>
-                <div className="suggestion-header">
-                  <span className="suggestion-relevance">{m.relevant}%</span>
-                  {m.tm_name && <span className="suggestion-source-name">{m.tm_name}</span>}
-                </div>
-                <div className="suggestion-source">{m.source_text}</div>
-                <div className="suggestion-target">{m.target_text}</div>
-              </li>
-            ))}
+            {tmMatches.map((m, i) => {
+              const isPerfect = m.relevant >= 100;
+              return (
+                <li
+                  key={i}
+                  className="suggestion-item suggestion-item--clickable"
+                  onClick={() => selectCandidate(m.target_text)}
+                >
+                  <div className="suggestion-header">
+                    <span className={`suggestion-relevance${isPerfect ? " suggestion-relevance--perfect" : ""}`}>
+                      {isPerfect ? "Perfect match" : `${m.relevant}%`}
+                    </span>
+                    {m.tm_name && <span className="suggestion-source-name">{m.tm_name}</span>}
+                  </div>
+                  <div className="suggestion-source">
+                    {!isPerfect ? <TmSourceDiff currentText={s.text} matchText={m.source_text} /> : m.source_text}
+                  </div>
+                  <div className="suggestion-target">{m.target_text}</div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

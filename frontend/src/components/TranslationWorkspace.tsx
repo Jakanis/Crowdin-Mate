@@ -154,6 +154,7 @@ export function TranslationWorkspace({
   const canApprove = permissionsQuery.data?.is_member ?? false;
   const currentUserId = permissionsQuery.data?.user_id ?? null;
   const focusedIndex = Math.max(0, strings.findIndex((s) => s.id === focusedStringId));
+  const focusedSourceText = strings.find((s) => s.id === focusedStringId)?.text ?? null;
 
   return (
     <div className="translation-workspace">
@@ -213,6 +214,7 @@ export function TranslationWorkspace({
           stringId={focusedStringId}
           languageId={languageId}
           sourceLanguageId={sourceLanguageId}
+          sourceText={focusedSourceText}
           width={rightPanelWidth}
           onResizeStart={onRightPanelResizeStart}
           collapsed={rightSidebarCollapsed}

@@ -9,6 +9,9 @@ interface RightSidebarProps {
   stringId: number | null;
   languageId: string;
   sourceLanguageId: string;
+  /** The focused string's own source text — passed through to TmPanel
+   * to diff against fuzzy TM matches. */
+  sourceText: string | null;
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
   collapsed: boolean;
@@ -40,6 +43,7 @@ export function RightSidebar({
   stringId,
   languageId,
   sourceLanguageId,
+  sourceText,
   width,
   onResizeStart,
   collapsed,
@@ -106,6 +110,7 @@ export function RightSidebar({
               stringId={stringId}
               languageId={languageId}
               sourceLanguageId={sourceLanguageId}
+              sourceText={sourceText}
               onJumpToMatch={onJumpToTmMatch}
             />
           )}

@@ -1099,14 +1099,26 @@ async def get_tm_matches(project_id: int, string_id: int, language_id: str):
             raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
 
     with get_conn() as conn:
+        # A string that's already been translated is, by definition, in
+        # the TM under its own exact source text — so without this
+        # exclusion, every translated string would always show its own
+        # current translation back to itself as a "100% suggestion",
+        # which is just noise (it's already right there in the
+        # candidate list above). Anything genuinely useful comes from a
+        # DIFFERENT string, which this doesn't touch.
         matches = [
             dict(row) for row in conn.execute(
                 """
                 SELECT source_text, target_text, relevant, tm_name, updated_at
-                FROM tm_matches WHERE string_id = ? AND language_id = ?
+                FROM tm_matches
+                WHERE string_id = ? AND language_id = ?
+                  AND NOT EXISTS (
+                    SELECT 1 FROM translations tr
+                    WHERE tr.string_id = ? AND tr.language_id = ? AND tr.text = tm_matches.target_text
+                  )
                 ORDER BY relevant DESC
                 """,
-                (string_id, language_id),
+                (string_id, language_id, string_id, language_id),
             )
         ]
         _augment_tm_matches_with_source(conn, matches, language_id, exclude_string_id=string_id)
