@@ -35,6 +35,9 @@ _COLUMN_MIGRATIONS = {
     "source_strings": [
         ("label_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
     ],
+    "tm_matches": [
+        ("updated_at", "TEXT"),
+    ],
 }
 
 

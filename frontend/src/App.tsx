@@ -435,6 +435,7 @@ export function App() {
                 onRightSidebarCollapsedChange={rightSidebar.setCollapsed}
                 rightSidebarActiveTab={rightSidebar.activeTab}
                 onRightSidebarActiveTabChange={rightSidebar.setActiveTab}
+                onJumpToTmMatch={handleJumpToSearchResult}
               />
             </div>
           ))}

@@ -15,6 +15,7 @@ interface RightSidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
   activeTab: string;
   onActiveTabChange: (tab: string) => void;
+  onJumpToTmMatch: (fileId: number, stringId: number) => void;
 }
 
 // One entry per tab — the icon rail, collapse behavior, and panel chrome
@@ -45,6 +46,7 @@ export function RightSidebar({
   onCollapsedChange,
   activeTab,
   onActiveTabChange,
+  onJumpToTmMatch,
 }: RightSidebarProps) {
 
   // Same queryKey CommentsPanel uses, so opening the tab reuses this
@@ -99,7 +101,12 @@ export function RightSidebar({
             <CommentsPanel projectId={projectId} stringId={stringId} languageId={languageId} />
           )}
           {activeTab === "tm" && (
-            <TmPanel projectId={projectId} stringId={stringId} languageId={languageId} />
+            <TmPanel
+              projectId={projectId}
+              stringId={stringId}
+              languageId={languageId}
+              onJumpToMatch={onJumpToTmMatch}
+            />
           )}
           {activeTab === "glossary" && (
             <GlossaryPanel

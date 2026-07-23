@@ -74,14 +74,16 @@ def sync_tm_matches(project_id: int, string_id: int, source_text: str, source_la
         for m in matches:
             conn.execute(
                 """
-                INSERT INTO tm_matches (string_id, language_id, source_text, target_text, relevant, tm_name, cached_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO tm_matches
+                    (string_id, language_id, source_text, target_text, relevant, tm_name, updated_at, cached_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     string_id, target_lang,
                     m.get("source", ""), m.get("target", ""),
                     m.get("relevant", 0),
                     (m.get("tm") or {}).get("name"),
+                    m.get("updatedAt"),
                     now,
                 ),
             )

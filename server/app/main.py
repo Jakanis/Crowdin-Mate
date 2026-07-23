@@ -962,13 +962,38 @@ async def get_tm_matches(project_id: int, string_id: int, language_id: str):
         matches = [
             dict(row) for row in conn.execute(
                 """
-                SELECT source_text, target_text, relevant, tm_name
+                SELECT source_text, target_text, relevant, tm_name, updated_at
                 FROM tm_matches WHERE string_id = ? AND language_id = ?
                 ORDER BY relevant DESC
                 """,
                 (string_id, language_id),
             )
         ]
+        # Crowdin's concordance search has no per-record user/date fields
+        # (only the TM segment's own updatedAt, already selected above) —
+        # but this project's TM already mirrors real project translations,
+        # so the same target text usually still exists on some OTHER
+        # string. Reverse-lookup it locally for the real "who/when", and
+        # a file/string to jump to, matching what Crowdin's own editor
+        # shows for in-context TM matches.
+        for m in matches:
+            row = conn.execute(
+                """
+                SELECT t.string_id, t.user_name, t.created_at, ss.file_id, f.path AS file_path
+                FROM translations t
+                JOIN source_strings ss ON ss.id = t.string_id
+                JOIN files f ON f.id = ss.file_id
+                WHERE t.text = ? AND t.language_id = ? AND t.string_id != ?
+                ORDER BY t.created_at DESC
+                LIMIT 1
+                """,
+                (m["target_text"], language_id, string_id),
+            ).fetchone()
+            m["matched_string_id"] = row["string_id"] if row else None
+            m["matched_file_id"] = row["file_id"] if row else None
+            m["matched_file_path"] = row["file_path"] if row else None
+            m["matched_user_name"] = row["user_name"] if row else None
+            m["matched_created_at"] = row["created_at"] if row else None
     return {"matches": matches}
 
 

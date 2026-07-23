@@ -126,6 +126,12 @@ export interface TmMatch {
   target_text: string;
   relevant: number;
   tm_name: string | null;
+  updated_at: string | null;
+  matched_string_id: number | null;
+  matched_file_id: number | null;
+  matched_file_path: string | null;
+  matched_user_name: string | null;
+  matched_created_at: string | null;
 }
 
 export interface GlossaryMatch {

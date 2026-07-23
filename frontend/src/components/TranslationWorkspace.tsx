@@ -24,6 +24,7 @@ interface TranslationWorkspaceProps {
   onRightSidebarCollapsedChange: (collapsed: boolean) => void;
   rightSidebarActiveTab: string;
   onRightSidebarActiveTabChange: (tab: string) => void;
+  onJumpToTmMatch: (fileId: number, stringId: number) => void;
 }
 
 /** One instance per open tab (see App.tsx) — each keeps its own strings
@@ -54,6 +55,7 @@ export function TranslationWorkspace({
   onRightSidebarCollapsedChange,
   rightSidebarActiveTab,
   onRightSidebarActiveTabChange,
+  onJumpToTmMatch,
 }: TranslationWorkspaceProps) {
   const stringsQuery = useQuery({
     queryKey: ["file-strings", projectId, fileId, languageId],
@@ -136,6 +138,7 @@ export function TranslationWorkspace({
           onCollapsedChange={onRightSidebarCollapsedChange}
           activeTab={rightSidebarActiveTab}
           onActiveTabChange={onRightSidebarActiveTabChange}
+          onJumpToTmMatch={onJumpToTmMatch}
         />
       </div>
     </div>

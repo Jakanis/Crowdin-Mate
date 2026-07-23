@@ -148,9 +148,15 @@ CREATE TABLE IF NOT EXISTS tm_matches (
     target_text TEXT NOT NULL,
     relevant INTEGER NOT NULL,
     tm_name TEXT,
+    updated_at TEXT,
     cached_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tm_matches_string_lang ON tm_matches (string_id, language_id);
+
+-- Lets a TM match be traced back to a real translation elsewhere in the
+-- project (same target text) for "who/when + jump to it" — see
+-- get_tm_matches in main.py.
+CREATE INDEX IF NOT EXISTS idx_translations_text_lang ON translations (text, language_id);
 
 CREATE TABLE IF NOT EXISTS glossary_matches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

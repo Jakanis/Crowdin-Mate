@@ -610,10 +610,31 @@ body {
 }
 
 /* --- file strings list (left sidebar "Strings" tab) --- */
+.fsl-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+  padding: 10px 10px 0;
+}
+
+.fsl-search-input {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: calc(13px * var(--ui-scale));
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+}
+
 .file-strings-scroll {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  margin: 0 -10px;
 }
 
 .fsl-row {
@@ -1298,6 +1319,17 @@ body {
 .suggestion-target {
   white-space: pre-wrap;
   line-height: 1.4;
+}
+
+.suggestion-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(128, 128, 128, 0.15);
+  font-size: calc(11px * var(--ui-scale));
+  opacity: 0.6;
 }
 
 .suggestion-description {
