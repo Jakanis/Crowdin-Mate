@@ -1763,16 +1763,31 @@ body {
 }
 
 .comfortable-pager-nav {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+/* Floats above the button instead of sitting inline next to it — an
+   inline sibling grew/shrank the nav group's width as it appeared and
+   disappeared, which visibly shifted the (centered) pager bar every
+   time a press armed or timed out. */
 .pager-hint {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 8px;
   font-size: calc(11px * var(--ui-scale));
-  opacity: 0.7;
   color: var(--accent);
   white-space: nowrap;
+  z-index: 5;
 }
 
 /* --- side-by-side view --- */
