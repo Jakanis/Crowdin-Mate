@@ -986,7 +986,13 @@ body {
 .string-source {
   font-size: calc(14px * var(--ui-scale));
   white-space: pre-wrap;
-  opacity: 0.75;
+  /* color-mix, not opacity: opacity < 1 creates a new stacking context
+     for this whole subtree, which trapped the glossary tooltip's
+     z-index inside it — sibling elements below (the key/context block,
+     the translation textarea) painted on top of the tooltip instead of
+     under it, showing through. A dimmed text color has the same visual
+     effect without that side effect. */
+  color: color-mix(in srgb, var(--fg) 75%, transparent);
   margin-bottom: 8px;
   line-height: 1.4;
 }
@@ -1017,6 +1023,7 @@ body {
   min-width: 180px;
   max-width: 320px;
   background: var(--bg-elevated);
+  color: var(--fg);
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
