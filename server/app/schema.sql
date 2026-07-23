@@ -30,7 +30,13 @@ CREATE TABLE IF NOT EXISTS files (
     strings_count INTEGER,
     updated_at TEXT,
     synced_at TEXT NOT NULL,
-    content_synced_at TEXT
+    content_synced_at TEXT,
+    -- Separate from content_synced_at (which means "full per-string
+    -- candidate history + approvals synced" via file_content_sync.py,
+    -- needed for the real editor). This one only means "search has a
+    -- target-language snippet for this file", set by the much cheaper
+    -- bulk_search_sync.py path — see search_index.py.
+    search_synced_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_files_project_directory
     ON files (project_id, directory_id);

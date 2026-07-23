@@ -38,6 +38,9 @@ _COLUMN_MIGRATIONS = {
     "tm_matches": [
         ("updated_at", "TEXT"),
     ],
+    "files": [
+        ("search_synced_at", "TEXT"),
+    ],
 }
 
 
