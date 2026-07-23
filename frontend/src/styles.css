@@ -760,6 +760,7 @@ body {
 
 .app-main {
   flex: 1;
+  min-width: 0;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -774,15 +775,50 @@ body {
   word-break: break-all;
 }
 
-/* --- open-file tab bar --- */
-.tab-bar {
+/* --- open-file tab bar ---
+   .tab-bar-row is the horizontal (default) mode: the bleed/border-bottom
+   styling that used to live on .tab-bar itself, now wrapping a
+   clipped-not-scrolled .tab-bar plus the overflow dropdown. .tab-bar on
+   its own (no row wrapper) is the vertical sidebar mode instead — see
+   TabBar.tsx's orientation prop. */
+.tab-bar-row {
   display: flex;
-  gap: 2px;
-  overflow-x: auto;
-  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
   margin: -16px -16px 12px;
   padding: 8px 16px 0;
   border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 2px;
+}
+
+.tab-bar-row .tab-bar {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tab-bar-measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  left: -9999px;
+  top: -9999px;
+  display: flex;
+  gap: 2px;
+}
+
+.tab-bar--vertical {
+  flex-direction: column;
+  flex-shrink: 0;
+  max-height: 45%;
+  overflow-y: auto;
+  padding: 6px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
 }
 
 .tab {
@@ -801,6 +837,17 @@ body {
      button's hit area can reach the tab's full height and right edge,
      instead of being a tiny glyph floating in the middle. */
   padding: 0;
+}
+
+.tab-bar--vertical .tab {
+  border: none;
+  border-radius: 4px;
+  max-width: none;
+  width: 100%;
+}
+
+.tab-bar--vertical .tab--active {
+  background: var(--accent-bg);
 }
 
 .tab--active {
@@ -842,8 +889,91 @@ body {
   color: var(--danger);
 }
 
+.tab-overflow {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tab-overflow-btn {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: rgba(128, 128, 128, 0.05);
+  height: 100%;
+  padding: 0 8px;
+  cursor: pointer;
+  font-size: calc(12px * var(--ui-scale));
+  color: inherit;
+}
+
+.tab-overflow-btn:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.tab-overflow-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+
+.tab-overflow-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 21;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  margin-top: 2px;
+}
+
+.tab-overflow-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: calc(13px * var(--ui-scale));
+  cursor: pointer;
+  gap: 8px;
+}
+
+.tab-overflow-item .tab-name {
+  padding: 0;
+}
+
+.tab-overflow-item:hover {
+  background: rgba(128, 128, 128, 0.1);
+}
+
+.tab-overflow-item--active {
+  font-weight: 600;
+}
+
+.tab-overflow-close {
+  opacity: 0.45;
+  font-size: calc(15px * var(--ui-scale));
+  flex-shrink: 0;
+}
+
+.tab-overflow-close:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+
 .workspace-tab-panel {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1525,6 +1655,7 @@ body {
 /* --- translation workspace --- */
 .translation-workspace {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1542,6 +1673,7 @@ body {
 
 .workspace-body {
   flex: 1;
+  min-width: 0;
   display: flex;
   gap: 16px;
   min-height: 0;
@@ -1550,6 +1682,7 @@ body {
 /* --- comfortable view --- */
 .comfortable-view {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1599,6 +1732,7 @@ body {
 /* --- side-by-side view --- */
 .side-by-side-scroll {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
   min-height: 0;
 }

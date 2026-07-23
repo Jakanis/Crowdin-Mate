@@ -136,3 +136,25 @@ export function useViewMode() {
 
   return { mode, setMode };
 }
+
+export type OpenTabsLayout = "top" | "sidebar";
+const OPEN_TABS_LAYOUT_KEY = "classicua-open-tabs-layout";
+
+// Matches a browser's optional vertical-tabs mode — useful once several
+// files are open at once (a quest-chain workflow). Sidebar and the tab
+// bar are each rendered once in App.tsx, so no cross-instance lifting
+// concern here, but kept as the same App.tsx-owned-hook-threaded-as-props
+// shape anyway for consistency with every other Settings-driven
+// preference (see useViewMode above).
+export function useOpenTabsLayout() {
+  const [layout, setLayoutState] = useState<OpenTabsLayout>(
+    () => (localStorage.getItem(OPEN_TABS_LAYOUT_KEY) as OpenTabsLayout | null) ?? "top",
+  );
+
+  const setLayout = (next: OpenTabsLayout) => {
+    localStorage.setItem(OPEN_TABS_LAYOUT_KEY, next);
+    setLayoutState(next);
+  };
+
+  return { layout, setLayout };
+}

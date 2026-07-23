@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { UI_SCALE_STEPS, useCrowdinPalette, useTheme, useUiScale, type ThemePreference, type ViewMode } from "../theme";
+import {
+  UI_SCALE_STEPS,
+  useCrowdinPalette,
+  useTheme,
+  useUiScale,
+  type OpenTabsLayout,
+  type ThemePreference,
+  type ViewMode,
+} from "../theme";
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: "system", label: "System" },
@@ -10,6 +18,11 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 const VIEW_MODE_OPTIONS: { value: ViewMode; label: string }[] = [
   { value: "comfortable", label: "Comfortable" },
   { value: "side-by-side", label: "Side-by-Side" },
+];
+
+const OPEN_TABS_LAYOUT_OPTIONS: { value: OpenTabsLayout; label: string }[] = [
+  { value: "top", label: "Top" },
+  { value: "sidebar", label: "Sidebar" },
 ];
 
 const SCALE_LABELS: Record<number, string> = {
@@ -25,6 +38,8 @@ interface SettingsMenuProps {
   onAutoAdvanceChange: (enabled: boolean) => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  openTabsLayout: OpenTabsLayout;
+  onOpenTabsLayoutChange: (layout: OpenTabsLayout) => void;
 }
 
 /** Gear icon in the header opening a small popover — theme (with an
@@ -37,7 +52,14 @@ interface SettingsMenuProps {
  * here — see the comment on useAutoAdvance's call site in App.tsx for
  * why (viewMode used to be a per-file-tab toggle in the workspace
  * toolbar; moved here as a global preference instead). */
-export function SettingsMenu({ autoAdvance, onAutoAdvanceChange, viewMode, onViewModeChange }: SettingsMenuProps) {
+export function SettingsMenu({
+  autoAdvance,
+  onAutoAdvanceChange,
+  viewMode,
+  onViewModeChange,
+  openTabsLayout,
+  onOpenTabsLayoutChange,
+}: SettingsMenuProps) {
   const [open, setOpen] = useState(false);
   const { preference, setPreference } = useTheme();
   const { scale, setScale } = useUiScale();
@@ -76,6 +98,20 @@ export function SettingsMenu({ autoAdvance, onAutoAdvanceChange, viewMode, onVie
                     key={opt.value}
                     className={viewMode === opt.value ? "active" : ""}
                     onClick={() => onViewModeChange(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-section">
+              <div className="settings-label">Open file tabs</div>
+              <div className="settings-segmented">
+                {OPEN_TABS_LAYOUT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    className={openTabsLayout === opt.value ? "active" : ""}
+                    onClick={() => onOpenTabsLayoutChange(opt.value)}
                   >
                     {opt.label}
                   </button>

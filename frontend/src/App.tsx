@@ -9,7 +9,7 @@ import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
 import { useRightSidebarState } from "./rightSidebarState";
-import { useAutoAdvance, useViewMode } from "./theme";
+import { useAutoAdvance, useOpenTabsLayout, useViewMode } from "./theme";
 import { useResizableWidth } from "./useResizableWidth";
 import { useSyncTree } from "./useSyncTree";
 
@@ -79,6 +79,7 @@ export function App() {
   // sync across them. Now a global Settings preference, not a per-file
   // toggle.
   const viewMode = useViewMode();
+  const openTabsLayout = useOpenTabsLayout();
 
   // Same lifting rationale as autoAdvance above — one RightSidebar
   // instance exists per open tab (all mounted at once), so its own
@@ -349,6 +350,8 @@ export function App() {
             onAutoAdvanceChange={autoAdvance.setEnabled}
             viewMode={viewMode.mode}
             onViewModeChange={viewMode.setMode}
+            openTabsLayout={openTabsLayout.layout}
+            onOpenTabsLayoutChange={openTabsLayout.setLayout}
           />
           <OfflineIndicator />
         </div>
@@ -373,16 +376,30 @@ export function App() {
             onJumpToSearchResult={handleJumpToSearchResult}
             width={leftPanel.width}
             onResizeStart={(e) => leftPanel.startResize(e, 1)}
+            openFilesSection={
+              openTabsLayout.layout === "sidebar" ? (
+                <TabBar
+                  openFiles={openFiles}
+                  activeFileId={activeFileId}
+                  onSelectTab={setActiveFileId}
+                  onCloseTab={handleCloseTab}
+                  onReorderTabs={handleReorderTabs}
+                  orientation="vertical"
+                />
+              ) : undefined
+            }
           />
         )}
         <main className="app-main">
-          <TabBar
-            openFiles={openFiles}
-            activeFileId={activeFileId}
-            onSelectTab={setActiveFileId}
-            onCloseTab={handleCloseTab}
-            onReorderTabs={handleReorderTabs}
-          />
+          {openTabsLayout.layout === "top" && (
+            <TabBar
+              openFiles={openFiles}
+              activeFileId={activeFileId}
+              onSelectTab={setActiveFileId}
+              onCloseTab={handleCloseTab}
+              onReorderTabs={handleReorderTabs}
+            />
+          )}
           {openFiles.length === 0 && <p className="hint">Select a file from the tree.</p>}
           {activeFileId != null && (
             <h2 className="file-title">{openFiles.find((f) => f.id === activeFileId)?.path}</h2>

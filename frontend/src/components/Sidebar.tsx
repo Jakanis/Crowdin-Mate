@@ -17,6 +17,7 @@ interface SidebarProps {
   onJumpToSearchResult: (fileId: number, stringId: number) => void;
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
+  openFilesSection?: React.ReactNode;
 }
 
 type Tab = "files" | "strings" | "search";
@@ -38,6 +39,7 @@ export function Sidebar({
   onJumpToSearchResult,
   width,
   onResizeStart,
+  openFilesSection,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [tab, setTab] = useState<Tab>("files");
@@ -93,6 +95,7 @@ export function Sidebar({
       <div className="sidebar-panel" hidden={tab !== "search"}>
         <SearchPanel projectId={projectId} languageId={languageId} onJumpToResult={onJumpToSearchResult} />
       </div>
+      {openFilesSection}
       </aside>
       <div className="resize-handle" onMouseDown={onResizeStart} />
     </>
