@@ -1167,16 +1167,6 @@ body {
   cursor: default;
 }
 
-.undo-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(128, 128, 128, 0.08);
-  font-size: calc(12px * var(--ui-scale));
-}
 
 .string-meta {
   opacity: 0.5;
@@ -1209,6 +1199,33 @@ body {
 .translation-item--selected {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
+}
+
+/* Deleting a candidate keeps it in place rather than removing it — see
+   TranslationEditor's handleDeleted — dimmed underneath a semi-opaque
+   "Deleted · Undo" overlay instead of a separate banner elsewhere on
+   the page. position: relative here (not the base .translation-item)
+   scopes the overlay's positioning to just this state. */
+.translation-item--pending-delete {
+  position: relative;
+  cursor: default;
+}
+
+.translation-item--pending-delete .translation-text,
+.translation-item--pending-delete .translation-meta {
+  opacity: 0.35;
+}
+
+.translation-delete-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  border-radius: 6px;
+  font-size: calc(12.5px * var(--ui-scale));
 }
 
 .translation-text {

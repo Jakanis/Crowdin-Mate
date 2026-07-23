@@ -207,23 +207,32 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
 
   // Crowdin's own editor deletes a candidate immediately (no "are you
   // sure?" dialog) and instead offers a brief Undo — matching that here.
-  // "Undo" can't literally restore the deleted translationId (the API
-  // has no undelete), so it resubmits the same text as a new candidate,
-  // which reads the same to the user even though it gets a fresh id.
-  const [undoDelete, setUndoDelete] = useState<string | null>(null);
-  const undoTimeoutRef = useRef<number | null>(null);
+  // The deleted candidate stays visible (dimmed, with a semi-opaque
+  // "Deleted · Undo" overlay) rather than vanishing into a separate
+  // banner, so refetchStrings() is deliberately deferred until the undo
+  // window actually closes — calling it immediately would drop the
+  // candidate from s.translations right away, since it's already gone
+  // server-side. "Undo" can't literally restore the deleted
+  // translationId (the API has no undelete), so it resubmits the same
+  // text as a new candidate, which reads the same to the user even
+  // though it gets a fresh id.
+  const [pendingDelete, setPendingDelete] = useState<{ id: number; text: string } | null>(null);
+  const deleteTimeoutRef = useRef<number | null>(null);
 
-  const handleDeleted = (deletedText: string) => {
-    if (undoTimeoutRef.current != null) window.clearTimeout(undoTimeoutRef.current);
-    setUndoDelete(deletedText);
-    undoTimeoutRef.current = window.setTimeout(() => setUndoDelete(null), UNDO_DELETE_MS);
+  const handleDeleted = (t: TranslationInfo) => {
+    if (deleteTimeoutRef.current != null) window.clearTimeout(deleteTimeoutRef.current);
+    setPendingDelete({ id: t.id, text: t.text });
+    deleteTimeoutRef.current = window.setTimeout(() => {
+      setPendingDelete(null);
+      refetchStrings();
+    }, UNDO_DELETE_MS);
   };
 
   const undoMutation = useMutation({
-    mutationFn: () => api.submitTranslation(projectId, s.id, languageId, undoDelete as string),
+    mutationFn: () => api.submitTranslation(projectId, s.id, languageId, pendingDelete!.text),
     onSuccess: () => {
-      if (undoTimeoutRef.current != null) window.clearTimeout(undoTimeoutRef.current);
-      setUndoDelete(null);
+      if (deleteTimeoutRef.current != null) window.clearTimeout(deleteTimeoutRef.current);
+      setPendingDelete(null);
       refetchStrings();
       notifyProgressChanged(fileId);
     },
@@ -296,15 +305,6 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         {errorMessage && <span className="error">{errorMessage}</span>}
       </div>
 
-      {undoDelete && (
-        <div className="undo-banner">
-          Translation deleted.
-          <button className="link-button" onClick={() => undoMutation.mutate()} disabled={undoMutation.isPending}>
-            {undoMutation.isPending ? "Restoring…" : "Undo"}
-          </button>
-        </div>
-      )}
-
       {s.translations.length > 0 && (
         <ul className="translation-list">
           {s.translations.map((t) => (
@@ -319,6 +319,9 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               onDeleted={handleDeleted}
               onSelect={() => selectCandidate(t.text)}
               selected={text === t.text}
+              pendingDelete={pendingDelete?.id === t.id}
+              onUndoDelete={() => undoMutation.mutate()}
+              undoPending={undoMutation.isPending}
             />
           ))}
         </ul>
@@ -337,6 +340,9 @@ function TranslationItem({
   onDeleted,
   onSelect,
   selected,
+  pendingDelete,
+  onUndoDelete,
+  undoPending,
 }: {
   projectId: number;
   fileId: number;
@@ -344,9 +350,12 @@ function TranslationItem({
   canApprove: boolean;
   currentUserId: number | null;
   onChanged: () => void;
-  onDeleted: (deletedText: string) => void;
+  onDeleted: (deleted: TranslationInfo) => void;
   onSelect: () => void;
   selected: boolean;
+  pendingDelete: boolean;
+  onUndoDelete: () => void;
+  undoPending: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
 
@@ -376,8 +385,12 @@ function TranslationItem({
     mutationFn: () => api.deleteTranslation(projectId, t.id),
     onSuccess: () => {
       setError(null);
-      onChanged();
-      onDeleted(t.text);
+      // Deliberately not onChanged() here — that would refetch and drop
+      // this candidate from the list immediately, but it needs to stay
+      // visible (dimmed, with the Undo overlay) for the undo window.
+      // TranslationEditor's handleDeleted schedules the real refetch
+      // itself once that window closes.
+      onDeleted(t);
       notifyProgressChanged(fileId);
     },
     onError: (err: Error) => setError(err.message),
@@ -391,8 +404,8 @@ function TranslationItem({
 
   return (
     <li
-      className={`translation-item${t.is_approved ? " translation-item--approved" : ""}${selected ? " translation-item--selected" : ""}`}
-      onClick={onSelect}
+      className={`translation-item${t.is_approved ? " translation-item--approved" : ""}${selected ? " translation-item--selected" : ""}${pendingDelete ? " translation-item--pending-delete" : ""}`}
+      onClick={pendingDelete ? undefined : onSelect}
     >
       <div className="translation-text">{t.text}</div>
       <div className="translation-meta">
@@ -451,6 +464,21 @@ function TranslationItem({
         )}
         {error && <span className="error">{error}</span>}
       </div>
+      {pendingDelete && (
+        <div className="translation-delete-overlay">
+          <span>Deleted</span>
+          <button
+            className="link-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUndoDelete();
+            }}
+            disabled={undoPending}
+          >
+            {undoPending ? "Restoring…" : "Undo"}
+          </button>
+        </div>
+      )}
     </li>
   );
 }
