@@ -130,6 +130,33 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   // box to visibly clip the last row mid-drag and only catch up once
   // the drag paused.
 
+  // A "rejected" result (most commonly Crowdin's "duplicate translation"
+  // check) or a raw network-level failure both mean this app's view of
+  // the string might not match what's actually on Crowdin anymore — a
+  // duplicate rejection is a strong signal the exact text already
+  // exists as a real translation there (e.g. an earlier submit whose
+  // response never made it back here: the backend process restarting
+  // mid-request, a dropped connection, anything that lets the Crowdin
+  // call land but breaks before this app hears back), and a network
+  // failure means we genuinely don't know whether the submit reached
+  // Crowdin before the connection died. Either way, silently leaving
+  // the pre-submit candidate list on screen would hide that the
+  // translation may already be there. Resyncing (not just refetching
+  // the local cache, which wouldn't have it either) reconciles with
+  // whatever Crowdin's real state turns out to be.
+  const reconcileWithCrowdin = () => {
+    api
+      .resyncFile(projectId, fileId, languageId)
+      .then(() => {
+        refetchStrings();
+        notifyProgressChanged(fileId);
+      })
+      .catch(() => {
+        // Resync itself failed too (genuinely offline, etc.) — nothing
+        // more to do here; the typed text is still safe in the draft.
+      });
+  };
+
   const submit = useMutation({
     mutationFn: () => api.submitTranslation(projectId, s.id, languageId, text),
     onMutate: () => {
@@ -138,7 +165,10 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     },
     onSuccess: (result) => {
       setStatus(result.status);
-      if (result.status === "rejected") setErrorMessage(result.reason ?? "Rejected by Crowdin");
+      if (result.status === "rejected") {
+        setErrorMessage(result.reason ?? "Rejected by Crowdin");
+        reconcileWithCrowdin();
+      }
       if (result.status === "synced") {
         refetchStrings();
         notifyProgressChanged(fileId);
@@ -167,6 +197,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     onError: (err: Error) => {
       setStatus("error");
       setErrorMessage(err.message);
+      reconcileWithCrowdin();
     },
   });
 

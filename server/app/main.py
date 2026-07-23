@@ -683,6 +683,7 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
     # different serializers.
     t = resp.get("data", resp)
     user = t.get("user") or {}
+    now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute(
             """
