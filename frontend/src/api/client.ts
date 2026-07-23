@@ -243,6 +243,12 @@ export const api = {
     request<{ drained: number }>(`/offline-queue/${itemId}/retry`, { method: "POST" }),
   deleteOfflineQueueItem: (itemId: number) =>
     request<{ ok: boolean }>(`/offline-queue/${itemId}`, { method: "DELETE" }),
+  getSimulateOffline: () => request<{ enabled: boolean }>("/debug/simulate-offline"),
+  setSimulateOffline: (enabled: boolean) =>
+    request<{ enabled: boolean }>("/debug/simulate-offline", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
   submitTranslation: (projectId: number, stringId: number, languageId: string, text: string) =>
     request<SubmitTranslationResult>(`/projects/${projectId}/strings/${stringId}/translations`, {
       method: "POST",

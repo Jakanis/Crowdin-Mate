@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import config, oauth, offline_queue
+from app import config, debug_mode, oauth, offline_queue
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
@@ -160,6 +160,27 @@ async def delete_offline_queue_item(item_id: int):
             (row["string_id"], row["language_id"]),
         )
     return {"ok": True}
+
+
+class SimulateOfflineIn(BaseModel):
+    enabled: bool
+
+
+@app.get("/debug/simulate-offline")
+async def get_simulate_offline():
+    return {"enabled": debug_mode.is_simulate_offline()}
+
+
+@app.post("/debug/simulate-offline")
+async def set_simulate_offline(body: SimulateOfflineIn):
+    """Developer-only testing toggle (see debug_mode.py's docstring) —
+    forces every Crowdin call to fail as if the network were down, so
+    the offline queue's enqueue/drain/retry behavior can actually be
+    tested without literally disconnecting the machine (which would
+    also break every other app using the network, and doesn't reliably
+    exercise the SAME code path as a Crowdin-specific outage anyway)."""
+    debug_mode.set_simulate_offline(body.enabled)
+    return {"enabled": body.enabled}
 
 
 class TokenIn(BaseModel):

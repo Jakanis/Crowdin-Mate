@@ -25,6 +25,7 @@ from collections import deque
 from crowdin_api import CrowdinClient
 from crowdin_api.exceptions import Throttled
 
+from app import debug_mode
 from app.config import get_token
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,18 @@ def _throttle_for_sustained_rate() -> None:
         _recent_call_times.append(time.monotonic())
 
 
+class SimulatedOfflineError(ConnectionError):
+    """Raised instead of actually calling Crowdin when debug_mode's
+    simulate-offline toggle is on. Deliberately a ConnectionError
+    subclass, not some bespoke exception type: every existing
+    except-clause downstream (submit_translation, offline_queue.drain_once)
+    only ever special-cases `isinstance(exc, APIException)` to decide
+    terminal-vs-queue, never the exact exception type — so this is
+    genuinely indistinguishable to that logic from a real network
+    outage, and exercises the actual enqueue/drain/retry code path
+    rather than a fake UI-only state."""
+
+
 _client: CrowdinClient | None = None
 _client_token: str | None = None
 
@@ -89,6 +102,13 @@ def call_with_limits(fn, *args, **kwargs):
 
     Usage: call_with_limits(client.source_files.list_files, projectId=393919)
     """
+    if debug_mode.is_simulate_offline():
+        # Checked before the concurrency gate/rate limiter too — a
+        # simulated outage shouldn't consume a real rate-limit slot or
+        # wait behind other in-flight calls, it should fail instantly
+        # like a real dead connection would.
+        raise SimulatedOfflineError("Simulated offline mode is enabled (see debug_mode.py)")
+
     with _concurrency_gate:
         attempt = 0
         while True:

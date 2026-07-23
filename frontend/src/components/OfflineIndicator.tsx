@@ -39,7 +39,7 @@ function timeAgo(iso: string): string {
  */
 export function OfflineIndicator() {
   const queryClient = useQueryClient();
-  const online = useOnlineStatus();
+  const browserOnline = useOnlineStatus();
   const [open, setOpen] = useState(false);
 
   const queueQuery = useQuery({
@@ -50,6 +50,28 @@ export function OfflineIndicator() {
   const items = queueQuery.data?.items ?? [];
   const pendingCount = items.filter((i) => i.status === "pending").length;
   const failedCount = items.filter((i) => i.status === "failed").length;
+
+  // Developer-only testing toggle (see debug_mode.py) — forces every
+  // Crowdin call on the backend to fail as if the network were down, so
+  // the whole offline queue path (enqueue/drain/retry/this indicator)
+  // can actually be exercised without literally cutting the machine's
+  // network, which would also break every other app using it and
+  // doesn't reliably hit the same code path as a Crowdin-specific
+  // outage anyway. The badge reflects this alongside the real
+  // navigator.onLine signal so the UI stays coherent during a test —
+  // "Offline" should mean writes are actually queuing, regardless of
+  // which of the two caused it.
+  const simulateOfflineQuery = useQuery({
+    queryKey: ["simulate-offline"],
+    queryFn: api.getSimulateOffline,
+  });
+  const simulatedOffline = simulateOfflineQuery.data?.enabled ?? false;
+  const online = browserOnline && !simulatedOffline;
+
+  const simulateOfflineMutation = useMutation({
+    mutationFn: (enabled: boolean) => api.setSimulateOffline(enabled),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["simulate-offline"] }),
+  });
 
   const drainMutation = useMutation({
     mutationFn: api.drainOfflineQueue,
@@ -71,7 +93,7 @@ export function OfflineIndicator() {
       <button
         className={`offline-indicator-badge${online ? "" : " offline-indicator-badge--offline"}`}
         onClick={() => setOpen((v) => !v)}
-        title={online ? "Online" : "No network connection"}
+        title={simulatedOffline ? "Offline (simulated for testing)" : online ? "Online" : "No network connection"}
       >
         <span className={`offline-dot${online ? "" : " offline-dot--offline"}`} />
         {online ? "Online" : "Offline"}
@@ -81,6 +103,18 @@ export function OfflineIndicator() {
         <>
           <div className="settings-backdrop" onClick={() => setOpen(false)} />
           <div className="settings-popover offline-queue-popover">
+            <div className="settings-section offline-simulate-section">
+              <label className="settings-checkbox">
+                <input
+                  type="checkbox"
+                  checked={simulatedOffline}
+                  onChange={(e) => simulateOfflineMutation.mutate(e.target.checked)}
+                  disabled={simulateOfflineMutation.isPending}
+                />
+                Simulate offline (testing)
+              </label>
+              <p className="hint">Forces every save to queue locally instead of reaching Crowdin.</p>
+            </div>
             <div className="settings-section">
               <div className="settings-label">
                 Pending translations {pendingCount > 0 && `(${pendingCount})`}
