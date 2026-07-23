@@ -18,7 +18,7 @@ for a file, confirmed round-tripping correctly to crowdin.com's own editor.
   your Crowdin account" screen once both servers are running; credentials are stored via your
   OS credential manager (Windows Credential Manager here), never in a file in this repo:
   - **OAuth (recommended)** — one-time setup: crowdin.com → your avatar → Settings → OAuth →
-    New Application, using callback URL `http://127.0.0.1:8000/oauth/callback` and as many
+    New Application, using callback URL `http://localhost:8000/oauth/callback` and as many
     scopes as you can select (projects, files, translations, comments, TM, glossaries). Paste
     the resulting Client ID/Secret into the app once; after that, "Connect with Crowdin" opens
     a normal browser login/authorization page and the backend's own `/oauth/callback` route

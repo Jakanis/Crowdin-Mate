@@ -257,7 +257,10 @@ async def oauth_callback(code: str | None = None, state: str | None = None, erro
         oauth.exchange_code(code)
         await _validate_and_stash_user()
     except Exception as exc:  # noqa: BLE001 - surfaced to the user in the page, not just logs
-        config.clear_oauth()
+        # Only the (possibly partially-written) tokens, not the client_id/
+        # secret the user registered by hand — those are still valid
+        # regardless of why this particular exchange failed.
+        config.clear_oauth_tokens()
         logger.exception("OAuth callback failed")
         return page(f"Could not complete login: {exc}")
 

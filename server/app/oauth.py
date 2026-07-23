@@ -20,18 +20,23 @@ back," not to persist across restarts.
 """
 
 import secrets
+from urllib.parse import urlencode
 
 import requests
 
 from app import config
 
-REDIRECT_URI = "http://127.0.0.1:8000/oauth/callback"
+REDIRECT_URI = "http://localhost:8000/oauth/callback"
 AUTHORIZE_URL = "https://accounts.crowdin.com/oauth/authorize"
 TOKEN_URL = "https://accounts.crowdin.com/oauth/token"
-# Broadest scopes covering everything this app already does via a PAT
-# (which has no scope restriction at all) — projects, files/strings,
-# translations + approvals + votes, comments, TM, glossaries.
-SCOPES = "project translation translation.approval comment tm glossary"
+# Real scope names, confirmed against Crowdin's own scopes reference
+# (support.crowdin.com/developer/understanding-scopes/) — the earlier
+# guesses ("translation", "translation.approval", "comment") aren't
+# real scopes and made Crowdin reject the authorize request with a 403.
+# `project` covers general project access (including comments, which
+# has no scope of its own); `project.translation` covers translations
+# + approvals; `tm`/`glossary` cover their own resources.
+SCOPES = "project project.translation tm glossary"
 
 _pending_state: str | None = None
 
@@ -50,8 +55,7 @@ def build_authorize_url() -> str:
         "scope": SCOPES,
         "state": _pending_state,
     }
-    query = "&".join(f"{k}={requests.utils.quote(v)}" for k, v in params.items())
-    return f"{AUTHORIZE_URL}?{query}"
+    return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
 def is_valid_state(state: str) -> bool:

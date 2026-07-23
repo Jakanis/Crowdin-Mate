@@ -1412,6 +1412,10 @@ body {
   line-height: 1.5;
 }
 
+.token-setup p a {
+  color: var(--accent);
+}
+
 .token-setup-redirect-uri {
   display: block;
   padding: 6px 10px;

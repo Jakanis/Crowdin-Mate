@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/client";
 
-const REDIRECT_URI = "http://127.0.0.1:8000/oauth/callback";
+const REDIRECT_URI = "http://localhost:8000/oauth/callback";
+const OAUTH_APPS_URL = "https://crowdin.com/settings#oauth-apps";
+const API_KEY_URL = "https://crowdin.com/settings#api-key";
 
 /**
  * OAuth (recommended) is the default path: the user creates a Crowdin
@@ -71,8 +73,11 @@ export function TokenSetup() {
           {!authStatus.data?.oauth_client_configured ? (
             <>
               <p>
-                One-time setup: create an OAuth app at crowdin.com → your avatar → Settings → OAuth
-                → New Application, using this exact callback URL:
+                One-time setup:{" "}
+                <a href={OAUTH_APPS_URL} target="_blank" rel="noopener noreferrer">
+                  create an OAuth app
+                </a>{" "}
+                (New Application), using this exact callback URL:
               </p>
               <code className="token-setup-redirect-uri">{REDIRECT_URI}</code>
               <p>Select all the scopes you can (projects, files, translations, comments, TM, glossaries), then paste its Client ID and Secret below.</p>
@@ -119,8 +124,11 @@ export function TokenSetup() {
       ) : (
         <>
           <p>
-            Paste a Crowdin Personal Access Token (Account Settings → API on crowdin.com). It's
-            stored in your OS credential manager, not in a file.
+            Paste a{" "}
+            <a href={API_KEY_URL} target="_blank" rel="noopener noreferrer">
+              Crowdin Personal Access Token
+            </a>
+            . It's stored in your OS credential manager, not in a file.
           </p>
           <form
             onSubmit={(e) => {
