@@ -121,47 +121,14 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fit the box to its content instead of a fixed row count (which was a
-  // crude char-count guess, capped at 8 rows with an internal scrollbar
-  // for anything longer). Re-measures on every text change, including
-  // programmatic ones like clicking a candidate to load its text.
-  //
-  // scrollHeight never includes border width, but with the project-wide
-  // box-sizing: border-box the `height` we set here does — omitting that
-  // undershoots by exactly the border width and leaves a 1-2px sliver
-  // clipped (confirmed by measuring scrollHeight vs clientHeight after
-  // the naive version). Add the border back in.
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-
-    const fit = () => {
-      el.style.height = "auto";
-      const { borderTopWidth, borderBottomWidth } = window.getComputedStyle(el);
-      el.style.height = `${el.scrollHeight + parseFloat(borderTopWidth) + parseFloat(borderBottomWidth)}px`;
-    };
-
-    fit();
-
-    // Text-only re-measurement misses a real cause of the same problem:
-    // dragging a side panel resizes this box without touching `text` at
-    // all, so the same content now wraps onto a different number of
-    // lines and the height goes stale (confirmed live — the box stayed
-    // whatever height it last fit at, cutting off text after a resize).
-    // Re-fit whenever the element's own width actually changes. Gated on
-    // width specifically (not just any resize) because fit() itself
-    // changes the element's height, and observing height too would have
-    // this callback re-triggering itself.
-    let lastWidth = el.offsetWidth;
-    const observer = new ResizeObserver(() => {
-      if (el.offsetWidth !== lastWidth) {
-        lastWidth = el.offsetWidth;
-        fit();
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [text]);
+  // Box auto-grows to fit its content via the field-sizing CSS property
+  // on .string-target (styles.css) rather than a scrollHeight + JS
+  // ResizeObserver combo — that approach lagged a step behind during a
+  // fast continuous side-panel drag (scrollHeight itself updates
+  // instantly on every width change, but the JS that copied it into
+  // style.height couldn't keep up), which is exactly what caused the
+  // box to visibly clip the last row mid-drag and only catch up once
+  // the drag paused.
 
   const submit = useMutation({
     mutationFn: () => api.submitTranslation(projectId, s.id, languageId, text),

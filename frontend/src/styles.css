@@ -1133,6 +1133,16 @@ body {
   resize: none;
   overflow: hidden;
   min-height: 44px;
+  /* Native auto-grow instead of the old JS scrollHeight measurement +
+     ResizeObserver combo — that approach lagged a step behind during a
+     fast continuous side-panel drag (confirmed live: scrollHeight
+     updates immediately on every width change, but the ResizeObserver
+     callback that used to copy it into style.height couldn't keep up,
+     so the box visibly clipped the last row mid-drag and only caught
+     up once the drag paused). field-sizing lets the browser grow the
+     box in the same synchronous layout pass as the resize itself, so
+     there's nothing to lag. */
+  field-sizing: content;
 }
 
 .string-row-footer {
