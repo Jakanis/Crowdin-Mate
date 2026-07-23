@@ -33,6 +33,30 @@ function bestTranslationText(s: SourceString): string {
 }
 
 const DRAFT_DEBOUNCE_MS = 600;
+const UNDO_DELETE_MS = 6000;
+
+function CheckIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13.5 4.5L6 12L2.5 8.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M3 4.5H13M6.5 4.5V3C6.5 2.5 7 2 7.5 2H8.5C9 2 9.5 2.5 9.5 3V4.5M12 4.5V13C12 13.5 11.5 14 11 14H5C4.5 14 4 13.5 4 13V4.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M6.5 7V11.5M9.5 7V11.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 /**
  * The translation-editing UI for one string: candidate list (click any
@@ -181,6 +205,30 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
 
   const dirty = text.trim() !== "" && text !== bestTranslationText(s);
 
+  // Crowdin's own editor deletes a candidate immediately (no "are you
+  // sure?" dialog) and instead offers a brief Undo — matching that here.
+  // "Undo" can't literally restore the deleted translationId (the API
+  // has no undelete), so it resubmits the same text as a new candidate,
+  // which reads the same to the user even though it gets a fresh id.
+  const [undoDelete, setUndoDelete] = useState<string | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
+
+  const handleDeleted = (deletedText: string) => {
+    if (undoTimeoutRef.current != null) window.clearTimeout(undoTimeoutRef.current);
+    setUndoDelete(deletedText);
+    undoTimeoutRef.current = window.setTimeout(() => setUndoDelete(null), UNDO_DELETE_MS);
+  };
+
+  const undoMutation = useMutation({
+    mutationFn: () => api.submitTranslation(projectId, s.id, languageId, undoDelete as string),
+    onSuccess: () => {
+      if (undoTimeoutRef.current != null) window.clearTimeout(undoTimeoutRef.current);
+      setUndoDelete(null);
+      refetchStrings();
+      notifyProgressChanged(fileId);
+    },
+  });
+
   // Focus the edit box the moment a candidate is picked, cursor at the
   // end, so you can click a candidate and start typing immediately
   // instead of needing a second click into the field. Deferred to the
@@ -241,12 +289,21 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         placeholder="Type a translation and Save to submit it to Crowdin"
       />
       <div className="string-row-footer">
-        <button onClick={() => submit.mutate()} disabled={!dirty || submit.isPending}>
-          {submit.isPending ? "Saving…" : "Save as new translation"}
+        <button className="btn-primary" onClick={() => submit.mutate()} disabled={!dirty || submit.isPending}>
+          {submit.isPending ? "Saving…" : "Save"}
         </button>
         <StatusBadge status={status} />
         {errorMessage && <span className="error">{errorMessage}</span>}
       </div>
+
+      {undoDelete && (
+        <div className="undo-banner">
+          Translation deleted.
+          <button className="link-button" onClick={() => undoMutation.mutate()} disabled={undoMutation.isPending}>
+            {undoMutation.isPending ? "Restoring…" : "Undo"}
+          </button>
+        </div>
+      )}
 
       {s.translations.length > 0 && (
         <ul className="translation-list">
@@ -259,6 +316,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               canApprove={canApprove}
               currentUserId={currentUserId}
               onChanged={refetchStrings}
+              onDeleted={handleDeleted}
               onSelect={() => selectCandidate(t.text)}
               selected={text === t.text}
             />
@@ -276,6 +334,7 @@ function TranslationItem({
   canApprove,
   currentUserId,
   onChanged,
+  onDeleted,
   onSelect,
   selected,
 }: {
@@ -285,6 +344,7 @@ function TranslationItem({
   canApprove: boolean;
   currentUserId: number | null;
   onChanged: () => void;
+  onDeleted: (deletedText: string) => void;
   onSelect: () => void;
   selected: boolean;
 }) {
@@ -317,6 +377,7 @@ function TranslationItem({
     onSuccess: () => {
       setError(null);
       onChanged();
+      onDeleted(t.text);
       notifyProgressChanged(fileId);
     },
     onError: (err: Error) => setError(err.message),
@@ -364,26 +425,28 @@ function TranslationItem({
         </span>
         {canApprove && (
           <button
-            className="link-button"
+            className={`icon-btn icon-btn--approve${t.is_approved ? " icon-btn--active" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               approve.mutate();
             }}
             disabled={approve.isPending}
+            title={t.is_approved ? "Unapprove" : "Approve"}
           >
-            {approve.isPending ? "…" : t.is_approved ? "Unapprove" : "Approve"}
+            <CheckIcon />
           </button>
         )}
         {canDelete && (
           <button
-            className="link-button link-button--danger"
+            className="icon-btn icon-btn--delete"
             onClick={(e) => {
               e.stopPropagation();
-              if (confirm("Delete this translation? This can't be undone.")) del.mutate();
+              del.mutate();
             }}
             disabled={del.isPending}
+            title="Delete"
           >
-            {del.isPending ? "…" : "Delete"}
+            <TrashIcon />
           </button>
         )}
         {error && <span className="error">{error}</span>}

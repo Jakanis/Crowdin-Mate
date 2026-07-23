@@ -1144,6 +1144,40 @@ body {
   flex-wrap: wrap;
 }
 
+/* Matches Crowdin's own solid blue "Save" button rather than a plain
+   browser button, for the one action on this screen that actually
+   submits something to Crowdin. */
+.btn-primary {
+  border: none;
+  border-radius: 6px;
+  padding: 7px 16px;
+  background: var(--accent);
+  color: var(--bg-elevated);
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.undo-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.08);
+  font-size: calc(12px * var(--ui-scale));
+}
+
 .string-meta {
   opacity: 0.5;
 }
@@ -1232,6 +1266,57 @@ body {
 
 .vote-button:disabled {
   cursor: default;
+}
+
+/* Icon buttons for Approve/Delete on each translation candidate —
+   matches Crowdin's own editor (a checkmark/trash icon button, not a
+   text link) rather than the plain .link-button used elsewhere. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  background: var(--bg-elevated);
+  color: inherit;
+  cursor: pointer;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn--approve {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+.icon-btn--approve:hover:not(:disabled) {
+  background: var(--success-bg);
+}
+
+.icon-btn--approve.icon-btn--active {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--bg-elevated);
+}
+
+.icon-btn--delete {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.icon-btn--delete:hover:not(:disabled) {
+  background: var(--danger-bg);
 }
 
 .link-button {
