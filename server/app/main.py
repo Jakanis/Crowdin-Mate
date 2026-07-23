@@ -24,6 +24,7 @@ from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
 from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_project_glossary
+from app.sync.live_search import search_project_live
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
 from app.sync import search_index
 from app.sync.suggestions_sync import has_looked_up, sync_glossary_matches, sync_tm_matches
@@ -403,19 +404,16 @@ async def resync_file_content(project_id: int, file_id: int, language_id: str):
     return result
 
 
-@app.get("/projects/{project_id}/search")
-async def search_strings(project_id: int, q: str, language_id: str, limit: int = 50):
-    """Full-text search over whatever's cached locally — instant, no
-    Crowdin call. Coverage is only as wide as what's been synced (see
-    strings_fts in schema.sql): opened files, plus anything pulled in by
-    an explicit /search-index/build run. Query is treated as a literal
-    phrase with a prefix match on the trailing word (quoting sidesteps
-    FTS5's own query-syntax special characters), which reads sensibly
-    for search-as-you-type."""
-    q = q.strip()
-    if not q:
-        return {"results": []}
-
+def _search_strings_local(project_id: int, q: str, limit: int) -> list[dict]:
+    """Full-text search over whatever's cached locally — the fallback
+    when the live API search below fails (offline, rate-limited, or any
+    other API error), so search still works with no network at all.
+    Coverage is only as wide as what's been synced (see strings_fts in
+    schema.sql): opened files, plus anything pulled in by an explicit
+    /search-index/build run. Query is treated as a literal phrase with a
+    prefix match on the trailing word (quoting sidesteps FTS5's own
+    query-syntax special characters), which reads sensibly for
+    search-as-you-type."""
     fts_query = '"' + q.replace('"', '""') + '"*'
     with get_conn() as conn:
         try:
@@ -439,8 +437,42 @@ async def search_strings(project_id: int, q: str, language_id: str, limit: int =
             ).fetchall()
         except sqlite3.OperationalError as exc:
             raise HTTPException(status_code=400, detail=f"Bad search query: {exc}")
+    return [dict(r) for r in rows]
 
-    return {"results": [dict(r) for r in rows]}
+
+@app.get("/projects/{project_id}/search")
+async def search_strings(project_id: int, q: str, language_id: str, limit: int = 50):
+    """Searches the whole project live via Crowdin's CroQL query
+    language (source text or any translation containing the query) —
+    unlike the local FTS index, coverage isn't limited to files that
+    happen to be cached. Falls back to the local index on any API
+    error (offline, rate-limited, etc.), so search still works with no
+    network at all, just narrower."""
+    q = q.strip()
+    if not q:
+        return {"results": []}
+
+    try:
+        live_results = await run_in_threadpool(search_project_live, project_id, q, language_id, limit)
+    except APIException:
+        return {"results": _search_strings_local(project_id, q, limit)}
+
+    file_ids = list({r["file_id"] for r in live_results if r["file_id"] is not None})
+    with get_conn() as conn:
+        placeholders = ",".join("?" * len(file_ids))
+        file_paths = (
+            {
+                row["id"]: row["path"]
+                for row in conn.execute(f"SELECT id, path FROM files WHERE id IN ({placeholders})", file_ids)
+            }
+            if file_ids
+            else {}
+        )
+    results = [
+        {**r, "file_path": file_paths.get(r["file_id"], f"File #{r['file_id']}")}
+        for r in live_results
+    ]
+    return {"results": results}
 
 
 @app.post("/projects/{project_id}/search-index/build")

@@ -24,12 +24,12 @@ function Snippet({ text }: { text: string }) {
   );
 }
 
-/** Search tab content for the left sidebar: instant full-text search over
- * whatever's cached locally (source_strings + translations), plus an
- * explicit opt-in "build full index" job for coverage beyond whatever's
- * been opened so far — see search_index.py for why that's a separate,
- * explicit action rather than something automatic (19,866 files, hours
- * not minutes, no bulk content endpoint). */
+/** Search tab content for the left sidebar: live, whole-project search via
+ * Crowdin's CroQL query language (see live_search.py) — covers every file,
+ * not just what's been opened. Falls back to the local FTS index
+ * (whatever's cached) if the API call fails, e.g. offline — the explicit
+ * opt-in "build full index" job below exists for that offline case, not
+ * for search coverage in general anymore. */
 export function SearchPanel({ projectId, languageId, onJumpToResult }: SearchPanelProps) {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
@@ -75,10 +75,10 @@ export function SearchPanel({ projectId, languageId, onJumpToResult }: SearchPan
         autoFocus
       />
 
-      {debounced.trim().length === 0 && <p className="hint">Type to search cached strings.</p>}
+      {debounced.trim().length === 0 && <p className="hint">Type to search the whole project.</p>}
       {searchQuery.isLoading && <p className="hint">Searching…</p>}
       {debounced.trim().length > 0 && searchQuery.data && results.length === 0 && (
-        <p className="hint">No matches in what's cached so far.</p>
+        <p className="hint">No matches.</p>
       )}
 
       <div className="search-results">
@@ -131,9 +131,10 @@ export function SearchPanel({ projectId, languageId, onJumpToResult }: SearchPan
           )}
           {!status.running && status.total > status.synced && (
             <p className="hint">
-              Search only covers files you've opened so far. Building the full index makes one API call per
-              remaining file ({(status.total - status.synced).toLocaleString()} left) — expect this to take
-              hours, not minutes.
+              Search itself already covers the whole project live — this index is only for when you're
+              offline. Building it makes one API call per remaining file (
+              {(status.total - status.synced).toLocaleString()} left) — expect this to take hours, not
+              minutes.
             </p>
           )}
         </div>
