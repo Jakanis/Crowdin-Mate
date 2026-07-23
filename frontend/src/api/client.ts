@@ -266,6 +266,11 @@ export const api = {
     request<{ status: string }>(`/projects/${projectId}/translations/${translationId}`, {
       method: "DELETE",
     }),
+  restoreTranslation: (projectId: number, stringId: number, translationId: number, languageId: string) =>
+    request<{ status: string; translation: { id: number; text: string; user_name: string | null } }>(
+      `/projects/${projectId}/strings/${stringId}/translations/${translationId}/restore?language_id=${encodeURIComponent(languageId)}`,
+      { method: "POST" },
+    ),
   voteTranslation: (projectId: number, translationId: number, mark: "up" | "down") =>
     request<{ status: string; rating: number }>(`/projects/${projectId}/translations/${translationId}/vote`, {
       method: "POST",

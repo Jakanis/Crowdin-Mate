@@ -831,6 +831,85 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
     return {"status": "deleted"}
 
 
+@app.post("/projects/{project_id}/strings/{string_id}/translations/{translation_id}/restore")
+async def restore_translation_endpoint(project_id: int, string_id: int, translation_id: int, language_id: str):
+    """True undo for a just-deleted translation, used by the editor's
+    delete-then-Undo overlay. Deliberately NOT "resubmit the same text
+    as a new translation" — that would misattribute authorship to
+    whoever clicks Undo. Crowdin keeps a deleted translation restorable
+    (confirmed live: same translationId, original author, original
+    timestamp, and its approval record all come back exactly as they
+    were), so this just calls that and re-inserts the row into the
+    local cache with the real data restore_translation returns, rather
+    than whatever the frontend had cached before the delete."""
+    client = get_client()
+    try:
+        resp = await run_in_threadpool(
+            call_with_limits, client.string_translations.restore_translation,
+            translationId=translation_id, projectId=project_id,
+        )
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    t = resp.get("data", resp)
+    user = t.get("user") or {}
+    created_at = t.get("createdAt")
+    if created_at is not None and not isinstance(created_at, str):
+        created_at = created_at.isoformat()
+
+    # restore_translation's response has no approval info (or stringId/
+    # languageId — both already known from the URL) — a translationId-
+    # scoped approvals lookup tells us whether the approval that
+    # existed before the delete came back too.
+    try:
+        approvals_resp = await run_in_threadpool(
+            call_with_limits, client.string_translations.list_translation_approvals,
+            projectId=project_id, translationId=translation_id,
+        )
+        approvals = [a.get("data", a) for a in approvals_resp.get("data", [])]
+    except APIException:
+        approvals = []
+    approval_id = approvals[0]["id"] if approvals else None
+
+    now = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO translations
+                (id, string_id, language_id, text, user_id, user_name,
+                 rating, is_approved, approval_id, created_at, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                text=excluded.text,
+                user_id=excluded.user_id,
+                user_name=excluded.user_name,
+                rating=excluded.rating,
+                is_approved=excluded.is_approved,
+                approval_id=excluded.approval_id,
+                created_at=excluded.created_at,
+                synced_at=excluded.synced_at
+            """,
+            (
+                translation_id, string_id, language_id,
+                t.get("text", ""),
+                user.get("id"), user.get("fullName") or user.get("username"),
+                t.get("rating", 0) or 0,
+                1 if approval_id is not None else 0,
+                approval_id,
+                created_at,
+                now,
+            ),
+        )
+        file_row = conn.execute("SELECT file_id FROM source_strings WHERE id = ?", (string_id,)).fetchone()
+    if file_row:
+        invalidate_progress_for_file(file_row["file_id"], language_id)
+
+    return {
+        "status": "restored",
+        "translation": {"id": translation_id, "text": t.get("text", ""), "user_name": user.get("fullName") or user.get("username")},
+    }
+
+
 class VoteIn(BaseModel):
     mark: str  # "up" | "down"
 

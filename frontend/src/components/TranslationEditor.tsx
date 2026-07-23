@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { api, type SourceString, type TranslationInfo } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
 
@@ -209,27 +209,46 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   // sure?" dialog) and instead offers a brief Undo — matching that here.
   // The deleted candidate stays visible (dimmed, with a semi-opaque
   // "Deleted · Undo" overlay) rather than vanishing into a separate
-  // banner, so refetchStrings() is deliberately deferred until the undo
-  // window actually closes — calling it immediately would drop the
-  // candidate from s.translations right away, since it's already gone
-  // server-side. "Undo" can't literally restore the deleted
-  // translationId (the API has no undelete), so it resubmits the same
-  // text as a new candidate, which reads the same to the user even
-  // though it gets a fresh id.
-  const [pendingDelete, setPendingDelete] = useState<{ id: number; text: string } | null>(null);
+  // banner. Undo calls restoreTranslation, not a resubmit of the text
+  // as a new translation — Crowdin keeps a deleted translation
+  // genuinely restorable (confirmed live: same translationId, original
+  // author, original timestamp, even its approval record all come back
+  // exactly as they were), and resubmitting would have misattributed
+  // authorship to whoever clicked Undo instead.
+  //
+  // The candidate is captured (with its original index) rather than
+  // just deferring refetchStrings() — react-query's own
+  // refetchOnWindowFocus (default on, and this data is usually well
+  // past its 30s staleTime by the time anyone clicks Delete) can
+  // refetch behind this component's back at any moment regardless of
+  // when *this* component asks for it, which would otherwise make the
+  // candidate disappear immediately despite the deferred call below.
+  // displayTranslations splices it back into its original slot
+  // whenever it's missing from the live list but still within the undo
+  // window, so the visual "stays put" behavior holds regardless of
+  // what triggered the refetch.
+  const [pendingDelete, setPendingDelete] = useState<{ translation: TranslationInfo; index: number } | null>(null);
   const deleteTimeoutRef = useRef<number | null>(null);
 
-  const handleDeleted = (t: TranslationInfo) => {
+  const handleDeleted = (t: TranslationInfo, index: number) => {
     if (deleteTimeoutRef.current != null) window.clearTimeout(deleteTimeoutRef.current);
-    setPendingDelete({ id: t.id, text: t.text });
+    setPendingDelete({ translation: t, index });
     deleteTimeoutRef.current = window.setTimeout(() => {
       setPendingDelete(null);
       refetchStrings();
     }, UNDO_DELETE_MS);
   };
 
+  const displayTranslations = useMemo(() => {
+    if (!pendingDelete) return s.translations;
+    if (s.translations.some((t) => t.id === pendingDelete.translation.id)) return s.translations;
+    const next = s.translations.slice();
+    next.splice(Math.min(pendingDelete.index, next.length), 0, pendingDelete.translation);
+    return next;
+  }, [s.translations, pendingDelete]);
+
   const undoMutation = useMutation({
-    mutationFn: () => api.submitTranslation(projectId, s.id, languageId, pendingDelete!.text),
+    mutationFn: () => api.restoreTranslation(projectId, s.id, pendingDelete!.translation.id, languageId),
     onSuccess: () => {
       if (deleteTimeoutRef.current != null) window.clearTimeout(deleteTimeoutRef.current);
       setPendingDelete(null);
@@ -305,9 +324,9 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         {errorMessage && <span className="error">{errorMessage}</span>}
       </div>
 
-      {s.translations.length > 0 && (
+      {displayTranslations.length > 0 && (
         <ul className="translation-list">
-          {s.translations.map((t) => (
+          {displayTranslations.map((t, index) => (
             <TranslationItem
               key={t.id}
               projectId={projectId}
@@ -316,10 +335,10 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               canApprove={canApprove}
               currentUserId={currentUserId}
               onChanged={refetchStrings}
-              onDeleted={handleDeleted}
+              onDeleted={() => handleDeleted(t, index)}
               onSelect={() => selectCandidate(t.text)}
               selected={text === t.text}
-              pendingDelete={pendingDelete?.id === t.id}
+              pendingDelete={pendingDelete?.translation.id === t.id}
               onUndoDelete={() => undoMutation.mutate()}
               undoPending={undoMutation.isPending}
             />
@@ -350,7 +369,7 @@ function TranslationItem({
   canApprove: boolean;
   currentUserId: number | null;
   onChanged: () => void;
-  onDeleted: (deleted: TranslationInfo) => void;
+  onDeleted: () => void;
   onSelect: () => void;
   selected: boolean;
   pendingDelete: boolean;
@@ -388,9 +407,9 @@ function TranslationItem({
       // Deliberately not onChanged() here — that would refetch and drop
       // this candidate from the list immediately, but it needs to stay
       // visible (dimmed, with the Undo overlay) for the undo window.
-      // TranslationEditor's handleDeleted schedules the real refetch
-      // itself once that window closes.
-      onDeleted(t);
+      // TranslationEditor's handleDeleted (via displayTranslations)
+      // keeps it visible regardless of when the real refetch happens.
+      onDeleted();
       notifyProgressChanged(fileId);
     },
     onError: (err: Error) => setError(err.message),
