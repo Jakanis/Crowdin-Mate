@@ -401,9 +401,6 @@ export function App() {
             />
           )}
           {openFiles.length === 0 && <p className="hint">Select a file from the tree.</p>}
-          {activeFileId != null && (
-            <h2 className="file-title">{openFiles.find((f) => f.id === activeFileId)?.path}</h2>
-          )}
           {activeFileId != null && staleFileIds.has(activeFileId) && (
             <div className="stale-file-banner">
               This file changed on Crowdin since it was opened.
@@ -420,6 +417,7 @@ export function App() {
               <TranslationWorkspace
                 projectId={projectId}
                 fileId={file.id}
+                filePath={file.path}
                 languageId={languageId}
                 sourceLanguageId={selectedProject.source_language_id}
                 focusedStringId={focusedStringIdByFile[file.id] ?? null}

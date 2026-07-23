@@ -798,14 +798,6 @@ body {
   min-height: 0;
 }
 
-.file-title {
-  font-size: calc(15px * var(--ui-scale));
-  font-weight: 600;
-  margin: 0 0 12px;
-  opacity: 0.8;
-  word-break: break-all;
-}
-
 /* --- open-file tab bar ---
    .tab-bar-row is the horizontal (default) mode: the bleed/border-bottom
    styling that used to live on .tab-bar itself, now wrapping a
@@ -1945,29 +1937,40 @@ body {
   gap: 10px;
 }
 
-/* Header for the tab: Prev/Next pager (Comfortable only) on the left,
-   the manual per-file Refresh icon button pinned to the right via its
-   own margin-left: auto — not the container's justify-content, since
-   that needs to keep working whether or not the pager is even rendered
-   (Side-by-Side has no pager, just the refresh button alone). */
+/* One compact row: file path (truncated, takes all remaining space so
+   it's what pushes the rest of the row to the right — not the other
+   items' own margins), Prev/Next pager (Comfortable only), and the
+   manual per-file Refresh icon button. */
 .workspace-toolbar {
   flex-shrink: 0;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+}
+
+.workspace-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(13.5px * var(--ui-scale));
+  font-weight: 600;
+  opacity: 0.8;
 }
 
 .workspace-pager {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  flex-shrink: 0;
   font-size: calc(13px * var(--ui-scale));
 }
 
 .workspace-refresh-button {
-  margin-left: auto;
+  flex-shrink: 0;
 }
 
 @keyframes icon-spin {

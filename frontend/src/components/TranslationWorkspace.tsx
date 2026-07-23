@@ -9,6 +9,7 @@ import { SideBySideView } from "./SideBySideView";
 interface TranslationWorkspaceProps {
   projectId: number;
   fileId: number;
+  filePath: string;
   languageId: string;
   sourceLanguageId: string;
   focusedStringId: number | null;
@@ -65,6 +66,7 @@ function RefreshIcon({ spinning }: { spinning?: boolean }) {
 export function TranslationWorkspace({
   projectId,
   fileId,
+  filePath,
   languageId,
   sourceLanguageId,
   focusedStringId,
@@ -233,31 +235,45 @@ export function TranslationWorkspace({
 
   return (
     <div className="translation-workspace">
-      {/* File path (App.tsx's file-title, directly above this) + Prev/Next
-          (Comfortable only — Side-by-Side has no single "current" string
-          to page through) + a manual refresh action, all as one header
-          for the tab: get_file_strings serves this tab's strings from the
-          local cache first, and while a background revalidation does run
-          on every fetch, this component staying mounted for the tab's
-          whole lifetime means nothing else re-queries once that
-          revalidation lands — see the auto-refresh-on-activate effect
-          above for the automatic half of this, the refresh button is the
-          explicit "no really, check Crowdin right now" escape hatch. */}
+      {/* One compact header for the tab: file path, Prev/Next (Comfortable
+          only — Side-by-Side has no single "current" string to page
+          through), and a manual refresh action, all on one line instead
+          of the path sitting on its own row above everything else.
+          get_file_strings serves this tab's strings from the local cache
+          first, and while a background revalidation does run on every
+          fetch, this component staying mounted for the tab's whole
+          lifetime means nothing else re-queries once that revalidation
+          lands — see the auto-refresh-on-activate effect above for the
+          automatic half of this, the refresh button is the explicit "no
+          really, check Crowdin right now" escape hatch. */}
       <div className="workspace-toolbar">
+        <span className="workspace-file-path" title={filePath}>
+          {filePath}
+        </span>
         {viewMode === "comfortable" && (
           <div className="workspace-pager">
             <div className="comfortable-pager-nav">
               {armed === "prev" && <span className="pager-hint">Press again for the previous file</span>}
-              <button onClick={handlePrevious} disabled={isFirst && !hasPrevFile}>
-                ← Previous
+              <button
+                className="icon-btn"
+                onClick={handlePrevious}
+                disabled={isFirst && !hasPrevFile}
+                title="Previous string"
+              >
+                ←
               </button>
             </div>
             <span className="comfortable-pager-count">
               {focusedIndex + 1} / {strings.length}
             </span>
             <div className="comfortable-pager-nav">
-              <button onClick={handleNext} disabled={isLast && !hasNextFile}>
-                Next →
+              <button
+                className="icon-btn"
+                onClick={handleNext}
+                disabled={isLast && !hasNextFile}
+                title="Next string"
+              >
+                →
               </button>
               {armed === "next" && <span className="pager-hint">Press again for the next file</span>}
             </div>
