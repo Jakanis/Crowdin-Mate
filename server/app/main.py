@@ -27,7 +27,7 @@ from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_pr
 from app.sync.live_search import search_project_live
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
 from app.sync import search_index
-from app.sync.suggestions_sync import has_looked_up, sync_glossary_matches, sync_tm_matches
+from app.sync.suggestions_sync import has_looked_up, search_tm_live, sync_glossary_matches, sync_tm_matches
 from app.sync.tree_sync import sync_project_tree
 
 logging.basicConfig(level=logging.INFO)
@@ -1057,6 +1057,34 @@ def _get_source_text_and_language(project_id: int, string_id: int) -> tuple[str,
     return string_row["text"], (project_row["source_language"] if project_row else "en")
 
 
+def _augment_tm_matches_with_source(conn, matches: list[dict], language_id: str, exclude_string_id: int | None) -> None:
+    """Crowdin's concordance search has no per-record user/date fields
+    (only the TM segment's own updatedAt, already selected by the
+    caller) — but this project's TM already mirrors real project
+    translations, so the same target text usually still exists on some
+    OTHER string. Reverse-lookup it locally for the real "who/when", and
+    a file/string to jump to, matching what Crowdin's own editor shows
+    for in-context TM matches. Mutates each match dict in place."""
+    for m in matches:
+        row = conn.execute(
+            """
+            SELECT t.string_id, t.user_name, t.created_at, ss.file_id, f.path AS file_path
+            FROM translations t
+            JOIN source_strings ss ON ss.id = t.string_id
+            JOIN files f ON f.id = ss.file_id
+            WHERE t.text = ? AND t.language_id = ? AND t.string_id != ?
+            ORDER BY t.created_at DESC
+            LIMIT 1
+            """,
+            (m["target_text"], language_id, exclude_string_id or -1),
+        ).fetchone()
+        m["matched_string_id"] = row["string_id"] if row else None
+        m["matched_file_id"] = row["file_id"] if row else None
+        m["matched_file_path"] = row["file_path"] if row else None
+        m["matched_user_name"] = row["user_name"] if row else None
+        m["matched_created_at"] = row["created_at"] if row else None
+
+
 @app.get("/projects/{project_id}/strings/{string_id}/tm-matches")
 async def get_tm_matches(project_id: int, string_id: int, language_id: str):
     """Cached indefinitely once fetched — a TM match for a given source
@@ -1081,31 +1109,26 @@ async def get_tm_matches(project_id: int, string_id: int, language_id: str):
                 (string_id, language_id),
             )
         ]
-        # Crowdin's concordance search has no per-record user/date fields
-        # (only the TM segment's own updatedAt, already selected above) —
-        # but this project's TM already mirrors real project translations,
-        # so the same target text usually still exists on some OTHER
-        # string. Reverse-lookup it locally for the real "who/when", and
-        # a file/string to jump to, matching what Crowdin's own editor
-        # shows for in-context TM matches.
-        for m in matches:
-            row = conn.execute(
-                """
-                SELECT t.string_id, t.user_name, t.created_at, ss.file_id, f.path AS file_path
-                FROM translations t
-                JOIN source_strings ss ON ss.id = t.string_id
-                JOIN files f ON f.id = ss.file_id
-                WHERE t.text = ? AND t.language_id = ? AND t.string_id != ?
-                ORDER BY t.created_at DESC
-                LIMIT 1
-                """,
-                (m["target_text"], language_id, string_id),
-            ).fetchone()
-            m["matched_string_id"] = row["string_id"] if row else None
-            m["matched_file_id"] = row["file_id"] if row else None
-            m["matched_file_path"] = row["file_path"] if row else None
-            m["matched_user_name"] = row["user_name"] if row else None
-            m["matched_created_at"] = row["created_at"] if row else None
+        _augment_tm_matches_with_source(conn, matches, language_id, exclude_string_id=string_id)
+    return {"matches": matches}
+
+
+@app.get("/projects/{project_id}/tm-search")
+async def search_tm(project_id: int, q: str, source_language_id: str, target_language_id: str, limit: int = 30):
+    """Ad hoc TM search for the sidebar's search box, matching Crowdin's
+    own TM tab — always live (see search_tm_live's docstring on why this
+    isn't synced/cached like the glossary search is)."""
+    if not q.strip():
+        return {"matches": []}
+    try:
+        matches = await run_in_threadpool(
+            search_tm_live, project_id, q, source_language_id, target_language_id, limit
+        )
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+
+    with get_conn() as conn:
+        _augment_tm_matches_with_source(conn, matches, target_language_id, exclude_string_id=None)
     return {"matches": matches}
 
 

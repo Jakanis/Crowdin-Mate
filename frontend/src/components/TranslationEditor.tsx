@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { api, type SourceString, type TranslationInfo } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
@@ -202,6 +202,20 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
 
   const dirty = text.trim() !== "" && text !== bestTranslationText(s);
 
+  // Same query TmPanel (right sidebar) runs — same queryKey, so this is
+  // never an extra network request beyond what the sidebar already
+  // needs, and this component sees the freshest known data whether or
+  // not the sidebar's TM tab happens to be open. Shown inline below the
+  // candidate list, matching Crowdin's own editor, since a suggestion is
+  // as directly useful as an existing candidate and shouldn't require
+  // opening a side panel to see.
+  const tmQuery = useQuery({
+    queryKey: ["tm-matches", projectId, s.id, languageId],
+    queryFn: () => api.getTmMatches(projectId, s.id, languageId),
+    enabled: true,
+  });
+  const tmMatches = tmQuery.data?.matches ?? [];
+
   // Crowdin's own editor deletes a candidate immediately (no "are you
   // sure?" dialog) and instead offers a brief Undo — matching that here.
   // The deleted candidate stays visible (dimmed, with a semi-opaque
@@ -384,6 +398,24 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
             />
           ))}
         </ul>
+      )}
+
+      {tmMatches.length > 0 && (
+        <div className="tm-suggestions-inline">
+          <h4 className="tm-suggestions-inline-title">Suggestions</h4>
+          <ul className="suggestion-list">
+            {tmMatches.map((m, i) => (
+              <li key={i} className="suggestion-item suggestion-item--clickable" onClick={() => selectCandidate(m.target_text)}>
+                <div className="suggestion-header">
+                  <span className="suggestion-relevance">{m.relevant}%</span>
+                  {m.tm_name && <span className="suggestion-source-name">{m.tm_name}</span>}
+                </div>
+                <div className="suggestion-source">{m.source_text}</div>
+                <div className="suggestion-target">{m.target_text}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

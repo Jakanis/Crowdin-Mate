@@ -91,6 +91,36 @@ def sync_tm_matches(project_id: int, string_id: int, source_text: str, source_la
     return len(matches)
 
 
+def search_tm_live(project_id: int, query: str, source_lang: str, target_lang: str, limit: int = 30) -> list[dict]:
+    """Ad hoc TM concordance search for the sidebar's search box — same
+    underlying API as sync_tm_matches above, but keyed on whatever text
+    the user typed rather than a cached string's source text, and never
+    persisted (unlike the glossary, the project's TM is far too large to
+    usefully sync wholesale for offline search — this hits Crowdin live
+    every time, same as Crowdin's own editor's TM search box does)."""
+    client = get_client()
+    resp = call_with_limits(
+        client.translation_memory.concordance_search_in_tms,
+        projectId=project_id,
+        sourceLanguageId=source_lang,
+        targetLanguageId=target_lang,
+        autoSubstitution=True,
+        minRelevant=60,
+        expressions=[query],
+    )
+    matches = [_unwrap(m) for m in resp.get("data", [])][:limit]
+    return [
+        {
+            "source_text": m.get("source", ""),
+            "target_text": m.get("target", ""),
+            "relevant": m.get("relevant", 0),
+            "tm_name": (m.get("tm") or {}).get("name"),
+            "updated_at": m.get("updatedAt"),
+        }
+        for m in matches
+    ]
+
+
 def sync_glossary_matches(project_id: int, string_id: int, source_text: str, source_lang: str, target_lang: str) -> int:
     """Concordance search against the project's glossary, passing the
     whole segment as one expression — same as sync_tm_matches above.

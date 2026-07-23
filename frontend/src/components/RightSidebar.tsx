@@ -105,6 +105,7 @@ export function RightSidebar({
               projectId={projectId}
               stringId={stringId}
               languageId={languageId}
+              sourceLanguageId={sourceLanguageId}
               onJumpToMatch={onJumpToTmMatch}
             />
           )}

@@ -436,6 +436,7 @@ export function App() {
                 rightSidebarActiveTab={rightSidebar.activeTab}
                 onRightSidebarActiveTabChange={rightSidebar.setActiveTab}
                 onJumpToTmMatch={handleJumpToSearchResult}
+                isActive={file.id === activeFileId}
               />
             </div>
           ))}

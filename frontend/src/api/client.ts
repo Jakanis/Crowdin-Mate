@@ -297,6 +297,14 @@ export const api = {
     request<{ matches: TmMatch[] }>(
       `/projects/${projectId}/strings/${stringId}/tm-matches?language_id=${encodeURIComponent(languageId)}`,
     ),
+  searchTm: (projectId: number, q: string, sourceLanguageId: string, targetLanguageId: string) =>
+    request<{ matches: TmMatch[] }>(
+      `/projects/${projectId}/tm-search?${new URLSearchParams({
+        q,
+        source_language_id: sourceLanguageId,
+        target_language_id: targetLanguageId,
+      }).toString()}`,
+    ),
   getGlossaryMatches: (projectId: number, stringId: number, languageId: string) =>
     request<{ matches: GlossaryMatch[] }>(
       `/projects/${projectId}/strings/${stringId}/glossary-matches?language_id=${encodeURIComponent(languageId)}`,
