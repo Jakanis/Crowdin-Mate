@@ -62,9 +62,33 @@ export function TranslationEditor({
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    const { borderTopWidth, borderBottomWidth } = window.getComputedStyle(el);
-    el.style.height = `${el.scrollHeight + parseFloat(borderTopWidth) + parseFloat(borderBottomWidth)}px`;
+
+    const fit = () => {
+      el.style.height = "auto";
+      const { borderTopWidth, borderBottomWidth } = window.getComputedStyle(el);
+      el.style.height = `${el.scrollHeight + parseFloat(borderTopWidth) + parseFloat(borderBottomWidth)}px`;
+    };
+
+    fit();
+
+    // Text-only re-measurement misses a real cause of the same problem:
+    // dragging a side panel resizes this box without touching `text` at
+    // all, so the same content now wraps onto a different number of
+    // lines and the height goes stale (confirmed live — the box stayed
+    // whatever height it last fit at, cutting off text after a resize).
+    // Re-fit whenever the element's own width actually changes. Gated on
+    // width specifically (not just any resize) because fit() itself
+    // changes the element's height, and observing height too would have
+    // this callback re-triggering itself.
+    let lastWidth = el.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.offsetWidth !== lastWidth) {
+        lastWidth = el.offsetWidth;
+        fit();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [text]);
 
   const submit = useMutation({

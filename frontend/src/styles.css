@@ -808,6 +808,10 @@ body {
   font-weight: 600;
 }
 
+.tab--drag-over {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 .tab-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -857,11 +861,67 @@ body {
   line-height: 1.4;
 }
 
+.glossary-term-highlight-wrap {
+  position: relative;
+}
+
 .glossary-term-highlight {
   background: var(--accent-bg);
   color: var(--accent);
   border-radius: 3px;
   padding: 0 1px;
+  cursor: pointer;
+}
+
+.glossary-term-highlight:hover {
+  background: var(--accent);
+  color: var(--bg-elevated);
+}
+
+.glossary-term-tooltip-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.glossary-term-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 11;
+  min-width: 180px;
+  max-width: 320px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  padding: 10px 12px;
+  font-size: calc(13px * var(--ui-scale));
+  white-space: normal;
+  cursor: default;
+}
+
+.glossary-term-tooltip-source {
+  opacity: 0.6;
+  margin-bottom: 2px;
+}
+
+.glossary-term-tooltip-target {
+  font-weight: 600;
+}
+
+.glossary-term-tooltip-description {
+  margin-top: 6px;
+  opacity: 0.75;
+  line-height: 1.4;
+}
+
+.glossary-term-tooltip-glossary {
+  margin-top: 6px;
+  font-size: calc(11px * var(--ui-scale));
+  opacity: 0.45;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .string-context {
@@ -1026,6 +1086,35 @@ body {
 }
 
 /* --- TM / glossary suggestion panels --- */
+.glossary-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+.glossary-search-input {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: calc(13px * var(--ui-scale));
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+}
+
+.glossary-sync-status {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  padding-top: 8px;
+  font-size: calc(11.5px * var(--ui-scale));
+}
+
 .suggestion-list {
   flex: 1;
   overflow-y: auto;
@@ -1070,16 +1159,6 @@ body {
 .suggestion-target {
   white-space: pre-wrap;
   line-height: 1.4;
-}
-
-.glossary-term-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.glossary-arrow {
-  opacity: 0.4;
 }
 
 .suggestion-description {
@@ -1454,6 +1533,8 @@ body {
   flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
 }
 
 .view-mode-toggle {

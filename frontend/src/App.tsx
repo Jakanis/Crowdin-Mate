@@ -8,6 +8,7 @@ import { SettingsMenu } from "./components/SettingsMenu";
 import { TabBar } from "./components/TabBar";
 import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
+import { useRightSidebarState } from "./rightSidebarState";
 import { useAutoAdvance } from "./theme";
 import { useResizableWidth } from "./useResizableWidth";
 import { useSyncTree } from "./useSyncTree";
@@ -72,6 +73,12 @@ export function App() {
   // this value is read directly, and separate hook instances don't share
   // React state just because they share a localStorage key.
   const autoAdvance = useAutoAdvance();
+
+  // Same lifting rationale as autoAdvance above — one RightSidebar
+  // instance exists per open tab (all mounted at once), so its own
+  // collapsed/active-tab state needs to live one level up to actually
+  // stay in sync across them. See rightSidebarState.ts.
+  const rightSidebar = useRightSidebarState();
 
   // Left sidebar sits to the left of its drag handle (dragging right
   // grows it, sign 1); the right TM/comments sidebar sits to the right
@@ -240,6 +247,18 @@ export function App() {
     });
   };
 
+  const handleReorderTabs = (draggedFileId: number, targetFileId: number) => {
+    setOpenFiles((prev) => {
+      const fromIndex = prev.findIndex((f) => f.id === draggedFileId);
+      const toIndex = prev.findIndex((f) => f.id === targetFileId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
   const setFocusedStringIdFor = (fileId: number, stringId: number | null) => {
     setFocusedStringIdByFile((prev) => ({ ...prev, [fileId]: stringId }));
   };
@@ -351,6 +370,7 @@ export function App() {
             activeFileId={activeFileId}
             onSelectTab={setActiveFileId}
             onCloseTab={handleCloseTab}
+            onReorderTabs={handleReorderTabs}
           />
           {openFiles.length === 0 && <p className="hint">Select a file from the tree.</p>}
           {activeFileId != null && (
@@ -373,6 +393,7 @@ export function App() {
                 projectId={projectId}
                 fileId={file.id}
                 languageId={languageId}
+                sourceLanguageId={selectedProject.source_language_id}
                 focusedStringId={focusedStringIdByFile[file.id] ?? null}
                 onFocusChange={(stringId) => setFocusedStringIdFor(file.id, stringId)}
                 autoAdvance={autoAdvance.enabled}
@@ -381,6 +402,10 @@ export function App() {
                 onNavigateFile={navigateFile}
                 rightPanelWidth={rightPanel.width}
                 onRightPanelResizeStart={(e) => rightPanel.startResize(e, -1)}
+                rightSidebarCollapsed={rightSidebar.collapsed}
+                onRightSidebarCollapsedChange={rightSidebar.setCollapsed}
+                rightSidebarActiveTab={rightSidebar.activeTab}
+                onRightSidebarActiveTabChange={rightSidebar.setActiveTab}
               />
             </div>
           ))}

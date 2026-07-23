@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { api } from "../api/client";
 import { CommentsPanel } from "./CommentsPanel";
 import { GlossaryPanel } from "./GlossaryPanel";
@@ -9,8 +8,13 @@ interface RightSidebarProps {
   projectId: number;
   stringId: number | null;
   languageId: string;
+  sourceLanguageId: string;
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+  activeTab: string;
+  onActiveTabChange: (tab: string) => void;
 }
 
 // One entry per tab — the icon rail, collapse behavior, and panel chrome
@@ -26,10 +30,22 @@ type TabKey = (typeof TABS)[number]["key"];
 
 /** Right sidebar, matching Crowdin's own icon-rail layout: a vertical
  * strip of tab icons, one panel visible at a time, collapsible to just
- * the rail to reclaim width for the editor. */
-export function RightSidebar({ projectId, stringId, languageId, width, onResizeStart }: RightSidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>("comments");
+ * the rail to reclaim width for the editor. collapsed/activeTab are
+ * lifted to App.tsx (see rightSidebarState.ts) rather than owned here —
+ * every open tab gets its own RightSidebar instance, all mounted at
+ * once, so local state here wouldn't stay in sync across them. */
+export function RightSidebar({
+  projectId,
+  stringId,
+  languageId,
+  sourceLanguageId,
+  width,
+  onResizeStart,
+  collapsed,
+  onCollapsedChange,
+  activeTab,
+  onActiveTabChange,
+}: RightSidebarProps) {
 
   // Same queryKey CommentsPanel uses, so opening the tab reuses this
   // fetch instead of firing a second one. A short staleTime keeps quick
@@ -49,10 +65,10 @@ export function RightSidebar({ projectId, stringId, languageId, width, onResizeS
 
   const selectTab = (key: TabKey) => {
     if (!collapsed && key === activeTab) {
-      setCollapsed(true);
+      onCollapsedChange(true);
     } else {
-      setActiveTab(key);
-      setCollapsed(false);
+      onActiveTabChange(key);
+      onCollapsedChange(false);
     }
   };
 
@@ -86,7 +102,12 @@ export function RightSidebar({ projectId, stringId, languageId, width, onResizeS
             <TmPanel projectId={projectId} stringId={stringId} languageId={languageId} />
           )}
           {activeTab === "glossary" && (
-            <GlossaryPanel projectId={projectId} stringId={stringId} languageId={languageId} />
+            <GlossaryPanel
+              projectId={projectId}
+              stringId={stringId}
+              languageId={languageId}
+              sourceLanguageId={sourceLanguageId}
+            />
           )}
           </aside>
         </>

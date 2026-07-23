@@ -135,6 +135,18 @@ export interface GlossaryMatch {
   glossary_name: string | null;
 }
 
+export interface GlossarySearchResult {
+  concept_id: number;
+  source_term: string;
+  target_term: string;
+  description: string | null;
+}
+
+export interface GlossaryStatus {
+  terms: number;
+  synced_at: string | null;
+}
+
 export interface SearchResult {
   string_id: number;
   file_id: number;
@@ -272,5 +284,17 @@ export const api = {
   getGlossaryMatches: (projectId: number, stringId: number, languageId: string) =>
     request<{ matches: GlossaryMatch[] }>(
       `/projects/${projectId}/strings/${stringId}/glossary-matches?language_id=${encodeURIComponent(languageId)}`,
+    ),
+  getGlossaryStatus: (projectId: number) =>
+    request<GlossaryStatus>(`/projects/${projectId}/glossary/status`),
+  syncGlossary: (projectId: number) =>
+    request<{ terms: number }>(`/projects/${projectId}/glossary/sync`, { method: "POST" }),
+  searchGlossary: (projectId: number, q: string, sourceLanguageId: string, targetLanguageId: string) =>
+    request<{ results: GlossarySearchResult[] }>(
+      `/projects/${projectId}/glossary/search?${new URLSearchParams({
+        q,
+        source_language_id: sourceLanguageId,
+        target_language_id: targetLanguageId,
+      }).toString()}`,
     ),
 };

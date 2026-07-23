@@ -23,6 +23,7 @@ from app import config, oauth, offline_queue
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
+from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_project_glossary
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
 from app.sync import search_index
 from app.sync.suggestions_sync import has_looked_up, sync_glossary_matches, sync_tm_matches
@@ -979,6 +980,32 @@ async def get_glossary_matches(project_id: int, string_id: int, language_id: str
             )
         ]
     return {"matches": matches}
+
+
+@app.get("/projects/{project_id}/glossary/status")
+async def get_glossary_sync_status(project_id: int):
+    return await run_in_threadpool(get_glossary_status, project_id)
+
+
+@app.post("/projects/{project_id}/glossary/sync")
+async def sync_glossary_endpoint(project_id: int):
+    """Explicit, user-triggered wholesale sync — see glossary_sync.py.
+    Runs synchronously (unlike search_index's background-thread build):
+    confirmed live this takes tens of seconds, not the hours a full
+    string-content index would, so a plain blocking request is fine."""
+    try:
+        count = await run_in_threadpool(sync_project_glossary, project_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    return {"terms": count}
+
+
+@app.get("/projects/{project_id}/glossary/search")
+async def search_glossary_endpoint(
+    project_id: int, q: str, source_language_id: str, target_language_id: str, limit: int = 50
+):
+    results = await run_in_threadpool(search_glossary, project_id, q, source_language_id, target_language_id, limit)
+    return {"results": results}
 
 
 # Serves the built frontend (frontend/dist, from `npm run build`) for the

@@ -1,43 +1,116 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
 interface GlossaryPanelProps {
   projectId: number;
   stringId: number | null;
   languageId: string;
+  sourceLanguageId: string;
 }
 
-/** Glossary tab: project glossary terms found in the focused string's
- * source text (concordance search against the whole segment, so
- * multi-word terms match too — see suggestions_sync.py). Same matches
- * are also highlighted inline in the source text itself, see
- * HighlightedSourceText.tsx. */
-export function GlossaryPanel({ projectId, stringId, languageId }: GlossaryPanelProps) {
-  const query = useQuery({
-    queryKey: ["glossary-matches", projectId, stringId, languageId],
-    queryFn: () => api.getGlossaryMatches(projectId, stringId as number, languageId),
-    enabled: stringId != null,
+const DEBOUNCE_MS = 300;
+
+/** Glossary tab: two modes sharing one panel. With the search box empty,
+ * shows terms found in the focused string's source text (concordance
+ * search against the whole segment, so multi-word terms match too — see
+ * suggestions_sync.py; same matches are also highlighted inline in the
+ * source text itself, see HighlightedSourceText.tsx). Typing a query
+ * switches to browsing/searching the WHOLE project glossary instead —
+ * that needs an explicit one-time sync first (glossary_sync.py, tens of
+ * seconds for a project this size), after which it runs entirely
+ * offline against the local cache, unlike the per-string lookup above
+ * which always hits Crowdin live. */
+export function GlossaryPanel({ projectId, stringId, languageId, sourceLanguageId }: GlossaryPanelProps) {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(search), DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [search]);
+
+  const searching = debounced.trim().length > 0;
+
+  const statusQuery = useQuery({
+    queryKey: ["glossary-status", projectId],
+    queryFn: () => api.getGlossaryStatus(projectId),
   });
 
-  if (stringId == null) return <p className="hint">Select a string to see glossary terms.</p>;
-  if (query.isLoading) return <p className="hint">Checking glossary…</p>;
-  if (query.isError) return <p className="error">{(query.error as Error).message}</p>;
-  if (query.data && query.data.matches.length === 0) {
-    return <p className="hint">No glossary terms in this string.</p>;
-  }
+  const syncMutation = useMutation({
+    mutationFn: () => api.syncGlossary(projectId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["glossary-status", projectId] }),
+  });
+
+  const searchQuery = useQuery({
+    queryKey: ["glossary-search", projectId, sourceLanguageId, languageId, debounced],
+    queryFn: () => api.searchGlossary(projectId, debounced, sourceLanguageId, languageId),
+    enabled: searching,
+  });
+
+  const stringMatchesQuery = useQuery({
+    queryKey: ["glossary-matches", projectId, stringId, languageId],
+    queryFn: () => api.getGlossaryMatches(projectId, stringId as number, languageId),
+    enabled: stringId != null && !searching,
+  });
+
+  const status = statusQuery.data;
 
   return (
-    <div className="suggestion-list">
-      {query.data?.matches.map((m, i) => (
-        <div key={i} className="suggestion-item">
-          <div className="glossary-term-row">
-            <strong>{m.source_term}</strong>
-            <span className="glossary-arrow">→</span>
-            <strong>{m.target_term}</strong>
-          </div>
-          {m.description && <div className="suggestion-description">{m.description}</div>}
-        </div>
-      ))}
+    <div className="glossary-panel">
+      <input
+        className="glossary-search-input"
+        type="text"
+        placeholder="Search glossary…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
+      <div className="suggestion-list">
+        {searching ? (
+          <>
+            {searchQuery.isLoading && <p className="hint">Searching…</p>}
+            {searchQuery.data && searchQuery.data.results.length === 0 && (
+              <p className="hint">
+                No matching terms{!status?.terms && " — try syncing the glossary below first"}.
+              </p>
+            )}
+            {searchQuery.data?.results.map((m) => (
+              <div key={m.concept_id} className="suggestion-item">
+                <div className="suggestion-source">{m.source_term}</div>
+                <div className="suggestion-target">{m.target_term}</div>
+                {m.description && <div className="suggestion-description">{m.description}</div>}
+              </div>
+            ))}
+          </>
+        ) : stringId == null ? (
+          <p className="hint">Select a string to see glossary terms.</p>
+        ) : stringMatchesQuery.isLoading ? (
+          <p className="hint">Checking glossary…</p>
+        ) : stringMatchesQuery.isError ? (
+          <p className="error">{(stringMatchesQuery.error as Error).message}</p>
+        ) : stringMatchesQuery.data && stringMatchesQuery.data.matches.length === 0 ? (
+          <p className="hint">No glossary terms in this string.</p>
+        ) : (
+          stringMatchesQuery.data?.matches.map((m, i) => (
+            <div key={i} className="suggestion-item">
+              <div className="suggestion-source">{m.source_term}</div>
+              <div className="suggestion-target">{m.target_term}</div>
+              {m.description && <div className="suggestion-description">{m.description}</div>}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="glossary-sync-status">
+        <span className="hint">
+          {status?.terms ? `${status.terms.toLocaleString()} terms synced for offline search` : "Search above needs a one-time sync"}
+        </span>
+        <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+          {syncMutation.isPending ? "Syncing…" : status?.terms ? "Re-sync" : "Sync glossary"}
+        </button>
+      </div>
     </div>
   );
 }

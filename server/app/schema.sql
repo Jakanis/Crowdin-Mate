@@ -71,6 +71,26 @@ CREATE TABLE IF NOT EXISTS labels (
     synced_at TEXT NOT NULL
 );
 
+-- Whole-glossary wholesale sync (glossary_sync.py) — explicit, user-
+-- triggered (a ~30k-row fetch takes tens of seconds), unlike
+-- glossary_matches above which stays a live per-string lookup since it
+-- needs Crowdin's own relevance ranking. This table exists purely so
+-- glossary SEARCH (browsing/looking up any term, not "what's in this
+-- string") can run fully offline against the local cache. One row per
+-- term per language; a source+target pair share the same concept_id.
+CREATE TABLE IF NOT EXISTS glossary_terms (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    glossary_id INTEGER NOT NULL,
+    concept_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    description TEXT,
+    synced_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_glossary_terms_project_concept ON glossary_terms (project_id, concept_id);
+CREATE INDEX IF NOT EXISTS idx_glossary_terms_project_text ON glossary_terms (project_id, text);
+
 -- Holds ALL submitted translations per string+language, not just the top
 -- one — a string commonly has several candidate translations from
 -- different contributors, and the proofreading workflow needs to see them

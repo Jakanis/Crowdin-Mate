@@ -9,6 +9,7 @@ interface TranslationWorkspaceProps {
   projectId: number;
   fileId: number;
   languageId: string;
+  sourceLanguageId: string;
   focusedStringId: number | null;
   onFocusChange: (stringId: number | null) => void;
   autoAdvance: boolean;
@@ -17,6 +18,10 @@ interface TranslationWorkspaceProps {
   onNavigateFile: (direction: "next" | "prev") => void;
   rightPanelWidth: number;
   onRightPanelResizeStart: (e: React.MouseEvent) => void;
+  rightSidebarCollapsed: boolean;
+  onRightSidebarCollapsedChange: (collapsed: boolean) => void;
+  rightSidebarActiveTab: string;
+  onRightSidebarActiveTabChange: (tab: string) => void;
 }
 
 type ViewMode = "comfortable" | "side-by-side";
@@ -31,6 +36,7 @@ export function TranslationWorkspace({
   projectId,
   fileId,
   languageId,
+  sourceLanguageId,
   focusedStringId,
   onFocusChange,
   autoAdvance,
@@ -39,6 +45,10 @@ export function TranslationWorkspace({
   onNavigateFile,
   rightPanelWidth,
   onRightPanelResizeStart,
+  rightSidebarCollapsed,
+  onRightSidebarCollapsedChange,
+  rightSidebarActiveTab,
+  onRightSidebarActiveTabChange,
 }: TranslationWorkspaceProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("comfortable");
 
@@ -126,8 +136,13 @@ export function TranslationWorkspace({
           projectId={projectId}
           stringId={focusedStringId}
           languageId={languageId}
+          sourceLanguageId={sourceLanguageId}
           width={rightPanelWidth}
           onResizeStart={onRightPanelResizeStart}
+          collapsed={rightSidebarCollapsed}
+          onCollapsedChange={onRightSidebarCollapsedChange}
+          activeTab={rightSidebarActiveTab}
+          onActiveTabChange={onRightSidebarActiveTabChange}
         />
       </div>
     </div>
