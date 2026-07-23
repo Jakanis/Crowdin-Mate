@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ProgressInfo, type TreeDirectory, type TreeFile } from "../api/client";
+import { onProgressChanged } from "../progressEvents";
 
 interface FileTreeProps {
   projectId: number;
@@ -69,6 +70,45 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
     fetchProgressFor("root");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, languageId]);
+
+  // A translation elsewhere (approve/unapprove/delete/submit) changed a
+  // file's counts — fetchProgressFor's own "already fetched, never
+  // again" guard means the stale cached percentage would otherwise
+  // never refresh on its own for the rest of the session (see bug
+  // report: an approved file still showing its old 50%). Drop the
+  // cached values and the "already fetched" guard for the file's own
+  // directory AND every ancestor up to the root (each level's aggregate
+  // depends on its children), then re-fetch all of them.
+  useEffect(() => {
+    return onProgressChanged((fileId) => {
+      const file = files.find((f) => f.id === fileId);
+      if (!file) return;
+
+      const ancestry: (number | "root")[] = ["root"];
+      let dirId: number | null = file.directory_id;
+      while (dirId != null) {
+        ancestry.push(dirId);
+        const dir = directories.find((d) => d.id === dirId);
+        dirId = dir ? dir.parent_id : null;
+      }
+
+      setFileProgress((prev) => {
+        const next = new Map(prev);
+        next.delete(fileId);
+        return next;
+      });
+      setDirProgress((prev) => {
+        const next = new Map(prev);
+        for (const id of ancestry) if (id !== "root") next.delete(id);
+        return next;
+      });
+      for (const parentId of ancestry) {
+        fetchedParents.current.delete(parentId);
+        fetchProgressFor(parentId);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, directories]);
 
   const { childDirsByParent, childFilesByDir } = useMemo(() => {
     const childDirsByParent = new Map<number | null, TreeDirectory[]>();

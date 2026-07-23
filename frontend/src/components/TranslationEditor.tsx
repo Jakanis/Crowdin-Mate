@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api, type SourceString, type TranslationInfo } from "../api/client";
+import { notifyProgressChanged } from "../progressEvents";
 
 interface TranslationEditorProps {
   projectId: number;
@@ -75,7 +76,10 @@ export function TranslationEditor({
     onSuccess: (result) => {
       setStatus(result.status);
       if (result.status === "rejected") setErrorMessage(result.reason ?? "Rejected by Crowdin");
-      if (result.status === "synced") refetchStrings();
+      if (result.status === "synced") {
+        refetchStrings();
+        notifyProgressChanged(fileId);
+      }
       // Queued counts as "saved" here too — the whole point of the
       // offline queue is that the edit is durable even without a
       // network, so auto-advance shouldn't block on connectivity.
@@ -136,6 +140,7 @@ export function TranslationEditor({
             <TranslationItem
               key={t.id}
               projectId={projectId}
+              fileId={fileId}
               t={t}
               canApprove={canApprove}
               currentUserId={currentUserId}
@@ -152,6 +157,7 @@ export function TranslationEditor({
 
 function TranslationItem({
   projectId,
+  fileId,
   t,
   canApprove,
   currentUserId,
@@ -160,6 +166,7 @@ function TranslationItem({
   selected,
 }: {
   projectId: number;
+  fileId: number;
   t: TranslationInfo;
   canApprove: boolean;
   currentUserId: number | null;
@@ -177,6 +184,7 @@ function TranslationItem({
     onSuccess: () => {
       setError(null);
       onChanged();
+      notifyProgressChanged(fileId);
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -195,6 +203,7 @@ function TranslationItem({
     onSuccess: () => {
       setError(null);
       onChanged();
+      notifyProgressChanged(fileId);
     },
     onError: (err: Error) => setError(err.message),
   });

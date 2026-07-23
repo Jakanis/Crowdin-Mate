@@ -16,6 +16,7 @@ from crowdin_api.exceptions import APIException
 
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn
+from app.sync.progress_sync import invalidate_progress_for_file
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,11 @@ def drain_once(max_items: int = 20) -> int:
                     "UPDATE translation_drafts SET dirty = 0 WHERE string_id = ? AND language_id = ?",
                     (row["string_id"], row["language_id"]),
                 )
+                file_row = conn.execute(
+                    "SELECT file_id FROM source_strings WHERE id = ?", (row["string_id"],)
+                ).fetchone()
+            if file_row is not None:
+                invalidate_progress_for_file(file_row["file_id"], row["language_id"])
             succeeded += 1
 
         except Exception as exc:  # noqa: BLE001 - outbox must never crash on a bad item

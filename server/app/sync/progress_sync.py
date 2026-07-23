@@ -107,6 +107,33 @@ def sync_file_progress(project_id: int, file_id: int, language_id: str) -> dict 
     return progress
 
 
+def invalidate_progress_for_file(file_id: int, language_id: str) -> None:
+    """Called after any action that changes a file's translation/approval
+    counts (submit, approve, unapprove, delete, a drained offline-queue
+    submit) so the tree's progress bars refetch live next time they're
+    shown instead of quietly keeping whatever was cached the moment the
+    folder was first expanded — get_children_progress only ever fetches
+    a child that ISN'T already cached, so without this an approved file
+    would show its old percentage forever. Also walks up the ancestor
+    directory chain, since a parent folder's aggregate is just as stale
+    once any of its children's counts change."""
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM file_progress WHERE file_id = ? AND language_id = ?", (file_id, language_id)
+        )
+        row = conn.execute("SELECT directory_id FROM files WHERE id = ?", (file_id,)).fetchone()
+        dir_id = row["directory_id"] if row else None
+        while dir_id is not None:
+            conn.execute(
+                "DELETE FROM directory_progress WHERE directory_id = ? AND language_id = ?",
+                (dir_id, language_id),
+            )
+            parent_row = conn.execute(
+                "SELECT parent_id FROM directories WHERE id = ?", (dir_id,)
+            ).fetchone()
+            dir_id = parent_row["parent_id"] if parent_row else None
+
+
 def get_children_progress(project_id: int, parent_directory_id: int | None, language_id: str) -> dict:
     """Progress for every direct child (subdirectory + file) of
     `parent_directory_id` (or the project root, if None) — fetching

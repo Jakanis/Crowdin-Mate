@@ -23,7 +23,7 @@ from app import config, oauth, offline_queue
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
-from app.sync.progress_sync import get_children_progress
+from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
 from app.sync import search_index
 from app.sync.suggestions_sync import has_looked_up, sync_glossary_matches, sync_tm_matches
 from app.sync.tree_sync import sync_project_tree
@@ -659,6 +659,10 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
             (string_id, body.language_id),
         )
 
+    file_id = _file_id_for_string(string_id)
+    if file_id is not None:
+        invalidate_progress_for_file(file_id, body.language_id)
+
     return {
         "status": "synced",
         "translation": {
@@ -667,6 +671,26 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
             "user_name": user.get("fullName") or user.get("username"),
         },
     }
+
+
+def _file_id_for_string(string_id: int) -> int | None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT file_id FROM source_strings WHERE id = ?", (string_id,)).fetchone()
+    return row["file_id"] if row else None
+
+
+def _invalidate_progress_for_translation(translation_id: int) -> None:
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT s.file_id, t.language_id FROM translations t
+            JOIN source_strings s ON s.id = t.string_id
+            WHERE t.id = ?
+            """,
+            (translation_id,),
+        ).fetchone()
+    if row is not None:
+        invalidate_progress_for_file(row["file_id"], row["language_id"])
 
 
 def _extract_validation_message(exc: APIException) -> str:
@@ -699,6 +723,7 @@ async def approve_translation(project_id: int, translation_id: int):
             "UPDATE translations SET is_approved = 1, approval_id = ? WHERE id = ?",
             (approval["id"], translation_id),
         )
+    _invalidate_progress_for_translation(translation_id)
     return {"status": "approved", "approval_id": approval["id"]}
 
 
@@ -728,6 +753,7 @@ async def unapprove_translation(project_id: int, translation_id: int):
             "UPDATE translations SET is_approved = 0, approval_id = NULL WHERE id = ?",
             (translation_id,),
         )
+    _invalidate_progress_for_translation(translation_id)
     return {"status": "unapproved"}
 
 
@@ -747,6 +773,10 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
 
+    # Before the DELETE below, not after — the join this needs
+    # (translations -> source_strings) only works while the row still
+    # exists.
+    _invalidate_progress_for_translation(translation_id)
     with get_conn() as conn:
         conn.execute("DELETE FROM translations WHERE id = ?", (translation_id,))
     return {"status": "deleted"}
