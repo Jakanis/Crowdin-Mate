@@ -1945,21 +1945,48 @@ body {
   gap: 10px;
 }
 
-/* Mostly a hairline separator above the source text — the
-   Comfortable/Side-by-Side toggle it used to hold moved to Settings (a
-   global preference, not per-tab) — plus the manual per-file Refresh
-   action (see TranslationWorkspace's doc comment on why one's needed
-   even with the auto-refresh-on-activate behavior). */
+/* Header for the tab: Prev/Next pager (Comfortable only) on the left,
+   the manual per-file Refresh icon button pinned to the right via its
+   own margin-left: auto — not the container's justify-content, since
+   that needs to keep working whether or not the pager is even rendered
+   (Side-by-Side has no pager, just the refresh button alone). */
 .workspace-toolbar {
   flex-shrink: 0;
   padding-bottom: 10px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+}
+
+.workspace-pager {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: calc(13px * var(--ui-scale));
 }
 
 .workspace-refresh-button {
-  font-size: calc(12px * var(--ui-scale));
+  margin-left: auto;
+}
+
+@keyframes icon-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icon-spin {
+  animation: icon-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-spin {
+    animation: none;
+  }
 }
 
 .workspace-body {
@@ -1991,17 +2018,6 @@ body {
   flex-direction: column;
 }
 
-.comfortable-pager {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(128, 128, 128, 0.25);
-  font-size: calc(13px * var(--ui-scale));
-}
-
 .comfortable-pager-count {
   opacity: 0.6;
   font-variant-numeric: tabular-nums;
@@ -2014,16 +2030,18 @@ body {
   gap: 8px;
 }
 
-/* Floats above the button instead of sitting inline next to it — an
+/* Floats below the button instead of sitting inline next to it — an
    inline sibling grew/shrank the nav group's width as it appeared and
-   disappeared, which visibly shifted the (centered) pager bar every
-   time a press armed or timed out. */
+   disappeared, which visibly shifted the pager bar every time a press
+   armed or timed out. Below (not above) now that the pager lives in the
+   header — floating up from here would go behind the app's own header
+   bar. */
 .pager-hint {
   position: absolute;
-  bottom: 100%;
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-bottom: 6px;
+  margin-top: 6px;
   background: var(--bg-elevated);
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 6px;
