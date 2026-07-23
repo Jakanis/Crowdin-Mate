@@ -1014,8 +1014,15 @@ body {
      under it, showing through. A dimmed text color has the same visual
      effect without that side effect. */
   color: color-mix(in srgb, var(--fg) 75%, transparent);
-  margin-bottom: 8px;
   line-height: 1.4;
+  /* Boxed like a submitted translation (.translation-item), so the
+     source text reads as its own distinct block instead of blending
+     into the surrounding pane. */
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.04);
+  padding: 8px 10px;
+  margin-bottom: 8px;
 }
 
 .glossary-term-highlight-wrap {
