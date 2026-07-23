@@ -33,7 +33,6 @@ function bestTranslationText(s: SourceString): string {
 }
 
 const DRAFT_DEBOUNCE_MS = 600;
-const UNDO_DELETE_MS = 6000;
 
 function CheckIcon() {
   return (
@@ -214,46 +213,89 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   // exactly as they were), and resubmitting would have misattributed
   // authorship to whoever clicked Undo instead.
   //
-  // The candidate is captured (with its original index) rather than
-  // just deferring refetchStrings() — react-query's own
-  // refetchOnWindowFocus (default on, and this data is usually well
-  // past its 30s staleTime by the time anyone clicks Delete) can
-  // refetch behind this component's back at any moment regardless of
-  // when *this* component asks for it, which would otherwise make the
-  // candidate disappear immediately despite the deferred call below.
-  // displayTranslations splices it back into its original slot
-  // whenever it's missing from the live list but still within the undo
-  // window, so the visual "stays put" behavior holds regardless of
-  // what triggered the refetch.
-  const [pendingDelete, setPendingDelete] = useState<{ translation: TranslationInfo; index: number } | null>(null);
-  const deleteTimeoutRef = useRef<number | null>(null);
+  // No timer: the overlay stays until the user either clicks Undo or
+  // navigates away from this string (see the unmount effect below),
+  // rather than auto-clearing on a clock — a deletion the user hasn't
+  // acted on yet (still looking at it, cursor still over it) shouldn't
+  // vanish out from under them. Keyed by translationId (not a single
+  // slot) so deleting a second candidate while the first's overlay is
+  // still up doesn't silently drop the first one's tracking — that
+  // used to make the first entry render as a normal, still-existing
+  // candidate again (stale s.translations, never refetched) even
+  // though it was already really gone, and clicking its Delete button
+  // a second time 404'd against Crowdin.
+  //
+  // Each entry is captured (with its original index) rather than
+  // eagerly refetching — react-query's own refetchOnWindowFocus
+  // (default on, and this data is usually well past its 30s staleTime
+  // by the time anyone clicks Delete) can refetch behind this
+  // component's back at any moment, which would otherwise make the
+  // candidate disappear immediately regardless of the undo window.
+  // displayTranslations splices each one back into its original slot
+  // whenever it's missing from the live list but still pending, so the
+  // visual "stays put" behavior holds regardless of what triggered the
+  // refetch.
+  const [pendingDeletes, setPendingDeletes] = useState<Map<number, { translation: TranslationInfo; index: number }>>(
+    new Map(),
+  );
+  const [restoringIds, setRestoringIds] = useState<Set<number>>(new Set());
 
   const handleDeleted = (t: TranslationInfo, index: number) => {
-    if (deleteTimeoutRef.current != null) window.clearTimeout(deleteTimeoutRef.current);
-    setPendingDelete({ translation: t, index });
-    deleteTimeoutRef.current = window.setTimeout(() => {
-      setPendingDelete(null);
-      refetchStrings();
-    }, UNDO_DELETE_MS);
+    setPendingDeletes((prev) => {
+      const next = new Map(prev);
+      next.set(t.id, { translation: t, index });
+      return next;
+    });
   };
 
   const displayTranslations = useMemo(() => {
-    if (!pendingDelete) return s.translations;
-    if (s.translations.some((t) => t.id === pendingDelete.translation.id)) return s.translations;
+    if (pendingDeletes.size === 0) return s.translations;
+    const missing = Array.from(pendingDeletes.values())
+      .filter((p) => !s.translations.some((t) => t.id === p.translation.id))
+      .sort((a, b) => a.index - b.index);
+    if (missing.length === 0) return s.translations;
     const next = s.translations.slice();
-    next.splice(Math.min(pendingDelete.index, next.length), 0, pendingDelete.translation);
+    for (const p of missing) next.splice(Math.min(p.index, next.length), 0, p.translation);
     return next;
-  }, [s.translations, pendingDelete]);
+  }, [s.translations, pendingDeletes]);
 
   const undoMutation = useMutation({
-    mutationFn: () => api.restoreTranslation(projectId, s.id, pendingDelete!.translation.id, languageId),
-    onSuccess: () => {
-      if (deleteTimeoutRef.current != null) window.clearTimeout(deleteTimeoutRef.current);
-      setPendingDelete(null);
+    mutationFn: (translationId: number) => api.restoreTranslation(projectId, s.id, translationId, languageId),
+    onMutate: (translationId) => {
+      setRestoringIds((prev) => new Set(prev).add(translationId));
+    },
+    onSuccess: (_data, translationId) => {
+      setPendingDeletes((prev) => {
+        const next = new Map(prev);
+        next.delete(translationId);
+        return next;
+      });
       refetchStrings();
       notifyProgressChanged(fileId);
     },
+    onSettled: (_data, _err, translationId) => {
+      setRestoringIds((prev) => {
+        const next = new Set(prev);
+        next.delete(translationId);
+        return next;
+      });
+    },
   });
+
+  // Finalize whatever's still pending (never undone) the moment this
+  // string is left — key={s.id} in ComfortableView/SideBySideView
+  // remounts this component on every Prev/Next/jump, so unmount here
+  // really does mean "moved to a different string". A ref (not
+  // pendingDeletes itself) keeps this a mount-only effect while still
+  // reading the latest set at the moment of unmounting.
+  const pendingDeletesRef = useRef(pendingDeletes);
+  pendingDeletesRef.current = pendingDeletes;
+  useEffect(() => {
+    return () => {
+      if (pendingDeletesRef.current.size > 0) refetchStrings();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Focus the edit box the moment a candidate is picked, cursor at the
   // end, so you can click a candidate and start typing immediately
@@ -336,9 +378,9 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               onDeleted={() => handleDeleted(t, index)}
               onSelect={() => selectCandidate(t.text)}
               selected={text === t.text}
-              pendingDelete={pendingDelete?.translation.id === t.id}
-              onUndoDelete={() => undoMutation.mutate()}
-              undoPending={undoMutation.isPending}
+              pendingDelete={pendingDeletes.has(t.id)}
+              onUndoDelete={() => undoMutation.mutate(t.id)}
+              undoPending={restoringIds.has(t.id)}
             />
           ))}
         </ul>
