@@ -2042,8 +2042,6 @@ body {
 .pager-hint {
   position: absolute;
   top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
   margin-top: 6px;
   background: var(--bg-elevated);
   border: 1px solid rgba(128, 128, 128, 0.3);
@@ -2054,6 +2052,21 @@ body {
   color: var(--accent);
   white-space: nowrap;
   z-index: 5;
+}
+
+/* Anchored from each button's own side (growing inward, toward the
+   middle of the pager) rather than centered on the button — the Next
+   button sits close to the header's right edge now that the whole
+   pager lives there, and a centered hint wider than the button itself
+   pushed its right half past the window edge and got clipped. Growing
+   inward instead guarantees the hint stays within the row regardless
+   of how close to an edge the anchoring button is. */
+.pager-hint--prev {
+  left: 0;
+}
+
+.pager-hint--next {
+  right: 0;
 }
 
 /* --- side-by-side view --- */

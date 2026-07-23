@@ -253,7 +253,9 @@ export function TranslationWorkspace({
         {viewMode === "comfortable" && (
           <div className="workspace-pager">
             <div className="comfortable-pager-nav">
-              {armed === "prev" && <span className="pager-hint">Press again for the previous file</span>}
+              {armed === "prev" && (
+                <span className="pager-hint pager-hint--prev">Press again for the previous file</span>
+              )}
               <button
                 className="icon-btn"
                 onClick={handlePrevious}
@@ -275,7 +277,9 @@ export function TranslationWorkspace({
               >
                 →
               </button>
-              {armed === "next" && <span className="pager-hint">Press again for the next file</span>}
+              {armed === "next" && (
+                <span className="pager-hint pager-hint--next">Press again for the next file</span>
+              )}
             </div>
           </div>
         )}
