@@ -1277,5 +1277,22 @@ if getattr(sys, "frozen", False):
     _FRONTEND_DIST = Path(sys._MEIPASS) / "frontend" / "dist"  # type: ignore[attr-defined]
 else:
     _FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+class _NoCacheStaticFiles(StaticFiles):
+    """Plain StaticFiles lets WebView2 (or any browser engine) cache
+    index.html/assets by URL — and since every packaged build serves the
+    same fixed http://127.0.0.1:8000 regardless of which version's
+    actually installed, a returning user's WebView2 cache can keep
+    serving an OLDER build's frontend even after installing/updating to
+    a new one, with no code-level way to bust it (confirmed live: a
+    rebuilt exe still showed a stale UI from an earlier run on the same
+    machine/port). No-store forces a fresh read from disk every time —
+    negligible cost since this is already a local, no-network read."""
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
 if _FRONTEND_DIST.is_dir():
-    app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="frontend")
+    app.mount("/", _NoCacheStaticFiles(directory=_FRONTEND_DIST, html=True), name="frontend")
