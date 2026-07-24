@@ -304,6 +304,22 @@ export function App() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Escape blurs whatever editable field currently has focus — the way
+  // out of the translation box (or a search box, or the comment box)
+  // back to where Ctrl+Arrow navigation works again, rather than a
+  // dedicated "stop editing" action of its own.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const active = document.activeElement as HTMLElement | null;
+      const tag = active?.tagName;
+      const isEditable = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || active?.isContentEditable;
+      if (isEditable) active?.blur();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const handleJumpToSearchResult = (fileId: number, stringId: number) => {
     const file = tree.data?.files.find((f) => f.id === fileId);
     if (!file) return;

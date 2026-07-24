@@ -59,13 +59,16 @@ on.
 |---|---|
 | `Ctrl+Enter` | Save the current translation |
 | `Ctrl+Shift+Enter` | Approve/unapprove the selected candidate |
-| `Ctrl+↑` / `Ctrl+↓` | Previous / next string |
+| `Ctrl+↑` or `←` | Previous string |
+| `Ctrl+↓` or `→` | Next string |
 | `Ctrl+Shift+↑` or `←` | Previous open tab |
 | `Ctrl+Shift+↓` or `→` | Next open tab |
+| `Esc` | Stop editing (blur the current field) |
 
-Tab-switching is skipped while you're typing anywhere — `Ctrl+Shift+←`/`→`
-is the standard "select previous/next word" shortcut while editing text, so
-it doesn't hijack that.
+String and tab navigation are both skipped while you're typing anywhere —
+`Ctrl+←`/`→` is the standard "move cursor by word" shortcut while editing
+text, so these don't hijack that. `Esc` is the way back out of a field to
+use them again.
 
 ## For translators: just download it
 

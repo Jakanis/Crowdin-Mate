@@ -193,35 +193,34 @@ export function TranslationWorkspace({
     armTimeoutRef.current = window.setTimeout(() => setArmed(null), ARM_TIMEOUT_MS);
   };
 
-  // Ctrl+Up/Down for string navigation, same target as the Prev/Next
-  // buttons above — kept as a ref (rather than depending on
-  // handlePrevious/handleNext directly, which are defined below the
-  // early returns further down and would make a straight dependency
-  // impossible without breaking the Rules of Hooks) so this effect
-  // itself can sit safely above those returns and still always call
-  // whatever the latest handlers are. Only active for the tab that's
-  // actually visible — every open tab's workspace stays mounted (see
-  // this component's own doc comment), so without the isActive gate
-  // every hidden tab would react to the same keypress too. Skipped
-  // while focus is in some OTHER editable field (search boxes, the
-  // comment box) — pressing Ctrl+Down while typing a comment shouldn't
-  // jump the string out from under you — but not while focus is in
-  // THIS string's own translation box, where it's just as useful as
-  // while typing there.
+  // Ctrl+Up/Left (previous) and Ctrl+Down/Right (next) for string
+  // navigation, same target as the Prev/Next buttons above and the same
+  // shape as App.tsx's tab-navigation shortcut — kept as a ref (rather
+  // than depending on handlePrevious/handleNext directly, which are
+  // defined below the early returns further down and would make a
+  // straight dependency impossible without breaking the Rules of Hooks)
+  // so this effect itself can sit safely above those returns and still
+  // always call whatever the latest handlers are. Only active for the
+  // tab that's actually visible — every open tab's workspace stays
+  // mounted (see this component's own doc comment), so without the
+  // isActive gate every hidden tab would react to the same keypress
+  // too. Skipped entirely while any editable field has focus — matching
+  // tab-navigation, Ctrl+Left/Right is "move cursor by word" while
+  // editing text, and Escape (see App.tsx) is the way out of the box to
+  // use these again.
   const navHandlersRef = useRef<{ prev: () => void; next: () => void }>({ prev: () => {}, next: () => {} });
   useEffect(() => {
     if (!isActive) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
       const active = document.activeElement;
       const tag = active?.tagName;
-      const isOtherEditable =
-        (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (active as HTMLElement | null)?.isContentEditable) &&
-        !active?.classList.contains("string-target");
-      if (isOtherEditable) return;
+      const isEditable =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (active as HTMLElement | null)?.isContentEditable;
+      if (isEditable) return;
       e.preventDefault();
-      if (e.key === "ArrowUp") navHandlersRef.current.prev();
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft") navHandlersRef.current.prev();
       else navHandlersRef.current.next();
     };
     document.addEventListener("keydown", onKeyDown);
