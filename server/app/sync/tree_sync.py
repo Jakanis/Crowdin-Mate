@@ -76,13 +76,15 @@ def sync_project_tree(project_id: int) -> dict:
         }
         conn.execute(
             """
-            INSERT INTO projects (id, name, source_language, target_languages_json, last_full_sync_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO projects
+                (id, name, source_language, target_languages_json, last_full_sync_at, last_activity)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name,
                 source_language=excluded.source_language,
                 target_languages_json=excluded.target_languages_json,
-                last_full_sync_at=excluded.last_full_sync_at
+                last_full_sync_at=excluded.last_full_sync_at,
+                last_activity=excluded.last_activity
             """,
             (
                 project["id"],
@@ -90,6 +92,7 @@ def sync_project_tree(project_id: int) -> dict:
                 (project.get("sourceLanguageId") or project.get("sourceLanguage", {}).get("id", "")),
                 _target_languages_json(project),
                 now,
+                _iso(project.get("lastActivity")),
             ),
         )
 
@@ -171,6 +174,43 @@ def sync_project_tree(project_id: int) -> dict:
         "synced_at": now,
         "changed_file_ids": changed_file_ids,
     }
+
+
+def check_and_sync_if_changed(project_id: int) -> dict:
+    """Cheap pre-check before the (relatively) expensive full crawl: for a
+    project with tens of thousands of files, unconditionally re-crawling
+    every directory/file/label on a timer is wasteful when nothing has
+    actually changed since the last time. A single get_project call's
+    lastActivity field moves on essentially any real activity in the
+    project (translations, comments, file management — confirmed live
+    that it's distinct from, and updates far more often than, updatedAt,
+    which only reflects the project's own *settings* changing) — so this
+    only runs the full sync_project_tree crawl if that's moved since the
+    last time we looked, rather than every time this is called.
+
+    Returns the same shape as sync_project_tree when a sync actually ran
+    (plus "synced": True), or a lightweight "synced": False response
+    when nothing had changed and only the one cheap call was made."""
+    client = get_client()
+    project_resp = call_with_limits(client.projects.get_project, projectId=project_id)
+    project = _unwrap(project_resp)
+    last_activity = _iso(project.get("lastActivity"))
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT last_activity FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+    previously_known = row["last_activity"] if row is not None else None
+
+    if previously_known is not None and last_activity == previously_known:
+        return {"project_id": project_id, "synced": False, "changed_file_ids": []}
+
+    logger.info(
+        "Project %s activity changed (%s -> %s) — running full tree sync",
+        project_id, previously_known, last_activity,
+    )
+    result = sync_project_tree(project_id)
+    return {**result, "synced": True}
 
 
 def _target_languages_json(project: dict) -> str:

@@ -19,6 +19,16 @@ import { useSyncTree } from "./useSyncTree";
 const DEFAULT_PROJECT_ID = 393919;
 const SELECTED_PROJECT_KEY = "classicua-selected-project";
 
+function timeAgo(iso: string): string {
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 function tabsStorageKey(projectId: number) {
   return `classicua-open-tabs-${projectId}`;
 }
@@ -342,7 +352,15 @@ export function App() {
               <span className="sync-progress-fill" style={{ width: `${sync.progress * 100}%` }} />
             </span>
           )}
-          <button onClick={sync.trigger} disabled={sync.isPending}>
+          <button
+            onClick={sync.trigger}
+            disabled={sync.isPending}
+            title={
+              tree.data?.last_full_sync_at
+                ? `Last synced ${timeAgo(tree.data.last_full_sync_at)}`
+                : "Never fully synced yet"
+            }
+          >
             {sync.isPending ? "Syncing…" : "Sync tree"}
           </button>
           <SettingsMenu
