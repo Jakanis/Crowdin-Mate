@@ -53,6 +53,20 @@ on.
 - **Comfortable & side-by-side views**, resizable panels, light/dark theme,
   and an optional palette that matches Crowdin's own editor colors.
 
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Enter` | Save the current translation |
+| `Ctrl+Shift+Enter` | Approve/unapprove the selected candidate |
+| `Ctrl+↑` / `Ctrl+↓` | Previous / next string |
+| `Ctrl+Shift+↑` or `←` | Previous open tab |
+| `Ctrl+Shift+↓` or `→` | Next open tab |
+
+Tab-switching is skipped while you're typing anywhere — `Ctrl+Shift+←`/`→`
+is the standard "select previous/next word" shortcut while editing text, so
+it doesn't hijack that.
+
 ## For translators: just download it
 
 No Python, no Node, nothing to install or run from a terminal — grab the
