@@ -8,6 +8,7 @@ interface SyncState {
   trigger: () => void;
   isPending: boolean;
   changed: boolean;
+  progress: number | null;
 }
 
 interface SidebarProps {

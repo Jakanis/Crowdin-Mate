@@ -7,6 +7,7 @@ interface SyncState {
   trigger: () => void;
   isPending: boolean;
   changed: boolean;
+  progress: number | null;
 }
 
 interface FileTreeProps {
@@ -319,6 +320,11 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
           <SyncIcon spinning={sync.isPending} />
         </button>
       </div>
+      {sync.progress != null && (
+        <span className="sync-progress" title="Estimated from previous sync durations">
+          <span className="sync-progress-fill" style={{ width: `${sync.progress * 100}%` }} />
+        </span>
+      )}
       {searchResult && (
         <div className="file-tree-search-status">
           {searchResult.matchCount === 0

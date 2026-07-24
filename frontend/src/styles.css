@@ -1894,6 +1894,22 @@ body {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+.sync-progress {
+  display: block;
+  flex-shrink: 0;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(128, 128, 128, 0.2);
+}
+
+.sync-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s linear;
+}
+
 .file-tree-search-status {
   flex-shrink: 0;
   padding: 4px 8px;
