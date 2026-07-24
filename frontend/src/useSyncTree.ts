@@ -10,7 +10,7 @@ const AUTO_CHECK_INTERVAL_MS = 10 * 60_000;
 // (file count varies a lot), so one project's history shouldn't skew
 // another's progress estimate.
 function durationsKey(projectId: number) {
-  return `classicua-sync-durations-${projectId}`;
+  return `crowdin-mate-sync-durations-${projectId}`;
 }
 
 function loadDurations(projectId: number): number[] {

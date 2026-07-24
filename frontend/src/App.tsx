@@ -13,17 +13,13 @@ import { useAutoAdvance, useOpenTabsLayout, useViewMode } from "./theme";
 import { useResizableWidth } from "./useResizableWidth";
 import { useSyncTree } from "./useSyncTree";
 
-// This app started as a single-project (ClassicUA, 393919) tool — kept
-// as the preferred default when nothing's been selected yet, but any
-// project the token can see now works via the header's project picker.
-const DEFAULT_PROJECT_ID = 393919;
-const SELECTED_PROJECT_KEY = "classicua-selected-project";
+const SELECTED_PROJECT_KEY = "crowdin-mate-selected-project";
 
 function tabsStorageKey(projectId: number) {
-  return `classicua-open-tabs-${projectId}`;
+  return `crowdin-mate-open-tabs-${projectId}`;
 }
 function selectedLanguageKey(projectId: number) {
-  return `classicua-selected-language-${projectId}`;
+  return `crowdin-mate-selected-language-${projectId}`;
 }
 
 interface PersistedTabs {
@@ -41,11 +37,10 @@ function loadPersistedTabs(projectId: number): PersistedTabs | null {
   }
 }
 
-function pickDefaultLanguage(project: Project): string {
+function pickDefaultLanguage(project: Project): string | null {
   const persisted = localStorage.getItem(selectedLanguageKey(project.id));
   if (persisted && project.target_languages.some((l) => l.id === persisted)) return persisted;
-  if (project.target_languages.some((l) => l.id === "uk")) return "uk";
-  return project.target_languages[0]?.id ?? "uk";
+  return project.target_languages[0]?.id ?? null;
 }
 
 export function App() {
@@ -91,8 +86,8 @@ export function App() {
   // grows it, sign 1); the right TM/comments sidebar sits to the right
   // of its handle (dragging left grows it, sign -1) — see
   // useResizableWidth's doc comment.
-  const leftPanel = useResizableWidth("classicua-left-width", 340, 220, 640);
-  const rightPanel = useResizableWidth("classicua-right-width", 280, 200, 560);
+  const leftPanel = useResizableWidth("crowdin-mate-left-width", 340, 220, 640);
+  const rightPanel = useResizableWidth("crowdin-mate-right-width", 280, 200, 560);
 
   const authStatus = useQuery({ queryKey: ["auth-status"], queryFn: api.authStatus });
 
@@ -125,16 +120,12 @@ export function App() {
   };
 
   // Pick a default project once the list loads and nothing's selected
-  // yet — whatever was last used (if it still exists), else the
-  // original ClassicUA project this app was built for, else just the
+  // yet — whatever was last used (if it still exists), else just the
   // first project the token can see.
   useEffect(() => {
     if (projectId != null || projects.length === 0) return;
     const persistedId = Number(localStorage.getItem(SELECTED_PROJECT_KEY));
-    const initial =
-      projects.find((p) => p.id === persistedId) ??
-      projects.find((p) => p.id === DEFAULT_PROJECT_ID) ??
-      projects[0];
+    const initial = projects.find((p) => p.id === persistedId) ?? projects[0];
     handleSelectProject(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects.length]);

@@ -14,15 +14,16 @@ dist/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
-vite-out.log
-vite-err.log
 
 # Local data / secrets (the PAT itself lives in the OS keyring, never here)
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
 .env
+*.log
 
-# Editor
+# Editor / OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db

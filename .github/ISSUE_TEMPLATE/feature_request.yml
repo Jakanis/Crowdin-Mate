@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest something this editor should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Before requesting, a quick check: Crowdin Mate is a translation and
+        proofreading *editor*, not a replacement for Crowdin's own project
+        management/admin console (see the README's "What this is (and
+        isn't)" section). Project setup, team/vendor management, and
+        integrations belong on crowdin.com itself, not here.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that's currently awkward or impossible?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? Sketches/mockups welcome.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you're currently using, or other approaches you considered.
+    validations:
+      required: false

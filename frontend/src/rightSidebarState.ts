@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-const COLLAPSED_KEY = "classicua-right-sidebar-collapsed";
-const ACTIVE_TAB_KEY = "classicua-right-sidebar-tab";
+const COLLAPSED_KEY = "crowdin-mate-right-sidebar-collapsed";
+const ACTIVE_TAB_KEY = "crowdin-mate-right-sidebar-tab";
 
 /**
  * Right sidebar's collapsed/active-tab state, lifted here (rather than

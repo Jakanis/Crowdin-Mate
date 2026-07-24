@@ -7,7 +7,7 @@ static files when it's present. See README's "Desktop app" section.
 
 The backend is otherwise unchanged from dev mode: same port (8000),
 same OAuth redirect_uri (http://localhost:8000/oauth/callback), same
-SQLite cache under ~/.classicua-client. Only how it's launched differs.
+SQLite cache under ~/.crowdin-mate. Only how it's launched differs.
 """
 
 import logging
@@ -71,7 +71,7 @@ def main() -> None:
         logger.error("Backend didn't come up within %ss — opening the window anyway.", STARTUP_TIMEOUT_SECONDS)
 
     webview.create_window(
-        "ClassicUA Translation Client",
+        "Crowdin Mate",
         f"http://{HOST}:{PORT}",
         width=1360,
         height=880,

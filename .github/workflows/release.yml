@@ -19,11 +19,11 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            asset_name: ClassicUA-Translation-Client-Windows.exe
-            built_path: server/dist/ClassicUA Translation Client.exe
+            asset_name: Crowdin-Mate-Windows.exe
+            built_path: server/dist/Crowdin Mate.exe
           - os: ubuntu-latest
-            asset_name: ClassicUA-Translation-Client-Linux
-            built_path: server/dist/ClassicUA Translation Client
+            asset_name: Crowdin-Mate-Linux
+            built_path: server/dist/Crowdin Mate
 
     runs-on: ${{ matrix.os }}
 

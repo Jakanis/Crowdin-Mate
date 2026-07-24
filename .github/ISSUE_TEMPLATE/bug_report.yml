@@ -1,0 +1,62 @@
+name: Bug report
+description: Something isn't working the way it should.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, in order, so the bug can be reproduced.
+      placeholder: |
+        1. Open project X
+        2. Switch to language Y
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows (packaged .exe)
+        - Linux (packaged binary)
+        - Running from source (Windows)
+        - Running from source (Linux)
+        - Running from source (macOS)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release version (e.g. v0.1.0), or commit hash if running from source.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: reproducible
+    attributes:
+      label: Reproducibility
+      options:
+        - label: This reproduces against a real Crowdin project (not just a hypothetical)
+        - label: This still happens after restarting the app
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / error messages
+      description: >
+        Browser devtools console errors, and/or the packaged app's log file
+        (`~/.crowdin-mate/desktop.log` on a packaged build). Redact anything
+        that looks like a token.
+      render: shell

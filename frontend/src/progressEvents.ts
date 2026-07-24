@@ -15,7 +15,7 @@
  * down to TranslationEditor — the two components are siblings several
  * levels apart with nothing else in common.
  */
-const EVENT_NAME = "classicua-progress-changed";
+const EVENT_NAME = "crowdin-mate-progress-changed";
 
 export function notifyProgressChanged(fileId: number): void {
   window.dispatchEvent(new CustomEvent<{ fileId: number }>(EVENT_NAME, { detail: { fileId } }));

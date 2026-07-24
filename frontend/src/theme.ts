@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 export type ThemePreference = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
 
-const THEME_KEY = "classicua-theme";
-const SCALE_KEY = "classicua-ui-scale";
+const THEME_KEY = "crowdin-mate-theme";
+const SCALE_KEY = "crowdin-mate-ui-scale";
 
 function resolveSystemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -48,7 +48,7 @@ export function useTheme() {
   return { preference, resolvedTheme, setPreference };
 }
 
-const AUTO_ADVANCE_KEY = "classicua-auto-advance";
+const AUTO_ADVANCE_KEY = "crowdin-mate-auto-advance";
 
 // Mirrors Crowdin's own "Automatically move to next string" editor
 // setting — same default (on), same meaning: only fires in Comfortable
@@ -68,7 +68,7 @@ export function useAutoAdvance() {
   return { enabled, setEnabled };
 }
 
-const PALETTE_KEY = "classicua-crowdin-palette";
+const PALETTE_KEY = "crowdin-mate-palette";
 
 // Swaps our own accent/success/warning/danger tokens for crowdin.com's
 // actual editor colors (pulled live via getComputedStyle on their
@@ -117,7 +117,7 @@ export function useUiScale() {
 }
 
 export type ViewMode = "comfortable" | "side-by-side";
-const VIEW_MODE_KEY = "classicua-view-mode";
+const VIEW_MODE_KEY = "crowdin-mate-view-mode";
 
 // Global preference (moved out of per-file TranslationWorkspace state,
 // which meant switching layout in one open tab didn't affect any
@@ -137,7 +137,7 @@ export function useViewMode() {
   return { mode, setMode };
 }
 
-const TM_SUGGESTIONS_COLLAPSED_KEY = "classicua-tm-suggestions-collapsed";
+const TM_SUGGESTIONS_COLLAPSED_KEY = "crowdin-mate-tm-suggestions-collapsed";
 
 // Self-contained like useCrowdinPalette above — TranslationEditor calls
 // this once per mount (once per open string in Comfortable view, once
@@ -159,7 +159,7 @@ export function useTmSuggestionsCollapsed() {
 }
 
 export type OpenTabsLayout = "top" | "sidebar";
-const OPEN_TABS_LAYOUT_KEY = "classicua-open-tabs-layout";
+const OPEN_TABS_LAYOUT_KEY = "crowdin-mate-open-tabs-layout";
 
 // Matches a browser's optional vertical-tabs mode — useful once several
 // files are open at once (a quest-chain workflow). Sidebar and the tab

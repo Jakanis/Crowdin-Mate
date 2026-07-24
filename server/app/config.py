@@ -13,7 +13,11 @@ from pathlib import Path
 
 import keyring
 
-KEYRING_SERVICE = "classicua-desktop-client"
+# Pre-rename service name (this app used to be ClassicUA-specific) —
+# kept only so _migrate_legacy_keyring below can move existing installs'
+# credentials over without forcing a re-login.
+_OLD_KEYRING_SERVICE = "classicua-desktop-client"
+KEYRING_SERVICE = "crowdin-mate"
 KEYRING_USERNAME = "crowdin-pat"
 KEYRING_OAUTH_CLIENT = "crowdin-oauth-client"  # {"client_id", "client_secret"} - short, fits fine as JSON
 # access_token/refresh_token stored as SEPARATE entries, not one combined
@@ -26,7 +30,41 @@ KEYRING_OAUTH_ACCESS_TOKEN = "crowdin-oauth-access-token"
 KEYRING_OAUTH_REFRESH_TOKEN = "crowdin-oauth-refresh-token"
 KEYRING_OAUTH_EXPIRES_AT = "crowdin-oauth-expires-at"
 
-DATA_DIR = Path.home() / ".classicua-client"
+
+def _migrate_legacy_keyring() -> None:
+    """One-time migration for this app's pre-rename keyring service name
+    — copies any existing credentials over under the new service name so
+    renaming the app doesn't force an existing install to re-enter its
+    PAT or redo OAuth. Safe to run every startup: each entry is deleted
+    from the old service once moved, so this is a no-op after the first
+    run (or on a fresh install with nothing to migrate)."""
+    for username in (
+        KEYRING_USERNAME,
+        KEYRING_OAUTH_CLIENT,
+        KEYRING_OAUTH_ACCESS_TOKEN,
+        KEYRING_OAUTH_REFRESH_TOKEN,
+        KEYRING_OAUTH_EXPIRES_AT,
+    ):
+        if keyring.get_password(KEYRING_SERVICE, username) is not None:
+            continue
+        old_value = keyring.get_password(_OLD_KEYRING_SERVICE, username)
+        if old_value is not None:
+            keyring.set_password(KEYRING_SERVICE, username, old_value)
+            try:
+                keyring.delete_password(_OLD_KEYRING_SERVICE, username)
+            except keyring.errors.PasswordDeleteError:
+                pass
+
+
+_migrate_legacy_keyring()
+
+# Pre-rename data directory — same reasoning as the keyring migration
+# above: move it wholesale (cache + everything else in it) rather than
+# leave an existing install's local cache orphaned by the rename.
+_OLD_DATA_DIR = Path.home() / ".classicua-client"
+DATA_DIR = Path.home() / ".crowdin-mate"
+if _OLD_DATA_DIR.exists() and not DATA_DIR.exists():
+    _OLD_DATA_DIR.rename(DATA_DIR)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "cache.sqlite3"
 

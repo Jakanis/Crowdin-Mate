@@ -169,13 +169,13 @@
    element's entire rendered box — layout, panel widths, padding,
    everything, not just text. That's a bigger, blunter effect than a
    "font size" setting should have (and reintroduced the same
-   viewport-overflow bug the zoom-placement fix above was chasing, on
-   Edge and in the Claude Browser pane both). Every font-size
-   declaration in this file now reads `calc(Npx * var(--ui-scale))`
-   instead, so only text scales — side panel widths and overall layout
-   stay exactly where they are regardless of this setting. overflow:
-   hidden is still a guard against page-level scrolling in general,
-   independent of the scale setting. */
+   viewport-overflow bug the zoom-placement fix above was chasing).
+   Every font-size declaration in this file now reads
+   `calc(Npx * var(--ui-scale))` instead, so only text scales — side
+   panel widths and overall layout stay exactly where they are
+   regardless of this setting. overflow: hidden is still a guard
+   against page-level scrolling in general, independent of the scale
+   setting. */
 html {
   height: 100%;
   overflow: hidden;

@@ -12,9 +12,9 @@ interface ProjectPickerProps {
 type OpenMenu = "project" | "language" | null;
 
 /** Header title, doubling as the project + target-language switcher.
- * Used to be plain "ClassicUA · Ukrainian" text sitting next to a pair
- * of permanent <select>s — replaced with the text itself acting as the
- * control: underlined to read as clickable, expanding into a small
+ * Used to be plain "<project name> · <language>" text sitting next to a
+ * pair of permanent <select>s — replaced with the text itself acting as
+ * the control: underlined to read as clickable, expanding into a small
  * anchored menu on click rather than a pair of dropdowns permanently
  * cluttering the header. */
 export function ProjectPicker({

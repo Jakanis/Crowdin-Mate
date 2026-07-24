@@ -1,4 +1,4 @@
-"""FastAPI backend for the ClassicUA desktop translation client.
+"""FastAPI backend for Crowdin Mate, a desktop translation client.
 
 Binds to 127.0.0.1 only (see run instructions in the README) — this holds
 the Crowdin PAT and must never be reachable from the network.
@@ -34,7 +34,7 @@ from app.sync.tree_sync import has_project_changed, sync_project_tree
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="ClassicUA Desktop Client API")
+app = FastAPI(title="Crowdin Mate API")
 
 # Vite's default dev server origin. Tightened to a fixed allow-list rather
 # than "*" since this backend holds a real credential.

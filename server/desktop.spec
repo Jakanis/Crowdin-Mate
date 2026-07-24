@@ -7,8 +7,8 @@ it does not build it):
 
     pyinstaller desktop.spec
 
-Produces a single-file executable named "ClassicUA Translation Client"
-(.exe on Windows) under server/dist/. See README's "Building a release"
+Produces a single-file executable named "Crowdin Mate" (.exe on
+Windows) under server/dist/. See README's "Building a release"
 section for the full release process (both platforms, GitHub Actions).
 
 Windows uses pywebview's native WebView2 backend (bundled with Windows
@@ -83,7 +83,7 @@ exe = EXE(  # noqa: F821
     a.binaries,
     a.datas,
     [],
-    name="ClassicUA Translation Client",
+    name="Crowdin Mate",
     debug=False,
     strip=False,
     upx=False,
