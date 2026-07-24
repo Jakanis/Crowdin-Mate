@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { SourceString, TreeDirectory, TreeFile } from "../api/client";
+import { DeletedTranslationsPanel } from "./DeletedTranslationsPanel";
 import { FileStringsList } from "./FileStringsList";
 import { FileTree } from "./FileTree";
 import { SearchPanel } from "./SearchPanel";
@@ -30,7 +31,7 @@ interface SidebarProps {
   openFilesSection?: React.ReactNode;
 }
 
-type Tab = "files" | "strings" | "search";
+type Tab = "files" | "strings" | "search" | "deleted";
 
 /** Left sidebar, matching Crowdin's own FILES/STRINGS tabs — Files browses
  * the whole project tree, Strings lists every string in the currently
@@ -84,6 +85,9 @@ export function Sidebar({
         <button className={tab === "search" ? "active" : ""} onClick={() => setTab("search")}>
           Search
         </button>
+        <button className={tab === "deleted" ? "active" : ""} onClick={() => setTab("deleted")}>
+          Deleted
+        </button>
         <button className="sidebar-collapse-btn" onClick={() => setCollapsed(true)} title="Hide sidebar">
           ◂
         </button>
@@ -112,6 +116,13 @@ export function Sidebar({
           projectId={projectId}
           languageId={languageId}
           languageName={languageName}
+          onJumpToResult={onJumpToSearchResult}
+        />
+      </div>
+      <div className="sidebar-panel" hidden={tab !== "deleted"}>
+        <DeletedTranslationsPanel
+          projectId={projectId}
+          languageId={languageId}
           onJumpToResult={onJumpToSearchResult}
         />
       </div>

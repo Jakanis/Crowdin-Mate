@@ -822,7 +822,18 @@ def _extract_validation_message(exc: APIException) -> str:
 async def approve_translation(project_id: int, translation_id: int):
     """Approve a translation and record the resulting approval id locally
     (needed to un-approve it later). Approving is idempotent-ish on
-    Crowdin's side but we just reflect whatever it returns."""
+    Crowdin's side but we just reflect whatever it returns.
+
+    Confirmed live: approving a translation makes Crowdin silently revoke
+    any OTHER translation's approval for the same string+language — only
+    one candidate can be the approved one at a time. Our own add_approval
+    response says nothing about that side effect, so without this we'd
+    leave the previously-approved sibling's local is_approved=1 stale
+    until the next full resync — exactly the "two approved translations"
+    bug reported live (string 288 in ClassicUA/uk: approving translation
+    11578 while 90874 was already approved left both marked approved
+    locally, even though a resync showed Crowdin had already dropped
+    90874's approval)."""
     client = get_client()
     try:
         resp = await run_in_threadpool(
@@ -834,6 +845,15 @@ async def approve_translation(project_id: int, translation_id: int):
 
     approval = resp.get("data", resp)
     with get_conn() as conn:
+        row = conn.execute(
+            "SELECT string_id, language_id FROM translations WHERE id = ?", (translation_id,)
+        ).fetchone()
+        if row is not None:
+            conn.execute(
+                "UPDATE translations SET is_approved = 0, approval_id = NULL "
+                "WHERE string_id = ? AND language_id = ? AND id != ?",
+                (row["string_id"], row["language_id"], translation_id),
+            )
         conn.execute(
             "UPDATE translations SET is_approved = 1, approval_id = ? WHERE id = ?",
             (approval["id"], translation_id),
@@ -878,7 +898,16 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
     button itself for other people's (moderator/canApprove only) — same
     split Crowdin's own editor uses, since "translator" role commonly
     includes moderation rights on non-Enterprise projects (see the
-    get_permissions docstring above)."""
+    get_permissions docstring above).
+
+    Crowdin keeps a deleted translation genuinely restorable (see
+    restore_translation_endpoint) indefinitely, not just for a short
+    window — so before dropping it from the live `translations` table we
+    snapshot the full row into `deleted_translations`, which is what
+    backs the "Deleted" sidebar tab (DeletedTranslationsPanel). That's
+    what makes Undo available any time later, not just while the string
+    that had it is still open (TranslationEditor's own inline Undo
+    overlay is purely in-memory and lost the moment you navigate away)."""
     client = get_client()
     try:
         await run_in_threadpool(
@@ -892,9 +921,54 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
     # (translations -> source_strings) only works while the row still
     # exists.
     _invalidate_progress_for_translation(translation_id)
+    now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
+        row = conn.execute("SELECT * FROM translations WHERE id = ?", (translation_id,)).fetchone()
+        if row is not None:
+            conn.execute(
+                """
+                INSERT INTO deleted_translations
+                    (id, string_id, language_id, text, user_id, user_name,
+                     rating, is_approved, approval_id, created_at, deleted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    string_id=excluded.string_id, language_id=excluded.language_id,
+                    text=excluded.text, user_id=excluded.user_id, user_name=excluded.user_name,
+                    rating=excluded.rating, is_approved=excluded.is_approved,
+                    approval_id=excluded.approval_id, created_at=excluded.created_at,
+                    deleted_at=excluded.deleted_at
+                """,
+                (
+                    row["id"], row["string_id"], row["language_id"], row["text"],
+                    row["user_id"], row["user_name"], row["rating"], row["is_approved"],
+                    row["approval_id"], row["created_at"], now,
+                ),
+            )
         conn.execute("DELETE FROM translations WHERE id = ?", (translation_id,))
     return {"status": "deleted"}
+
+
+@app.get("/projects/{project_id}/deleted-translations")
+async def list_deleted_translations(project_id: int, language_id: str):
+    """Backs the "Deleted" sidebar tab — every translation deleted (and
+    not yet restored) anywhere in this project/language, newest first,
+    with enough source-string/file context to show and jump to without a
+    second round trip per row."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT dt.id, dt.string_id, dt.language_id, dt.text, dt.user_id, dt.user_name,
+                   dt.rating, dt.is_approved, dt.created_at, dt.deleted_at,
+                   ss.text AS source_text, ss.identifier, ss.file_id, f.path AS file_path
+            FROM deleted_translations dt
+            JOIN source_strings ss ON ss.id = dt.string_id
+            JOIN files f ON f.id = ss.file_id
+            WHERE f.project_id = ? AND dt.language_id = ?
+            ORDER BY dt.deleted_at DESC
+            """,
+            (project_id, language_id),
+        ).fetchall()
+    return {"deleted": [dict(r) for r in rows]}
 
 
 @app.post("/projects/{project_id}/strings/{string_id}/translations/{translation_id}/restore")
@@ -966,6 +1040,7 @@ async def restore_translation_endpoint(project_id: int, string_id: int, translat
                 now,
             ),
         )
+        conn.execute("DELETE FROM deleted_translations WHERE id = ?", (translation_id,))
         file_row = conn.execute("SELECT file_id FROM source_strings WHERE id = ?", (string_id,)).fetchone()
     if file_row:
         invalidate_progress_for_file(file_row["file_id"], language_id)

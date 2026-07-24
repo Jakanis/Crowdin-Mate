@@ -82,6 +82,23 @@ export interface TranslationInfo {
   created_at: string | null;
 }
 
+export interface DeletedTranslationInfo {
+  id: number;
+  string_id: number;
+  language_id: string;
+  text: string;
+  user_id: number | null;
+  user_name: string | null;
+  rating: number;
+  is_approved: number;
+  created_at: string | null;
+  deleted_at: string;
+  source_text: string;
+  identifier: string | null;
+  file_id: number;
+  file_path: string;
+}
+
 export interface DraftInfo {
   string_id: number;
   draft_text: string;
@@ -294,6 +311,10 @@ export const api = {
     request<{ status: string; translation: { id: number; text: string; user_name: string | null } }>(
       `/projects/${projectId}/strings/${stringId}/translations/${translationId}/restore?language_id=${encodeURIComponent(languageId)}`,
       { method: "POST" },
+    ),
+  listDeletedTranslations: (projectId: number, languageId: string) =>
+    request<{ deleted: DeletedTranslationInfo[] }>(
+      `/projects/${projectId}/deleted-translations?language_id=${encodeURIComponent(languageId)}`,
     ),
   voteTranslation: (projectId: number, translationId: number, mark: "up" | "down") =>
     request<{ status: string; rating: number }>(`/projects/${projectId}/translations/${translationId}/vote`, {

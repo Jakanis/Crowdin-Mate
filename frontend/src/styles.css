@@ -831,6 +831,74 @@ body {
   word-break: break-all;
 }
 
+/* --- left sidebar "Deleted" tab --- */
+.deleted-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px;
+}
+
+.deleted-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deleted-item {
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.06);
+  padding: 8px;
+}
+
+.deleted-item-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  font-size: calc(11px * var(--ui-scale));
+  opacity: 0.55;
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.deleted-item-path:hover {
+  opacity: 0.85;
+  text-decoration: underline;
+}
+
+.deleted-item-source {
+  font-size: calc(12.5px * var(--ui-scale));
+  line-height: 1.35;
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
+.deleted-item-text {
+  font-size: calc(12.5px * var(--ui-scale));
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.deleted-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: calc(11px * var(--ui-scale));
+}
+
 .app-main {
   flex: 1;
   min-width: 0;

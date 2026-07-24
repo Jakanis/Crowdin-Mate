@@ -123,6 +123,30 @@ CREATE TABLE IF NOT EXISTS translations (
 CREATE INDEX IF NOT EXISTS idx_translations_string_lang
     ON translations (string_id, language_id);
 
+-- Snapshot of a translation at the moment it's deleted — kept around so
+-- it stays undoable indefinitely (Crowdin itself keeps a deleted
+-- translation genuinely restorable, not just for a short window), not
+-- only during TranslationEditor's own in-memory "Undo" overlay, which is
+-- lost the moment the string is left. Row is removed again once
+-- restored (see restore_translation_endpoint). One row per translation
+-- id — a second delete of something already in here (shouldn't normally
+-- happen, since a deleted translation isn't visible to delete again)
+-- just refreshes the snapshot rather than erroring.
+CREATE TABLE IF NOT EXISTS deleted_translations (
+    id INTEGER PRIMARY KEY,              -- Crowdin's translationId
+    string_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    user_id INTEGER,
+    user_name TEXT,
+    rating INTEGER NOT NULL DEFAULT 0,
+    is_approved INTEGER NOT NULL DEFAULT 0,
+    approval_id INTEGER,
+    created_at TEXT,
+    deleted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deleted_translations_string ON deleted_translations (string_id, language_id);
+
 -- String-level comments and issues. Fetched lazily per string (most
 -- strings have none), cached here once seen.
 CREATE TABLE IF NOT EXISTS comments (

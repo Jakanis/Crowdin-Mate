@@ -202,8 +202,6 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     },
   });
 
-  const dirty = text.trim() !== "" && text !== bestTranslationText(s);
-
   // Ctrl+Shift+Enter (see the textarea's onKeyDown below) approves/
   // unapproves whichever existing candidate's text currently matches the
   // box — same target as clicking a candidate's own approve button, just
@@ -273,6 +271,23 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     new Map(),
   );
   const [restoringIds, setRestoringIds] = useState<Set<number>>(new Set());
+
+  // Excludes candidates currently pending-delete from "does this match
+  // what's already saved" — matching Crowdin's own editor, deleting a
+  // candidate and immediately typing/pasting the exact same text back in
+  // is a legitimate way to resubmit it as a brand-new translation (own
+  // author, own timestamp) even while its Undo overlay is still up.
+  // Without this exclusion, text still equal to the just-deleted
+  // candidate's text kept comparing equal to bestTranslationText(s)
+  // (s.translations isn't refetched during the undo window — see
+  // TranslationItem's delete mutation below) and Save stayed disabled,
+  // silently blocking exactly the resubmit Crowdin itself allows.
+  const activeTranslations = useMemo(
+    () => s.translations.filter((t) => !pendingDeletes.has(t.id)),
+    [s.translations, pendingDeletes],
+  );
+  const bestActiveText = activeTranslations.find((t) => t.is_approved)?.text ?? activeTranslations[0]?.text ?? "";
+  const dirty = text.trim() !== "" && text !== bestActiveText;
 
   const handleDeleted = (t: TranslationInfo, index: number) => {
     setPendingDeletes((prev) => {

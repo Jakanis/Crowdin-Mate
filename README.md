@@ -38,6 +38,9 @@ on.
   responsive.
 - **Translate & proofread** — edit, save, approve/unapprove, vote, and delete
   translations, with per-string comments/issues, all synced back to Crowdin.
+- **Nothing deleted is ever really gone** — every deletion lands in the
+  "Deleted" sidebar tab, restorable any time (not just in the few seconds
+  right after), matching Crowdin's own indefinitely-recoverable delete.
 - **Translation memory & glossary suggestions** — inline, cached locally so
   revisiting a string is instant after the first lookup.
 - **Search** — live full-project search via Crowdin's own query language,

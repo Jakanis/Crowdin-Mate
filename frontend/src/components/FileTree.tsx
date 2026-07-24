@@ -123,9 +123,20 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   // again" guard means the stale cached percentage would otherwise
   // never refresh on its own for the rest of the session (see bug
   // report: an approved file still showing its old 50%). Drop the
-  // cached values and the "already fetched" guard for the file's own
-  // directory AND every ancestor up to the root (each level's aggregate
-  // depends on its children), then re-fetch all of them.
+  // "already fetched" guard for the file's own directory AND every
+  // ancestor up to the root (each level's aggregate depends on its
+  // children) and re-fetch all of them — scoped to exactly that
+  // ancestry chain, not the whole tree, since a sibling folder's counts
+  // didn't change.
+  //
+  // Deliberately NOT clearing dirProgress/fileProgress here first: an
+  // earlier version did, which meant every bar on the ancestry path blanked
+  // out the instant a translation was saved/approved/deleted and only
+  // reappeared once the re-fetch resolved — visually indistinguishable
+  // from "the whole tree just reloaded" even though only a handful of
+  // rows were ever actually involved. mergeProgress below overwrites the
+  // old value in place once the fresh one arrives, so the bar just holds
+  // its last known percentage for that one request round-trip instead.
   useEffect(() => {
     return onProgressChanged((fileId) => {
       const file = files.find((f) => f.id === fileId);
@@ -139,16 +150,6 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
         dirId = dir ? dir.parent_id : null;
       }
 
-      setFileProgress((prev) => {
-        const next = new Map(prev);
-        next.delete(fileId);
-        return next;
-      });
-      setDirProgress((prev) => {
-        const next = new Map(prev);
-        for (const id of ancestry) if (id !== "root") next.delete(id);
-        return next;
-      });
       for (const parentId of ancestry) {
         fetchedParents.current.delete(parentId);
         fetchProgressFor(parentId);
