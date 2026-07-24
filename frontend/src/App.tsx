@@ -277,6 +277,33 @@ export function App() {
     if (target) setActiveFileId(target.id);
   };
 
+  // Ctrl+Shift+Up/Left for the previous open tab, Ctrl+Shift+Down/Right
+  // for the next one — kept as a ref so this effect (declared once,
+  // unconditionally, above every early return in this component) always
+  // calls whatever the latest navigateFile closure is without needing to
+  // resubscribe the listener on every openFiles/activeFileId change.
+  // Skipped entirely while any input/textarea/contenteditable has focus:
+  // Ctrl+Shift+Left/Right is the standard "select previous/next word"
+  // shortcut while editing text, and this shouldn't steal that.
+  const navigateFileRef = useRef(navigateFile);
+  navigateFileRef.current = navigateFile;
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || !e.shiftKey) return;
+      if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+      const active = document.activeElement;
+      const tag = active?.tagName;
+      const isEditable =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (active as HTMLElement | null)?.isContentEditable;
+      if (isEditable) return;
+      e.preventDefault();
+      const direction = e.key === "ArrowUp" || e.key === "ArrowLeft" ? "prev" : "next";
+      navigateFileRef.current(direction);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const handleJumpToSearchResult = (fileId: number, stringId: number) => {
     const file = tree.data?.files.find((f) => f.id === fileId);
     if (!file) return;

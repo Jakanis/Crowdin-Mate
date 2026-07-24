@@ -204,6 +204,22 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
 
   const dirty = text.trim() !== "" && text !== bestTranslationText(s);
 
+  // Ctrl+Shift+Enter (see the textarea's onKeyDown below) approves/
+  // unapproves whichever existing candidate's text currently matches the
+  // box — same target as clicking a candidate's own approve button, just
+  // without leaving the keyboard. A separate mutation from
+  // TranslationItem's own (rather than lifting that one up) since this
+  // only ever needs to fire for whichever one is currently selected, not
+  // track pending/error state per row.
+  const approveSelectedMutation = useMutation({
+    mutationFn: (t: TranslationInfo) =>
+      t.is_approved ? api.unapproveTranslation(projectId, t.id) : api.approveTranslation(projectId, t.id),
+    onSuccess: () => {
+      refetchStrings();
+      notifyProgressChanged(fileId);
+    },
+  });
+
   // Same query TmPanel (right sidebar) runs — same queryKey, so this is
   // never an extra network request beyond what the sidebar already
   // needs, and this component sees the freshest known data whether or
@@ -372,6 +388,18 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         className="string-target"
         value={text}
         onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (!(e.ctrlKey || e.metaKey) || e.key !== "Enter") return;
+          e.preventDefault();
+          if (e.shiftKey) {
+            const selected = displayTranslations.find((t) => t.text === text);
+            if (canApprove && selected && !approveSelectedMutation.isPending) {
+              approveSelectedMutation.mutate(selected);
+            }
+          } else if (dirty && !submit.isPending) {
+            submit.mutate();
+          }
+        }}
         placeholder="Type a translation and Save to submit it to Crowdin"
       />
       <div className="string-row-footer">
