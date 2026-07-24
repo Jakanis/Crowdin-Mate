@@ -1,5 +1,6 @@
 """Desktop entrypoint: runs the FastAPI backend in a background thread
-and opens it in a native window via pywebview, instead of a browser tab.
+and opens it in a native window via pywebview, instead of a browser tab
+— pass --browser to get a plain browser tab instead (see BROWSER_MODE).
 
 Requires the frontend to already be built (`npm run build` in
 frontend/, producing frontend/dist) — main.py mounts that directory as
@@ -17,6 +18,7 @@ import sys
 import threading
 import time
 import urllib.request
+import webbrowser
 
 import uvicorn
 import webview
@@ -27,6 +29,16 @@ from app.main import app
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8000
 STARTUP_TIMEOUT_SECONDS = 15
+
+# Some people would rather have this in a regular browser tab — their
+# own extensions/devtools, multiple windows, whatever — than the native
+# window. No separate build for that: same exe, same server, just skip
+# creating the webview window and open the system browser instead. The
+# packaged exe has no console (see desktop.spec), so this only really
+# announces itself via the browser tab that opens; stop it the same way
+# you'd stop any other local server (Task Manager, or Ctrl+C / closing
+# the terminal if launched from one).
+BROWSER_MODE = "--browser" in sys.argv
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +123,20 @@ def main() -> None:
     if not _wait_until_ready(port, STARTUP_TIMEOUT_SECONDS):
         logger.error("Backend didn't come up within %ss — opening the window anyway.", STARTUP_TIMEOUT_SECONDS)
 
+    url = f"http://{HOST}:{port}"
+
+    if BROWSER_MODE:
+        # No native window at all — open the system default browser at
+        # the running backend, then just block forever so the process
+        # (and the daemon server thread with it) doesn't exit the moment
+        # main() would otherwise return.
+        webbrowser.open(url)
+        server_thread.join()
+        return
+
     webview.create_window(
         "Crowdin Mate",
-        f"http://{HOST}:{port}",
+        url,
         width=1360,
         height=880,
         min_size=(960, 640),

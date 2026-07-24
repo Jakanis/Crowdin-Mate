@@ -137,6 +137,22 @@ npm run build
 python desktop.py
 ```
 
+Prefer a regular browser tab over the native window — your own extensions,
+devtools, multiple windows? Pass `--browser` (works the same way whether
+you're running from source or a downloaded release binary, e.g.
+`Crowdin-Mate-Windows.exe --browser` from a terminal or a shortcut with that
+argument):
+
+```bash
+python desktop.py --browser
+```
+
+Same backend, same served frontend — this just skips creating the pywebview
+window and opens your system default browser at it instead. The packaged
+exe has no console, so there's nothing to watch it start; stop it like any
+other local server (Task Manager, or Ctrl+C/closing the terminal if you
+launched it from one).
+
 `server/app/main.py` mounts `frontend/dist` as static files (registered
 *after* every API route, so it never shadows them) whenever that directory
 exists — absent in the normal dev workflow above, since Vite's own dev server
