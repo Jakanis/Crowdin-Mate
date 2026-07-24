@@ -37,23 +37,33 @@ def _migrate_legacy_keyring() -> None:
     renaming the app doesn't force an existing install to re-enter its
     PAT or redo OAuth. Safe to run every startup: each entry is deleted
     from the old service once moved, so this is a no-op after the first
-    run (or on a fresh install with nothing to migrate)."""
-    for username in (
-        KEYRING_USERNAME,
-        KEYRING_OAUTH_CLIENT,
-        KEYRING_OAUTH_ACCESS_TOKEN,
-        KEYRING_OAUTH_REFRESH_TOKEN,
-        KEYRING_OAUTH_EXPIRES_AT,
-    ):
-        if keyring.get_password(KEYRING_SERVICE, username) is not None:
-            continue
-        old_value = keyring.get_password(_OLD_KEYRING_SERVICE, username)
-        if old_value is not None:
-            keyring.set_password(KEYRING_SERVICE, username, old_value)
-            try:
-                keyring.delete_password(_OLD_KEYRING_SERVICE, username)
-            except keyring.errors.PasswordDeleteError:
-                pass
+    run (or on a fresh install with nothing to migrate).
+
+    Runs at import time, so it must tolerate there being no usable
+    keyring backend at all (a bare Linux CI runner or a minimal install
+    with no secret service running) — confirmed live this raises
+    NoKeyringError rather than just returning None, which would
+    otherwise crash the whole app on import before it ever gets a
+    chance to show its own "connect your account" screen."""
+    try:
+        for username in (
+            KEYRING_USERNAME,
+            KEYRING_OAUTH_CLIENT,
+            KEYRING_OAUTH_ACCESS_TOKEN,
+            KEYRING_OAUTH_REFRESH_TOKEN,
+            KEYRING_OAUTH_EXPIRES_AT,
+        ):
+            if keyring.get_password(KEYRING_SERVICE, username) is not None:
+                continue
+            old_value = keyring.get_password(_OLD_KEYRING_SERVICE, username)
+            if old_value is not None:
+                keyring.set_password(KEYRING_SERVICE, username, old_value)
+                try:
+                    keyring.delete_password(_OLD_KEYRING_SERVICE, username)
+                except keyring.errors.PasswordDeleteError:
+                    pass
+    except keyring.errors.KeyringError:
+        pass
 
 
 _migrate_legacy_keyring()
