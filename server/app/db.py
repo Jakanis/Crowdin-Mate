@@ -5,13 +5,20 @@ background sync worker and the request-handling thread don't block each
 other on every read.
 """
 
+import sys
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
 from app.config import DB_PATH
 
-_SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+# Frozen (PyInstaller) builds extract everything under sys._MEIPASS rather
+# than a real checkout with schema.sql sitting next to this file on disk —
+# see desktop.spec, which bundles it at that same "app/schema.sql" path.
+if getattr(sys, "frozen", False):
+    _SCHEMA_PATH = Path(sys._MEIPASS) / "app" / "schema.sql"  # type: ignore[attr-defined]
+else:
+    _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 
 def _connect() -> sqlite3.Connection:

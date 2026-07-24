@@ -11,6 +11,7 @@ SQLite cache under ~/.classicua-client. Only how it's launched differs.
 """
 
 import logging
+import sys
 import threading
 import time
 import urllib.request
@@ -18,6 +19,7 @@ import urllib.request
 import uvicorn
 import webview
 
+from app.config import DATA_DIR
 from app.main import app
 
 HOST = "127.0.0.1"
@@ -26,10 +28,26 @@ STARTUP_TIMEOUT_SECONDS = 15
 
 logger = logging.getLogger(__name__)
 
+# `sys.frozen` is set by PyInstaller (and other freezers) on the packaged
+# build, never when running from source. The packaged exe is windowed (no
+# console — see the PyInstaller spec), so a startup crash would otherwise
+# be completely silent and unreportable; logging to a file here is the
+# packaged build's only real diagnostic trail. Dev-mode keeps logging to
+# its actual terminal instead, unchanged.
+FROZEN = getattr(sys, "frozen", False)
+if FROZEN:
+    log_path = DATA_DIR / "desktop.log"
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.WARNING,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
 
 def _run_server() -> None:
-    # warning, not info — this window has no terminal a user watches;
-    # only real problems are worth its (still-visible, on Windows) console.
+    # warning, not info — nobody's watching a console for this (never true
+    # even in dev-mode strictly, but doubly so once packaged/windowed);
+    # only real problems are worth surfacing at all.
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
 
 
@@ -59,8 +77,34 @@ def main() -> None:
         height=880,
         min_size=(960, 640),
     )
-    webview.start()
+    # Windows/macOS: leave the gui unspecified so pywebview picks its native
+    # backend (WebView2 on Windows, already part of Windows 10 21H2+/11 —
+    # genuinely zero extra install for almost everyone).
+    #
+    # Linux has no equivalent OS-provided web renderer, and pywebview's
+    # default there is the GTK backend (webkit2gtk + PyGObject), which are
+    # system packages tied to GNOME's stack — fine on a GNOME desktop, but
+    # asking a KDE/Qt user to pull in GTK+WebKit2GTK just to run this one
+    # app is exactly the kind of cross-toolkit friction worth avoiding.
+    # Forcing the Qt backend instead (PyQt5 + PyQtWebEngine, see
+    # requirements.txt) sidesteps that entirely: those wheels bundle their
+    # own copy of Qt's shared libraries, so the packaged Linux binary needs
+    # no system GTK *or* Qt pre-installed — same "just run it" experience
+    # regardless of desktop environment.
+    if sys.platform.startswith("linux"):
+        webview.start(gui="qt")
+    else:
+        webview.start()
 
 
 if __name__ == "__main__":
-    main()
+    if FROZEN:
+        # Windowed builds have no console to print a traceback to — log it
+        # to desktop.log instead of vanishing silently on a crash.
+        try:
+            main()
+        except Exception:
+            logger.exception("Fatal error in desktop app")
+            raise
+    else:
+        main()

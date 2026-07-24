@@ -4,6 +4,10 @@ __pycache__/
 .venv/
 venv/
 
+# PyInstaller build output (server/dist/ already covered by the Node
+# "dist/" rule below, but its build/ intermediate dir isn't)
+server/build/
+
 # Node
 node_modules/
 dist/

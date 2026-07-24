@@ -86,6 +86,57 @@ OAuth redirect_uri, same SQLite cache under `~/.classicua-client` either way; on
 launched differs. Rebuild (`npm run build`) after any frontend change — `desktop.py` serves
 whatever was last built, not live source.
 
+## For translators: just download it
+
+No Python, no Node, nothing to install or run from a terminal — grab the latest build from
+the [Releases page](../../releases) for your OS and double-click it:
+
+- **Windows** — `ClassicUA-Translation-Client-Windows.exe`. Uses Windows' own WebView2, which
+  ships with Windows 10 21H2+/11 already, so there's genuinely nothing else to install.
+- **Linux** — `ClassicUA-Translation-Client-Linux`. Mark it executable first
+  (`chmod +x ClassicUA-Translation-Client-Linux`), then run it. Uses pywebview's Qt backend
+  bundled with its own copy of Qt (not your system's GTK or Qt), so it works the same on
+  GNOME, KDE, or anything else — it does still expect a handful of low-level system libraries
+  (OpenGL, fontconfig, X11/XCB, NSS, ALSA — see the full list in
+  [`release.yml`](.github/workflows/release.yml)) that are near-universal on any real desktop
+  Linux install; only a bare/minimal or container-style setup would be missing them.
+
+Either way, the app then walks you through connecting your own Crowdin account (OAuth or a
+Personal Access Token, your choice — see "Prerequisites" above) — nothing is pre-configured
+or shared between users.
+
+## Building a release binary yourself
+
+Both platforms use the same [`server/desktop.spec`](server/desktop.spec) via
+[PyInstaller](https://pyinstaller.org/), producing one self-contained executable with no
+separate Python/Node install required to *run* it (you still need both to *build* it):
+
+```bash
+# 1. Build the frontend (from frontend/)
+npm run build
+
+# 2. Install backend deps + PyInstaller (from server/)
+pip install -r requirements.txt
+pip install pyinstaller
+
+# 3. Build (from server/) — produces server/dist/ClassicUA Translation Client(.exe)
+pyinstaller desktop.spec --noconfirm
+```
+
+PyInstaller doesn't cross-compile — building the Linux binary means actually running this on
+Linux (a real machine, a VM, or WSL2 with WSLg if you want to see the window while testing).
+[`.github/workflows/release.yml`](.github/workflows/release.yml) does exactly this in CI for
+both platforms and attaches the results to a GitHub Release whenever a tag matching `v*` is
+pushed (e.g. `git tag v0.1.0 && git push --tags`) — that's the normal way to cut a release,
+rather than building locally.
+
+Windows and Linux differ only in which web-rendering backend pywebview uses (see
+`desktop.py`'s own docstring): Windows uses the OS's built-in WebView2, Linux uses pywebview's
+Qt backend (`PyQt5` + `PyQtWebEngine`, both platform-conditional in `requirements.txt`)
+instead of its GTK default — GTK/WebKit2GTK are tied to GNOME's stack and aren't things a
+KDE/Qt user should need to install just for this one app, whereas the Qt backend's wheels
+bundle their own copy of Qt and need no system toolkit installed at all, GNOME included.
+
 ## Architecture
 
 See `.claude/plans` in this session, or ask for a recap — short version:

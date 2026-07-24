@@ -5,3 +5,18 @@ keyring>=25.0
 pydantic>=2.0
 requests>=2.31
 pywebview>=5.0
+# Linux only: pywebview's Qt backend (see desktop.py) instead of its
+# GTK default — PyQt5/PyQtWebEngine wheels bundle their own copy of
+# Qt's shared libraries, so this needs no system GTK/WebKit2GTK *or*
+# system Qt installed, unlike the GTK backend which depends on
+# distro packages tied to GNOME's stack. Windows/macOS use their
+# native web renderer instead (WebView2 / WKWebView) and never
+# import these.
+PyQt5>=5.15; sys_platform == "linux"
+PyQtWebEngine>=5.15; sys_platform == "linux"
+# pywebview's Qt platform module imports QtPy (a Qt-binding-agnostic
+# compatibility shim) directly, not PyQt5 itself — confirmed live this
+# is genuinely required, not optional: without it the packaged Linux
+# binary fails at startup with "ModuleNotFoundError: No module named
+# 'qtpy'" even with PyQt5/PyQtWebEngine both present.
+QtPy>=2.4; sys_platform == "linux"

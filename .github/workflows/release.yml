@@ -1,0 +1,84 @@
+name: Build release binaries
+
+# Runs on any tag starting with "v" (e.g. v0.1.0) and attaches the
+# packaged Windows exe + Linux binary to that tag's GitHub Release.
+# workflow_dispatch is there so a build can be re-run by hand (e.g. to
+# retry a flaky runner) without pushing a new tag.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            asset_name: ClassicUA-Translation-Client-Windows.exe
+            built_path: server/dist/ClassicUA Translation Client.exe
+          - os: ubuntu-latest
+            asset_name: ClassicUA-Translation-Client-Linux
+            built_path: server/dist/ClassicUA Translation Client
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # Qt's bundled runtime (see desktop.py/desktop.spec on why Qt over
+      # GTK) still needs a handful of low-level system libraries present
+      # for its X11/XCB platform plugin, NSS (used by QtWebEngine's
+      # embedded Chromium), and ALSA — confirmed by actually launching
+      # the built binary under WSLg: without these it either won't
+      # start at all (missing libsmime3.so/libasound.so.2) or the
+      # window silently never appears (missing libxcb-* pulled in by
+      # libqxcb.so). All of these are near-universal on any real desktop
+      # Linux install; it's specifically bare CI/container images that
+      # strip them.
+      - name: Install Linux Qt runtime libs
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1 libxkbcommon0 libxkbcommon-x11-0 fontconfig \
+            libxcb-cursor0 libxcb-icccm4 libxcb-xkb1 libxcb-keysyms1 \
+            libxcb-shape0 libxcb-xinerama0 libxcb-render-util0 libxcb-image0 \
+            libnss3 libasound2t64
+
+      - name: Install backend dependencies
+        working-directory: server
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        working-directory: server
+        run: pyinstaller desktop.spec --noconfirm
+
+      - name: Rename asset
+        shell: bash
+        run: cp "${{ matrix.built_path }}" "${{ matrix.asset_name }}"
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset_name }}

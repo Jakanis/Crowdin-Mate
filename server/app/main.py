@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1224,6 +1225,14 @@ async def search_glossary_endpoint(
 # already exist before this or it would shadow them. Absent entirely in
 # the normal dev workflow (Vite's own dev server on :5173 serves the
 # frontend then, and this directory won't exist yet).
-_FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+#
+# Path resolution differs once PyInstaller-frozen: __file__ no longer
+# sits inside a real checkout with frontend/ as a sibling of server/ —
+# everything's extracted under sys._MEIPASS instead (see desktop.spec,
+# which bundles frontend/dist there at the top level).
+if getattr(sys, "frozen", False):
+    _FRONTEND_DIST = Path(sys._MEIPASS) / "frontend" / "dist"  # type: ignore[attr-defined]
+else:
+    _FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if _FRONTEND_DIST.is_dir():
     app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="frontend")
