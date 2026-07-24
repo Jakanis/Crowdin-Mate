@@ -29,7 +29,7 @@ from app.sync.live_search import search_project_live
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
 from app.sync import search_index
 from app.sync.suggestions_sync import has_looked_up, search_tm_live, sync_glossary_matches, sync_tm_matches
-from app.sync.tree_sync import sync_project_tree
+from app.sync.tree_sync import check_and_sync_if_changed, sync_project_tree
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -317,12 +317,32 @@ async def list_projects():
 
 @app.post("/projects/{project_id}/sync-tree")
 async def trigger_tree_sync(project_id: int):
-    """Runs synchronously for now (Phase 0) — a project this size crawls
-    in low tens of seconds via recursion=True, acceptable for an explicit
-    user-triggered action. Will move to a background job + progress
-    endpoint if that stops being true in practice."""
+    """Explicit, user-triggered full crawl (the "Sync tree" button) —
+    always runs regardless of whether anything's actually changed, since
+    clicking it is itself a deliberate "I want to be sure" action. Runs
+    synchronously for now (Phase 0) — a project this size crawls in low
+    tens of seconds via recursion=True, acceptable for an explicit
+    action. Will move to a background job + progress endpoint if that
+    stops being true in practice."""
     try:
         result = await run_in_threadpool(sync_project_tree, project_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    return result
+
+
+@app.post("/projects/{project_id}/sync-tree/check")
+async def trigger_tree_sync_check(project_id: int):
+    """The automatic/periodic path (see useSyncTree.ts) — unlike the plain
+    /sync-tree endpoint above, this only runs the actual crawl if a cheap
+    single-call check (get_project's lastActivity) says something's
+    changed since last time. Deliberately NOT the same endpoint as the
+    manual button: a full unconditional re-crawl is fine as an explicit,
+    occasional user action, but doing that automatically on a timer for a
+    project with tens of thousands of files is the exact wasteful
+    behavior this replaces."""
+    try:
+        result = await run_in_threadpool(check_and_sync_if_changed, project_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
     return result
@@ -332,7 +352,9 @@ async def trigger_tree_sync(project_id: int):
 async def get_tree(project_id: int):
     """Flat list of directories + files from the LOCAL cache only — never
     hits the Crowdin API. The frontend assembles/virtualizes the tree
-    client-side from this flat shape."""
+    client-side from this flat shape. last_full_sync_at rides along so
+    the "Sync tree" button can show a "last synced" tooltip without a
+    separate round trip."""
     with get_conn() as conn:
         directories = [
             dict(row) for row in conn.execute(
@@ -346,7 +368,11 @@ async def get_tree(project_id: int):
                 (project_id,),
             )
         ]
-    return {"directories": directories, "files": files}
+        project_row = conn.execute(
+            "SELECT last_full_sync_at FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+    last_full_sync_at = project_row["last_full_sync_at"] if project_row is not None else None
+    return {"directories": directories, "files": files, "last_full_sync_at": last_full_sync_at}
 
 
 @app.get("/projects/{project_id}/tree-progress")
@@ -426,7 +452,7 @@ async def resync_file_content(project_id: int, file_id: int, language_id: str):
     return result
 
 
-def _search_strings_local(project_id: int, q: str, limit: int) -> list[dict]:
+def _search_strings_local(project_id: int, q: str, language_id: str, limit: int) -> list[dict]:
     """Full-text search over whatever's cached locally — the fallback
     when the live API search below fails (offline, rate-limited, or any
     other API error), so search still works with no network at all.
@@ -435,27 +461,33 @@ def _search_strings_local(project_id: int, q: str, limit: int) -> list[dict]:
     /search-index/build run. Query is treated as a literal phrase with a
     prefix match on the trailing word (quoting sidesteps FTS5's own
     query-syntax special characters), which reads sensibly for
-    search-as-you-type."""
+    search-as-you-type.
+
+    strings_fts_map.language_id = '' rows are source-only (no target
+    language synced yet for that string) and match regardless of the
+    requested language, so source text stays searchable before any
+    translation sync has happened."""
     fts_query = '"' + q.replace('"', '""') + '"*'
     with get_conn() as conn:
         try:
             rows = conn.execute(
                 """
                 SELECT
-                    strings_fts.rowid AS string_id,
+                    m.string_id AS string_id,
                     ss.file_id,
                     ss.identifier,
                     f.path AS file_path,
                     snippet(strings_fts, 1, '⟦', '⟧', '…', 12) AS source_snippet,
                     snippet(strings_fts, 2, '⟦', '⟧', '…', 12) AS target_snippet
                 FROM strings_fts
-                JOIN source_strings ss ON ss.id = strings_fts.rowid
+                JOIN strings_fts_map m ON m.id = strings_fts.rowid
+                JOIN source_strings ss ON ss.id = m.string_id
                 JOIN files f ON f.id = ss.file_id
-                WHERE strings_fts MATCH ? AND ss.project_id = ?
+                WHERE strings_fts MATCH ? AND ss.project_id = ? AND (m.language_id = ? OR m.language_id = '')
                 ORDER BY rank
                 LIMIT ?
                 """,
-                (fts_query, project_id, limit),
+                (fts_query, project_id, language_id, limit),
             ).fetchall()
         except sqlite3.OperationalError as exc:
             raise HTTPException(status_code=400, detail=f"Bad search query: {exc}")
@@ -477,7 +509,7 @@ async def search_strings(project_id: int, q: str, language_id: str, limit: int =
     try:
         live_results = await run_in_threadpool(search_project_live, project_id, q, language_id, limit)
     except APIException:
-        return {"results": _search_strings_local(project_id, q, limit)}
+        return {"results": _search_strings_local(project_id, q, language_id, limit)}
 
     file_ids = list({r["file_id"] for r in live_results if r["file_id"] is not None})
     with get_conn() as conn:
@@ -504,32 +536,36 @@ async def build_search_index(project_id: int, language_id: str):
     project, not just what's been opened. See search_index.py — safe to
     call repeatedly; a build already in progress is left alone."""
     started = search_index.start(project_id, language_id)
-    return {"started": started, **search_index.get_status(project_id)}
+    return {"started": started, **search_index.get_status(project_id, language_id)}
 
 
 @app.get("/projects/{project_id}/search-index/status")
-async def get_search_index_status(project_id: int):
-    return search_index.get_status(project_id)
+async def get_search_index_status(project_id: int, language_id: str):
+    return search_index.get_status(project_id, language_id)
 
 
 @app.post("/projects/{project_id}/search-index/stop")
-async def stop_search_index(project_id: int):
-    search_index.request_stop(project_id)
-    return search_index.get_status(project_id)
+async def stop_search_index(project_id: int, language_id: str):
+    search_index.request_stop(project_id, language_id)
+    return search_index.get_status(project_id, language_id)
 
 
 @app.get("/projects/{project_id}/files/{file_id}/strings")
 async def get_file_strings(project_id: int, file_id: int, language_id: str, background_tasks: BackgroundTasks):
     """Reads from the local cache first — instant even for a large file —
     then revalidates in the background. On a file that's never been
-    opened before (content_synced_at is null) we sync synchronously once,
-    since there's nothing useful to show from an empty cache yet."""
+    synced for this specific language before, we sync synchronously once,
+    since there's nothing useful to show from an empty cache yet — keyed
+    per (file, language), not just per file, so opening an already-opened
+    file in a second language doesn't skip straight to a background-only
+    revalidation and show an empty translation list in the meantime."""
     with get_conn() as conn:
-        content_synced_at = conn.execute(
-            "SELECT content_synced_at FROM files WHERE id = ?", (file_id,)
+        synced = conn.execute(
+            "SELECT 1 FROM file_language_sync WHERE file_id = ? AND language_id = ?",
+            (file_id, language_id),
         ).fetchone()
 
-    if content_synced_at is None or content_synced_at["content_synced_at"] is None:
+    if synced is None:
         try:
             await run_in_threadpool(sync_file_content, project_id, file_id, language_id)
         except APIException as exc:

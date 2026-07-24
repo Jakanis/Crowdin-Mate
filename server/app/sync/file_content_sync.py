@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn
+from app.sync.search_fts import upsert_target_text
 
 logger = logging.getLogger(__name__)
 
@@ -164,20 +165,32 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
             translation_texts_by_string.setdefault(t["_string_id"], []).append(t.get("text", ""))
 
         for s in strings:
-            conn.execute("DELETE FROM strings_fts WHERE rowid = ?", (s["id"],))
-            conn.execute(
-                "INSERT INTO strings_fts(rowid, identifier, source_text, target_text) VALUES (?, ?, ?, ?)",
-                (
-                    s["id"],
-                    s.get("identifier") or "",
-                    s.get("text") or "",
-                    " ".join(translation_texts_by_string.get(s["id"], [])),
-                ),
+            upsert_target_text(
+                conn,
+                s["id"],
+                language_id,
+                s.get("identifier") or "",
+                s.get("text") or "",
+                " ".join(translation_texts_by_string.get(s["id"], [])),
             )
 
         conn.execute(
             "UPDATE files SET content_synced_at = ? WHERE id = ?",
             (now, file_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO file_language_sync (file_id, language_id, synced_at) VALUES (?, ?, ?)
+            ON CONFLICT(file_id, language_id) DO UPDATE SET synced_at = excluded.synced_at
+            """,
+            (file_id, language_id, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO file_search_sync (file_id, language_id, synced_at) VALUES (?, ?, ?)
+            ON CONFLICT(file_id, language_id) DO UPDATE SET synced_at = excluded.synced_at
+            """,
+            (file_id, language_id, now),
         )
 
     logger.info(

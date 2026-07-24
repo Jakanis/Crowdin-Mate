@@ -5,6 +5,7 @@ import { api, type SearchResult } from "../api/client";
 interface SearchPanelProps {
   projectId: number;
   languageId: string;
+  languageName: string;
   onJumpToResult: (fileId: number, stringId: number) => void;
 }
 
@@ -30,7 +31,7 @@ function Snippet({ text }: { text: string }) {
  * (whatever's cached) if the API call fails, e.g. offline — the explicit
  * opt-in "build full index" job below exists for that offline case, not
  * for search coverage in general anymore. */
-export function SearchPanel({ projectId, languageId, onJumpToResult }: SearchPanelProps) {
+export function SearchPanel({ projectId, languageId, languageName, onJumpToResult }: SearchPanelProps) {
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -47,18 +48,18 @@ export function SearchPanel({ projectId, languageId, onJumpToResult }: SearchPan
   });
 
   const indexStatus = useQuery({
-    queryKey: ["search-index-status", projectId],
-    queryFn: () => api.getSearchIndexStatus(projectId),
+    queryKey: ["search-index-status", projectId, languageId],
+    queryFn: () => api.getSearchIndexStatus(projectId, languageId),
     refetchInterval: (query) => (query.state.data?.running ? 1000 : false),
   });
 
   const build = useMutation({
     mutationFn: () => api.buildSearchIndex(projectId, languageId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["search-index-status", projectId] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["search-index-status", projectId, languageId] }),
   });
   const stop = useMutation({
-    mutationFn: () => api.stopSearchIndex(projectId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["search-index-status", projectId] }),
+    mutationFn: () => api.stopSearchIndex(projectId, languageId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["search-index-status", projectId, languageId] }),
   });
 
   const status = indexStatus.data;
@@ -69,7 +70,7 @@ export function SearchPanel({ projectId, languageId, onJumpToResult }: SearchPan
       <input
         className="search-input"
         type="text"
-        placeholder="Search source or Ukrainian text…"
+        placeholder={`Search source or ${languageName} text…`}
         value={input}
         onChange={(e) => setInput(e.target.value)}
         autoFocus

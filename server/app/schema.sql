@@ -6,7 +6,10 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     source_language TEXT NOT NULL,
     target_languages_json TEXT NOT NULL DEFAULT '[]',
-    last_full_sync_at TEXT
+    last_full_sync_at TEXT,
+    -- Crowdin's own project-level "last activity" timestamp — see the
+    -- _COLUMN_MIGRATIONS entry in db.py for why this exists.
+    last_activity TEXT
 );
 
 CREATE TABLE IF NOT EXISTS directories (
@@ -249,11 +252,52 @@ CREATE TABLE IF NOT EXISTS app_config (
 -- explicit background indexing job in search_index.py for whoever wants
 -- full-project coverage. Kept in sync explicitly, right alongside the
 -- writes in sync_file_content, rather than via FTS5 external-content
--- triggers — simpler to reason about at this scale. rowid = string_id.
--- target_text is every cached translation candidate for that string
--- space-joined, so a match on any candidate's wording is found.
+-- triggers — simpler to reason about at this scale. target_text is every
+-- cached translation candidate for that string space-joined, so a match
+-- on any candidate's wording is found.
+--
+-- One row per (string_id, language_id) — a project can have several
+-- target languages, each with its own target_text, so a single row per
+-- string (the original design) could only ever hold one language's text
+-- at a time. FTS5 columns can't be indexed for plain equality lookups
+-- and rowid can't represent a composite key on its own, so strings_fts_map
+-- below bridges (string_id, language_id) to this table's rowid via a real
+-- B-tree index — see app/sync/search_fts.py for the read/write helpers.
+-- language_id = '' is a placeholder used when only source text (no
+-- specific language's target text yet) has been synced for a string, so
+-- it's still searchable before any translation sync has happened.
 CREATE VIRTUAL TABLE IF NOT EXISTS strings_fts USING fts5(
     identifier,
     source_text,
     target_text
+);
+
+CREATE TABLE IF NOT EXISTS strings_fts_map (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    string_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    UNIQUE (string_id, language_id)
+);
+CREATE INDEX IF NOT EXISTS idx_strings_fts_map_string ON strings_fts_map (string_id);
+
+-- Per-(file, language) sync tracking — files.content_synced_at/
+-- search_synced_at only record "synced for SOME language at some point",
+-- which wrongly treated one language's sync as covering every language:
+-- opening an already-synced file in a second language skipped the
+-- synchronous first sync (see get_file_strings in main.py, showing an
+-- empty translation list until a background revalidation catches up),
+-- and a second-language search-index build silently found nothing left
+-- to do (see search_index.py).
+CREATE TABLE IF NOT EXISTS file_language_sync (
+    file_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY (file_id, language_id)
+);
+
+CREATE TABLE IF NOT EXISTS file_search_sync (
+    file_id INTEGER NOT NULL,
+    language_id TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    PRIMARY KEY (file_id, language_id)
 );

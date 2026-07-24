@@ -49,6 +49,7 @@ export interface TreeFile {
 export interface TreeResponse {
   directories: TreeDirectory[];
   files: TreeFile[];
+  last_full_sync_at: string | null;
 }
 
 export interface ProgressInfo {
@@ -205,6 +206,11 @@ export const api = {
       `/projects/${projectId}/sync-tree`,
       { method: "POST" },
     ),
+  checkSyncTree: (projectId: number) =>
+    request<{ project_id: number; synced: boolean; changed_file_ids: number[] }>(
+      `/projects/${projectId}/sync-tree/check`,
+      { method: "POST" },
+    ),
   getTree: (projectId: number) => request<TreeResponse>(`/projects/${projectId}/tree`),
   getTreeProgress: (projectId: number, languageId: string, parentId?: number) =>
     request<TreeProgressResponse>(
@@ -228,15 +234,20 @@ export const api = {
     request<{ results: SearchResult[] }>(
       `/projects/${projectId}/search?${new URLSearchParams({ q, language_id: languageId }).toString()}`,
     ),
-  getSearchIndexStatus: (projectId: number) =>
-    request<SearchIndexStatus>(`/projects/${projectId}/search-index/status`),
+  getSearchIndexStatus: (projectId: number, languageId: string) =>
+    request<SearchIndexStatus>(
+      `/projects/${projectId}/search-index/status?language_id=${encodeURIComponent(languageId)}`,
+    ),
   buildSearchIndex: (projectId: number, languageId: string) =>
     request<SearchIndexStatus & { started: boolean }>(
       `/projects/${projectId}/search-index/build?language_id=${encodeURIComponent(languageId)}`,
       { method: "POST" },
     ),
-  stopSearchIndex: (projectId: number) =>
-    request<SearchIndexStatus>(`/projects/${projectId}/search-index/stop`, { method: "POST" }),
+  stopSearchIndex: (projectId: number, languageId: string) =>
+    request<SearchIndexStatus>(
+      `/projects/${projectId}/search-index/stop?language_id=${encodeURIComponent(languageId)}`,
+      { method: "POST" },
+    ),
   getOfflineQueue: () => request<{ items: OfflineQueueItem[] }>("/offline-queue"),
   drainOfflineQueue: () => request<{ drained: number }>("/offline-queue/drain", { method: "POST" }),
   retryOfflineQueueItem: (itemId: number) =>

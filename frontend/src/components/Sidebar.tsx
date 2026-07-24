@@ -7,6 +7,7 @@ import { SearchPanel } from "./SearchPanel";
 interface SidebarProps {
   projectId: number;
   languageId: string;
+  languageName: string;
   directories: TreeDirectory[];
   files: TreeFile[];
   onSelectFile: (file: TreeFile) => void;
@@ -29,6 +30,7 @@ type Tab = "files" | "strings" | "search";
 export function Sidebar({
   projectId,
   languageId,
+  languageName,
   directories,
   files,
   onSelectFile,
@@ -93,7 +95,12 @@ export function Sidebar({
         <FileStringsList strings={strings} focusedStringId={focusedStringId} onSelect={onFocusString} />
       </div>
       <div className="sidebar-panel" hidden={tab !== "search"}>
-        <SearchPanel projectId={projectId} languageId={languageId} onJumpToResult={onJumpToSearchResult} />
+        <SearchPanel
+          projectId={projectId}
+          languageId={languageId}
+          languageName={languageName}
+          onJumpToResult={onJumpToSearchResult}
+        />
       </div>
       {openFilesSection}
       </aside>

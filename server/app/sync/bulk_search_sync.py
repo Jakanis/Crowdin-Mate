@@ -36,6 +36,7 @@ import requests
 
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn
+from app.sync.search_fts import upsert_source_text, upsert_target_text
 
 logger = logging.getLogger(__name__)
 
@@ -90,19 +91,7 @@ def bulk_sync_source_strings(project_id: int) -> int:
                     now,
                 ),
             )
-            existing = conn.execute(
-                "SELECT target_text FROM strings_fts WHERE rowid = ?", (s["id"],)
-            ).fetchone()
-            conn.execute("DELETE FROM strings_fts WHERE rowid = ?", (s["id"],))
-            conn.execute(
-                "INSERT INTO strings_fts(rowid, identifier, source_text, target_text) VALUES (?, ?, ?, ?)",
-                (
-                    s["id"],
-                    s.get("identifier") or "",
-                    s.get("text") or "",
-                    existing["target_text"] if existing else "",
-                ),
-            )
+            upsert_source_text(conn, s["id"], s.get("identifier") or "", s.get("text") or "")
     logger.info("bulk source sync: %d string(s) for project %s", len(strings), project_id)
     return len(strings)
 
@@ -135,21 +124,21 @@ def sync_file_target_text_fast(project_id: int, file_id: int, language_id: str) 
     now = _now()
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, identifier FROM source_strings WHERE file_id = ?", (file_id,)
+            "SELECT id, identifier, text FROM source_strings WHERE file_id = ?", (file_id,)
         ).fetchall()
         for row in rows:
             target_text = target_by_identifier.get(row["identifier"])
             if target_text is None:
                 continue
-            existing = conn.execute(
-                "SELECT identifier, source_text FROM strings_fts WHERE rowid = ?", (row["id"],)
-            ).fetchone()
-            if existing is None:
-                continue
-            conn.execute("DELETE FROM strings_fts WHERE rowid = ?", (row["id"],))
-            conn.execute(
-                "INSERT INTO strings_fts(rowid, identifier, source_text, target_text) VALUES (?, ?, ?, ?)",
-                (row["id"], existing["identifier"], existing["source_text"], target_text),
+            upsert_target_text(
+                conn, row["id"], language_id, row["identifier"] or "", row["text"] or "", target_text
             )
         conn.execute("UPDATE files SET search_synced_at = ? WHERE id = ?", (now, file_id))
+        conn.execute(
+            """
+            INSERT INTO file_search_sync (file_id, language_id, synced_at) VALUES (?, ?, ?)
+            ON CONFLICT(file_id, language_id) DO UPDATE SET synced_at = excluded.synced_at
+            """,
+            (file_id, language_id, now),
+        )
     return True

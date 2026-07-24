@@ -384,6 +384,7 @@ export function App() {
           <Sidebar
             projectId={projectId}
             languageId={languageId}
+            languageName={languageName}
             directories={tree.data?.directories ?? []}
             files={tree.data?.files ?? []}
             onSelectFile={handleSelectFile}
