@@ -5,12 +5,14 @@ Requires the frontend to already be built (`npm run build` in
 frontend/, producing frontend/dist) — main.py mounts that directory as
 static files when it's present. See README's "Desktop app" section.
 
-The backend is otherwise unchanged from dev mode: same port (8000),
-same OAuth redirect_uri (http://localhost:8000/oauth/callback), same
-SQLite cache under ~/.crowdin-mate. Only how it's launched differs.
+The backend is otherwise unchanged from dev mode: same OAuth
+redirect_uri (http://localhost:8000/oauth/callback), same SQLite cache
+under ~/.crowdin-mate. Only how it's launched differs — and, since a
+fixed port, differs in one more way: see _pick_port below.
 """
 
 import logging
+import socket
 import sys
 import threading
 import time
@@ -23,7 +25,7 @@ from app.config import DATA_DIR
 from app.main import app
 
 HOST = "127.0.0.1"
-PORT = 8000
+PREFERRED_PORT = 8000
 STARTUP_TIMEOUT_SECONDS = 15
 
 logger = logging.getLogger(__name__)
@@ -44,16 +46,44 @@ if FROZEN:
     )
 
 
-def _run_server() -> None:
+def _pick_port(preferred: int) -> int:
+    """Prefer the well-known fixed port — oauth.py's REDIRECT_URI, and
+    whatever the user registered as their OAuth app's callback URL on
+    crowdin.com, are both hardcoded to it — but fall back to an
+    OS-assigned free port if something else already holds it, rather
+    than trusting it's free and finding out later the hard way.
+
+    Confirmed live: the previous version always used the fixed port and
+    only checked readiness via an HTTP request, not an actual bind. A
+    leftover process already listening there (e.g. a dev-mode backend
+    left running from a previous session) made that check succeed
+    against the WRONG server — this app's own window then loaded
+    whatever THAT process served (or didn't), with nothing to indicate
+    it wasn't talking to itself. Binding here first means "success"
+    only ever means our own process actually holds the port.
+
+    Deliberately no SO_REUSEADDR on this probe socket — on Windows it
+    can let a bind succeed even while another process is genuinely
+    still listening on that port (unlike its TIME_WAIT-only behavior
+    on Linux/macOS), which would silently defeat this exact check."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((HOST, preferred))
+        except OSError:
+            sock.bind((HOST, 0))
+        return sock.getsockname()[1]
+
+
+def _run_server(port: int) -> None:
     # warning, not info — nobody's watching a console for this (never true
     # even in dev-mode strictly, but doubly so once packaged/windowed);
     # only real problems are worth surfacing at all.
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    uvicorn.run(app, host=HOST, port=port, log_level="warning")
 
 
-def _wait_until_ready(timeout: float) -> bool:
+def _wait_until_ready(port: int, timeout: float) -> bool:
     deadline = time.monotonic() + timeout
-    url = f"http://{HOST}:{PORT}/auth/status"
+    url = f"http://{HOST}:{port}/auth/status"
     while time.monotonic() < deadline:
         try:
             urllib.request.urlopen(url, timeout=0.5)
@@ -64,15 +94,26 @@ def _wait_until_ready(timeout: float) -> bool:
 
 
 def main() -> None:
-    server_thread = threading.Thread(target=_run_server, daemon=True)
+    port = _pick_port(PREFERRED_PORT)
+    if port != PREFERRED_PORT:
+        logger.warning(
+            "Port %s was unavailable, using %s instead. A Personal Access "
+            "Token still works normally, and an already-connected OAuth "
+            "session keeps refreshing fine either way — but starting a "
+            "brand-new OAuth connection won't work this session, since "
+            "its callback URL is fixed to port %s.",
+            PREFERRED_PORT, port, PREFERRED_PORT,
+        )
+
+    server_thread = threading.Thread(target=_run_server, args=(port,), daemon=True)
     server_thread.start()
 
-    if not _wait_until_ready(STARTUP_TIMEOUT_SECONDS):
+    if not _wait_until_ready(port, STARTUP_TIMEOUT_SECONDS):
         logger.error("Backend didn't come up within %ss — opening the window anyway.", STARTUP_TIMEOUT_SECONDS)
 
     webview.create_window(
         "Crowdin Mate",
-        f"http://{HOST}:{PORT}",
+        f"http://{HOST}:{port}",
         width=1360,
         height=880,
         min_size=(960, 640),

@@ -1,4 +1,12 @@
-const API_BASE = "http://127.0.0.1:8000";
+// The packaged desktop app serves the frontend and the API from the same
+// origin (see desktop.py's _pick_port — the backend's port isn't always
+// 8000, since it falls back to an OS-assigned one if 8000 is already
+// taken), so relative requests just work there regardless of the actual
+// port. The dev workflow is the one case frontend and backend are
+// genuinely different origins — Vite's dev server is pinned to 5173
+// (strictPort, see vite.config.ts) while the dev backend is always 8000 —
+// so that's the only case needing an explicit absolute URL.
+const API_BASE = window.location.port === "5173" ? "http://127.0.0.1:8000" : "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
