@@ -1177,6 +1177,15 @@ body {
   resize: none;
   overflow: hidden;
   min-height: 44px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  /* The browser's native focus ring here reads as too heavy against
+     this box's own accent-colored surroundings — a plain border-color
+     shift is a subtler, still-clearly-visible alternative. */
+  outline: none;
+  transition: border-color 0.15s ease;
   /* Native auto-grow instead of the old JS scrollHeight measurement +
      ResizeObserver combo — that approach lagged a step behind during a
      fast continuous side-panel drag (confirmed live: scrollHeight
@@ -1187,6 +1196,10 @@ body {
      box in the same synchronous layout pass as the resize itself, so
      there's nothing to lag. */
   field-sizing: content;
+}
+
+.string-target:focus {
+  border-color: var(--accent);
 }
 
 .string-row-footer {
