@@ -499,16 +499,23 @@ async def search_strings(project_id: int, q: str, language_id: str, limit: int =
     """Searches the whole project live via Crowdin's CroQL query
     language (source text or any translation containing the query) —
     unlike the local FTS index, coverage isn't limited to files that
-    happen to be cached. Falls back to the local index on any API
-    error (offline, rate-limited, etc.), so search still works with no
-    network at all, just narrower."""
+    happen to be cached. Falls back to the local index on any failure
+    to reach Crowdin at all, so search still works with no network,
+    just narrower — deliberately catching more than APIException: a
+    genuine outage (or the simulate-offline debug toggle, see
+    SimulatedOfflineError's docstring) raises requests.ConnectionError/
+    Timeout, which never got far enough to receive an HTTP response to
+    wrap as an APIException, so catching only that left a real or
+    simulated outage surfacing as a raw 500 instead of degrading to the
+    local index like this endpoint is meant to."""
     q = q.strip()
     if not q:
         return {"results": []}
 
     try:
         live_results = await run_in_threadpool(search_project_live, project_id, q, language_id, limit)
-    except APIException:
+    except Exception as exc:
+        logger.info("Live search failed, falling back to local index: %s", exc)
         return {"results": _search_strings_local(project_id, q, language_id, limit)}
 
     file_ids = list({r["file_id"] for r in live_results if r["file_id"] is not None})
