@@ -102,6 +102,18 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   };
 
   useEffect(() => {
+    // Switching project or language without a full page reload (the
+    // header picker) left this component mounted, so fetchedParents/
+    // dirProgress/fileProgress still held the PREVIOUS project's or
+    // language's data — "root" already being in fetchedParents meant
+    // the guard below silently skipped re-fetching it for whatever's
+    // now selected, leaving root-level items with no progress at all
+    // (or, switching language only, stale percentages from the old
+    // language mislabeled as the new one). Clear all three before
+    // fetching fresh.
+    fetchedParents.current = new Set();
+    setDirProgress(new Map());
+    setFileProgress(new Map());
     fetchProgressFor("root");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, languageId]);
