@@ -4,10 +4,18 @@ import { FileStringsList } from "./FileStringsList";
 import { FileTree } from "./FileTree";
 import { SearchPanel } from "./SearchPanel";
 
+interface SyncState {
+  trigger: () => void;
+  isPending: boolean;
+  changed: boolean;
+}
+
 interface SidebarProps {
   projectId: number;
   languageId: string;
   languageName: string;
+  sync: SyncState;
+  lastFullSyncAt: string | null;
   directories: TreeDirectory[];
   files: TreeFile[];
   onSelectFile: (file: TreeFile) => void;
@@ -31,6 +39,8 @@ export function Sidebar({
   projectId,
   languageId,
   languageName,
+  sync,
+  lastFullSyncAt,
   directories,
   files,
   onSelectFile,
@@ -89,6 +99,8 @@ export function Sidebar({
           directories={directories}
           files={files}
           onSelectFile={onSelectFile}
+          sync={sync}
+          lastFullSyncAt={lastFullSyncAt}
         />
       </div>
       <div className="sidebar-panel" hidden={!(tab === "strings" && selectedFile != null)}>

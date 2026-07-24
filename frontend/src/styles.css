@@ -203,10 +203,15 @@ body {
   border-bottom: 1px solid rgba(128, 128, 128, 0.3);
 }
 
-.app-header h1 {
+.header-title {
   font-size: calc(16px * var(--ui-scale));
   margin: 0;
   white-space: nowrap;
+}
+
+.header-title-sep,
+.header-title-static {
+  opacity: 0.85;
 }
 
 .app-header-actions {
@@ -216,20 +221,73 @@ body {
   margin-left: auto;
 }
 
-.project-picker {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* Header title acting as a picker: the project/language name itself is
+   the clickable control (underlined to read as such), rather than a
+   permanent <select> sitting in the header next to plain text. */
+.header-picker {
+  position: relative;
+  display: inline-block;
 }
 
-.project-picker select {
-  font-size: calc(12.5px * var(--ui-scale));
-  padding: 4px 6px;
+.header-picker-trigger {
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(128, 128, 128, 0.6);
+}
+
+.header-picker-trigger:hover {
+  text-decoration-color: var(--accent);
+  color: var(--accent);
+}
+
+.header-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  max-width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
   border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-elevated);
-  color: var(--fg);
-  max-width: 220px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.header-picker-menu button {
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font-size: calc(13px * var(--ui-scale));
+  cursor: pointer;
+}
+
+.header-picker-menu button:hover {
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.header-picker-menu button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .header-link-button {
@@ -245,22 +303,6 @@ body {
 
 .header-link-button:hover {
   background: rgba(128, 128, 128, 0.1);
-}
-
-.sync-progress {
-  display: block;
-  width: 80px;
-  height: 6px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: rgba(128, 128, 128, 0.2);
-}
-
-.sync-progress-fill {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.2s linear;
 }
 
 .stale-file-banner {
@@ -1832,6 +1874,24 @@ body {
 
 .file-tree-search-clear:hover {
   opacity: 1;
+}
+
+.file-tree-sync-btn {
+  flex-shrink: 0;
+}
+
+/* Painted to signal "something changed on Crowdin since your last sync"
+   — the periodic cheap check (see useSyncTree.ts) sets this instead of
+   silently re-syncing on its own, so the button itself is the only
+   indication until the user clicks it. */
+.file-tree-sync-btn--changed {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-bg);
+}
+
+.file-tree-sync-btn--changed:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .file-tree-search-status {

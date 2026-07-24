@@ -42,35 +42,29 @@ function averageDuration(projectId: number): number {
  *   given project, so an average of the last few real run durations
  *   (localStorage, not a big deal to lose on a cache clear) is a
  *   reasonable stand-in for a real percentage. Capped at 95% until the
- *   call actually resolves, so it never lies about being done. Only the
- *   manual button gets this treatment — see below for why.
+ *   call actually resolves, so it never lies about being done.
  *
- * - Background check (every 10 minutes): this used to unconditionally
- *   re-run the full directories/files/labels crawl on a timer, which
- *   for a project with tens of thousands of files meant silently
- *   re-crawling everything every 10 minutes whether or not anything had
- *   actually changed. Replaced with a cheap single-API-call check
- *   (get_project's lastActivity — see check_and_sync_if_changed on the
- *   backend) that only escalates to an actual full crawl when something
- *   has genuinely changed since last time. Deliberately silent/no
- *   progress-bar for this path — it runs in the background, not while
- *   someone's actively watching and waiting the way clicking the button
- *   implies — but its end effects (tree query invalidated,
- *   changed_file_ids surfaced for the stale-file banner) are identical
- *   to a manual sync whenever it does end up running one.
+ * - Background check (every 10 minutes, plus once on mount/project
+ *   switch): this used to unconditionally re-run the full
+ *   directories/files/labels crawl on a timer, which for a project with
+ *   tens of thousands of files meant silently re-crawling everything
+ *   whether or not anything had actually changed — and then it did that
+ *   re-crawl invisibly, with no indication anything had happened.
+ *   Replaced with a cheap single-API-call check (get_project's
+ *   lastActivity — see has_project_changed on the backend) that never
+ *   triggers a sync on its own; it only flips `changed` to true so the
+ *   sync button can be painted and its hover hint updated. The user
+ *   still decides when to actually pull, via the same manual trigger()
+ *   as always.
  */
 export function useSyncTree(projectId: number) {
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<number | null>(null);
   const [changedFileIds, setChangedFileIds] = useState<number[]>([]);
+  const [changed, setChanged] = useState(false);
   const startRef = useRef<number | null>(null);
   const estimateRef = useRef(FALLBACK_ESTIMATE_MS);
   const progressTimerRef = useRef<number | null>(null);
-
-  const applySyncResult = (result: { changed_file_ids: number[] }) => {
-    queryClient.invalidateQueries({ queryKey: ["tree", projectId] });
-    setChangedFileIds(result.changed_file_ids);
-  };
 
   const mutation = useMutation({
     mutationFn: () => api.syncTree(projectId),
@@ -84,7 +78,11 @@ export function useSyncTree(projectId: number) {
         setProgress(Math.min(0.95, elapsed / estimateRef.current));
       }, 200);
     },
-    onSuccess: applySyncResult,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["tree", projectId] });
+      setChangedFileIds(result.changed_file_ids);
+      setChanged(false);
+    },
     onSettled: () => {
       if (progressTimerRef.current != null) window.clearInterval(progressTimerRef.current);
       if (startRef.current != null) recordDuration(projectId, performance.now() - startRef.current);
@@ -96,7 +94,7 @@ export function useSyncTree(projectId: number) {
   const checkMutation = useMutation({
     mutationFn: () => api.checkSyncTree(projectId),
     onSuccess: (result) => {
-      if (result.synced) applySyncResult(result);
+      if (result.changed) setChanged(true);
     },
   });
 
@@ -111,19 +109,24 @@ export function useSyncTree(projectId: number) {
   projectIdRef.current = projectId;
 
   useEffect(() => {
+    // projectId is 0 before a project's actually been picked (see
+    // App.tsx's useSyncTree(projectId ?? 0)) — skip rather than check a
+    // bogus project id in that brief window. A "changed" flag from a
+    // previously-selected project shouldn't linger after switching.
+    setChanged(false);
+    if (projectId) checkMutateRef.current();
+
     const id = window.setInterval(() => {
-      // projectId is 0 before a project's actually been picked (see
-      // App.tsx's useSyncTree(projectId ?? 0)) — skip rather than check
-      // a bogus project id in that brief window.
       if (!isPendingRef.current && projectIdRef.current) checkMutateRef.current();
     }, AUTO_CHECK_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, []);
+  }, [projectId]);
 
   return {
     trigger: () => mutation.mutate(),
     isPending: mutation.isPending,
     progress,
     changedFileIds,
+    changed,
   };
 }

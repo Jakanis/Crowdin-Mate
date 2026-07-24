@@ -176,21 +176,21 @@ def sync_project_tree(project_id: int) -> dict:
     }
 
 
-def check_and_sync_if_changed(project_id: int) -> dict:
-    """Cheap pre-check before the (relatively) expensive full crawl: for a
-    project with tens of thousands of files, unconditionally re-crawling
-    every directory/file/label on a timer is wasteful when nothing has
-    actually changed since the last time. A single get_project call's
-    lastActivity field moves on essentially any real activity in the
-    project (translations, comments, file management — confirmed live
-    that it's distinct from, and updates far more often than, updatedAt,
-    which only reflects the project's own *settings* changing) — so this
-    only runs the full sync_project_tree crawl if that's moved since the
-    last time we looked, rather than every time this is called.
+def has_project_changed(project_id: int) -> bool:
+    """Cheap one-call signal for whether anything's happened on Crowdin
+    since the last full tree sync — used to visually flag the sync
+    button (paint it, update its hover hint) rather than silently
+    re-crawling on its own; the user decides when to actually pull via
+    the manual sync button, same spirit as not auto-syncing at all.
 
-    Returns the same shape as sync_project_tree when a sync actually ran
-    (plus "synced": True), or a lightweight "synced": False response
-    when nothing had changed and only the one cheap call was made."""
+    A single get_project call's lastActivity field moves on essentially
+    any real activity in the project (translations, comments, file
+    management — confirmed live that it's distinct from, and updates far
+    more often than, updatedAt, which only reflects the project's own
+    *settings* changing), compared against the value sync_project_tree
+    stored as of the last completed full sync. Unlike a separate "last
+    checked" timestamp, this naturally stays true across repeated calls
+    until an actual sync runs and moves the stored value forward."""
     client = get_client()
     project_resp = call_with_limits(client.projects.get_project, projectId=project_id)
     project = _unwrap(project_resp)
@@ -202,15 +202,7 @@ def check_and_sync_if_changed(project_id: int) -> dict:
         ).fetchone()
     previously_known = row["last_activity"] if row is not None else None
 
-    if previously_known is not None and last_activity == previously_known:
-        return {"project_id": project_id, "synced": False, "changed_file_ids": []}
-
-    logger.info(
-        "Project %s activity changed (%s -> %s) — running full tree sync",
-        project_id, previously_known, last_activity,
-    )
-    result = sync_project_tree(project_id)
-    return {**result, "synced": True}
+    return previously_known is not None and last_activity != previously_known
 
 
 def _target_languages_json(project: dict) -> str:

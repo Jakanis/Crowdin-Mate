@@ -207,10 +207,9 @@ export const api = {
       { method: "POST" },
     ),
   checkSyncTree: (projectId: number) =>
-    request<{ project_id: number; synced: boolean; changed_file_ids: number[] }>(
-      `/projects/${projectId}/sync-tree/check`,
-      { method: "POST" },
-    ),
+    request<{ project_id: number; changed: boolean }>(`/projects/${projectId}/sync-tree/check`, {
+      method: "POST",
+    }),
   getTree: (projectId: number) => request<TreeResponse>(`/projects/${projectId}/tree`),
   getTreeProgress: (projectId: number, languageId: string, parentId?: number) =>
     request<TreeProgressResponse>(

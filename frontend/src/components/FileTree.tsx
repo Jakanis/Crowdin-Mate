@@ -3,12 +3,46 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ProgressInfo, type TreeDirectory, type TreeFile } from "../api/client";
 import { onProgressChanged } from "../progressEvents";
 
+interface SyncState {
+  trigger: () => void;
+  isPending: boolean;
+  changed: boolean;
+}
+
 interface FileTreeProps {
   projectId: number;
   languageId: string;
   directories: TreeDirectory[];
   files: TreeFile[];
   onSelectFile?: (file: TreeFile) => void;
+  sync: SyncState;
+  lastFullSyncAt: string | null;
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function SyncIcon({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={spinning ? "icon-spin" : undefined}
+    >
+      <path d="M13 4.5A5.5 5.5 0 1 1 11.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M13 1.8V4.6H10.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function matchesQuery(file: TreeFile, query: string): boolean {
@@ -29,7 +63,7 @@ const ROW_HEIGHT = 28;
  * Collapsed folders contribute exactly one row here, regardless of how
  * many thousands of descendants they hold.
  */
-export function FileTree({ projectId, languageId, directories, files, onSelectFile }: FileTreeProps) {
+export function FileTree({ projectId, languageId, directories, files, onSelectFile, sync, lastFullSyncAt }: FileTreeProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState("");
   const parentRef = useRef<HTMLDivElement>(null);
@@ -268,6 +302,22 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
             ×
           </button>
         )}
+        <button
+          className={`icon-btn file-tree-sync-btn${sync.changed ? " file-tree-sync-btn--changed" : ""}`}
+          onClick={sync.trigger}
+          disabled={sync.isPending}
+          title={
+            sync.isPending
+              ? "Syncing…"
+              : sync.changed
+                ? "Changes detected on Crowdin — click to sync"
+                : lastFullSyncAt
+                  ? `Last synced ${timeAgo(lastFullSyncAt)}`
+                  : "Never fully synced yet"
+          }
+        >
+          <SyncIcon spinning={sync.isPending} />
+        </button>
       </div>
       {searchResult && (
         <div className="file-tree-search-status">

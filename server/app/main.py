@@ -29,7 +29,7 @@ from app.sync.live_search import search_project_live
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
 from app.sync import search_index
 from app.sync.suggestions_sync import has_looked_up, search_tm_live, sync_glossary_matches, sync_tm_matches
-from app.sync.tree_sync import check_and_sync_if_changed, sync_project_tree
+from app.sync.tree_sync import has_project_changed, sync_project_tree
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -334,18 +334,18 @@ async def trigger_tree_sync(project_id: int):
 @app.post("/projects/{project_id}/sync-tree/check")
 async def trigger_tree_sync_check(project_id: int):
     """The automatic/periodic path (see useSyncTree.ts) — unlike the plain
-    /sync-tree endpoint above, this only runs the actual crawl if a cheap
-    single-call check (get_project's lastActivity) says something's
-    changed since last time. Deliberately NOT the same endpoint as the
-    manual button: a full unconditional re-crawl is fine as an explicit,
-    occasional user action, but doing that automatically on a timer for a
-    project with tens of thousands of files is the exact wasteful
-    behavior this replaces."""
+    /sync-tree endpoint above, this never runs the actual crawl itself;
+    it's a cheap single-call check (get_project's lastActivity) that only
+    reports whether something's changed since the last full sync, so the
+    frontend can paint the sync button and update its hover hint. The
+    user still decides when to actually pull, via the manual button —
+    auto-crawling a project with tens of thousands of files on a timer is
+    the exact wasteful (and surprising) behavior this replaces."""
     try:
-        result = await run_in_threadpool(check_and_sync_if_changed, project_id)
+        changed = await run_in_threadpool(has_project_changed, project_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
-    return result
+    return {"project_id": project_id, "changed": changed}
 
 
 @app.get("/projects/{project_id}/tree")

@@ -19,16 +19,6 @@ import { useSyncTree } from "./useSyncTree";
 const DEFAULT_PROJECT_ID = 393919;
 const SELECTED_PROJECT_KEY = "classicua-selected-project";
 
-function timeAgo(iso: string): string {
-  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
 function tabsStorageKey(projectId: number) {
   return `classicua-open-tabs-${projectId}`;
 }
@@ -327,9 +317,6 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>
-          {selectedProject.name} · {languageName}
-        </h1>
         <ProjectPicker
           projects={projects}
           selectedProject={selectedProject}
@@ -347,22 +334,6 @@ export function App() {
           >
             Open in Crowdin ↗
           </a>
-          {sync.progress != null && (
-            <span className="sync-progress" title="Estimated from previous sync durations">
-              <span className="sync-progress-fill" style={{ width: `${sync.progress * 100}%` }} />
-            </span>
-          )}
-          <button
-            onClick={sync.trigger}
-            disabled={sync.isPending}
-            title={
-              tree.data?.last_full_sync_at
-                ? `Last synced ${timeAgo(tree.data.last_full_sync_at)}`
-                : "Never fully synced yet"
-            }
-          >
-            {sync.isPending ? "Syncing…" : "Sync tree"}
-          </button>
           <SettingsMenu
             autoAdvance={autoAdvance.enabled}
             onAutoAdvanceChange={autoAdvance.setEnabled}
@@ -378,13 +349,18 @@ export function App() {
       <div className="app-body">
         {isEmpty ? (
           <aside className="app-sidebar">
-            <p className="hint">No cached tree yet — click "Sync tree" to crawl the project once.</p>
+            <p className="hint">No cached tree yet.</p>
+            <button onClick={sync.trigger} disabled={sync.isPending}>
+              {sync.isPending ? "Syncing…" : "Sync tree"}
+            </button>
           </aside>
         ) : (
           <Sidebar
             projectId={projectId}
             languageId={languageId}
             languageName={languageName}
+            sync={sync}
+            lastFullSyncAt={tree.data?.last_full_sync_at ?? null}
             directories={tree.data?.directories ?? []}
             files={tree.data?.files ?? []}
             onSelectFile={handleSelectFile}
