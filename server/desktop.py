@@ -155,10 +155,19 @@ def main() -> None:
     # own copy of Qt's shared libraries, so the packaged Linux binary needs
     # no system GTK *or* Qt pre-installed — same "just run it" experience
     # regardless of desktop environment.
+    # pywebview defaults to private_mode=True — nothing the window itself
+    # stores (localStorage, cookies) survives past this process exiting,
+    # regardless of what the frontend tries to persist (open tabs, the
+    # last-selected project/language, panel widths — see App.tsx). Off,
+    # with our own storage_path alongside everything else this app
+    # already keeps under DATA_DIR, rather than pywebview's own default
+    # (~/.pywebview or %APPDATA%\pywebview) — one place to find or wipe
+    # this app's local state, not two.
+    storage_path = str(DATA_DIR / "webview")
     if sys.platform.startswith("linux"):
-        webview.start(gui="qt")
+        webview.start(gui="qt", private_mode=False, storage_path=storage_path)
     else:
-        webview.start()
+        webview.start(private_mode=False, storage_path=storage_path)
 
 
 if __name__ == "__main__":

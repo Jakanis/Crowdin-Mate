@@ -181,6 +181,12 @@ SQLite cache under `~/.crowdin-mate` either way; only how it's launched
 differs. Rebuild (`npm run build`) after any frontend change — `desktop.py`
 serves whatever was last built, not live source.
 
+The native window keeps its own browser profile under
+`~/.crowdin-mate/webview` (`private_mode=False` + an explicit `storage_path`
+— pywebview otherwise wipes it every run) — that's what makes open tabs,
+the last-selected project/language, and panel widths still be there next
+time you launch, not just within one running session.
+
 ## Building a release binary yourself
 
 Both platforms use the same [`server/desktop.spec`](server/desktop.spec) via
