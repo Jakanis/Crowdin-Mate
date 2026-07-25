@@ -33,6 +33,15 @@ interface TranslationEditorProps {
    * _augment_tm_matches_with_source in main.py for where the who/when/
    * jump-target data actually comes from). */
   onJumpToMatch?: (fileId: number, stringId: number) => void;
+  /** Whether this instance's own tab is the one currently visible.
+   * Comfortable/Side-by-Side both remount this component when a
+   * DIFFERENT string is focused within the same tab (key={s.id} /
+   * conditional render), but every open TAB's own TranslationWorkspace
+   * stays mounted the whole time — just hidden via CSS (see its own
+   * docstring) — so a delete's pendingDeletes tracking would otherwise
+   * survive indefinitely on a tab you've switched away from. Defaults to
+   * true so standalone/test usage without this prop keeps working. */
+  isActive?: boolean;
 }
 
 /** Exposed via ref so a sibling (HighlightedSourceText, several levels
@@ -99,7 +108,7 @@ function JumpIcon() {
  * the surrounding layout differs.
  */
 export const TranslationEditor = forwardRef<TranslationEditorHandle, TranslationEditorProps>(function TranslationEditor(
-  { projectId, fileId, languageId, s, canApprove, currentUserId, onSaved, onJumpToMatch },
+  { projectId, fileId, languageId, s, canApprove, currentUserId, onSaved, onJumpToMatch, isActive = true },
   ref,
 ) {
   const queryClient = useQueryClient();
@@ -287,19 +296,15 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   // though it was already really gone, and clicking its Delete button
   // a second time 404'd against Crowdin.
   //
-  // Each entry is captured (with its original index) rather than
-  // eagerly refetching — react-query's own refetchOnWindowFocus
-  // (default on, and this data is usually well past its 30s staleTime
-  // by the time anyone clicks Delete) can refetch behind this
-  // component's back at any moment, which would otherwise make the
-  // candidate disappear immediately regardless of the undo window.
-  // displayTranslations splices each one back into its original slot
-  // whenever it's missing from the live list but still pending, so the
-  // visual "stays put" behavior holds regardless of what triggered the
-  // refetch.
-  const [pendingDeletes, setPendingDeletes] = useState<Map<number, { translation: TranslationInfo; index: number }>>(
-    new Map(),
-  );
+  // Each entry is captured rather than eagerly refetching — react-query's
+  // own refetchOnWindowFocus (default on, and this data is usually well
+  // past its 30s staleTime by the time anyone clicks Delete) can refetch
+  // behind this component's back at any moment, which would otherwise
+  // make the candidate disappear immediately regardless of the undo
+  // window. displayTranslations appends each one back on whenever it's
+  // missing from the live list but still pending, so the visual "stays
+  // put" behavior holds regardless of what triggered the refetch.
+  const [pendingDeletes, setPendingDeletes] = useState<Map<number, TranslationInfo>>(new Map());
   const [restoringIds, setRestoringIds] = useState<Set<number>>(new Set());
 
   // Excludes candidates currently pending-delete from "does this match
@@ -319,30 +324,35 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   const bestActiveText = activeTranslations.find((t) => t.is_approved)?.text ?? activeTranslations[0]?.text ?? "";
   const dirty = text.trim() !== "" && text !== bestActiveText;
 
-  const handleDeleted = (t: TranslationInfo, index: number) => {
+  const handleDeleted = (t: TranslationInfo) => {
     setPendingDeletes((prev) => {
       const next = new Map(prev);
-      next.set(t.id, { translation: t, index });
+      next.set(t.id, t);
       return next;
     });
   };
 
+  // Pending-deleted candidates are appended after every live one rather
+  // than spliced back into whatever slot they used to occupy — splicing
+  // by original position meant a translation submitted AFTER the delete
+  // (a genuinely new, still-live candidate) could land BELOW a deleted
+  // ghost that just happened to have a lower original index, which reads
+  // backwards: the freshest real candidate should always rank above
+  // anything already on its way out, never under it.
   const displayTranslations = useMemo(() => {
     if (pendingDeletes.size === 0) return s.translations;
-    const missing = Array.from(pendingDeletes.values())
-      .filter((p) => !s.translations.some((t) => t.id === p.translation.id))
-      .sort((a, b) => a.index - b.index);
+    const missing = Array.from(pendingDeletes.values()).filter(
+      (t) => !s.translations.some((live) => live.id === t.id),
+    );
     if (missing.length === 0) return s.translations;
-    const next = s.translations.slice();
-    for (const p of missing) next.splice(Math.min(p.index, next.length), 0, p.translation);
-    return next;
+    return [...s.translations, ...missing];
   }, [s.translations, pendingDeletes]);
 
   // Persisted history (deleted_translations, embedded per-string by
   // get_file_strings) minus whatever's already shown inline via
   // pendingDeletes' own "Deleted · Undo" overlay above — without this
   // exclusion, a delete from earlier in THIS session (still tracked in
-  // pendingDeletes, still spliced into displayTranslations) would show
+  // pendingDeletes, still appended onto displayTranslations) would show
   // up twice the moment anything else triggers a refetch, since by then
   // it's already landed in deleted_translations server-side too.
   const historicalDeletes = useMemo(
@@ -387,6 +397,25 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Same finalize-on-leaving idea, but for switching TABS rather than
+  // strings: unmounting (above) only happens when a different string is
+  // focused within the same tab (key={s.id} remounts this). Every open
+  // tab's own TranslationWorkspace stays mounted the whole time, just
+  // hidden via CSS, so a delete's inline overlay would otherwise survive
+  // indefinitely on a tab you've since switched away from — still
+  // showing "Deleted · Undo" (and still counted in dirty's exclusion
+  // above) for a string you're no longer even looking at. isActive
+  // going false is that signal: drop the tracking so the overlay
+  // disappears, and refetch so the persisted "Deleted" section — which
+  // already has this row server-side, see delete_translation_endpoint —
+  // picks it up instead of leaving it looking like nothing happened.
+  useEffect(() => {
+    if (isActive || pendingDeletes.size === 0) return;
+    setPendingDeletes(new Map());
+    refetchStrings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
 
   // Focus the edit box the moment a candidate is picked, cursor at the
   // end, so you can click a candidate and start typing immediately
@@ -477,7 +506,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
 
       {displayTranslations.length > 0 && (
         <ul className="translation-list">
-          {displayTranslations.map((t, index) => (
+          {displayTranslations.map((t) => (
             <TranslationItem
               key={t.id}
               projectId={projectId}
@@ -486,7 +515,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               canApprove={canApprove}
               currentUserId={currentUserId}
               onChanged={refetchStrings}
-              onDeleted={() => handleDeleted(t, index)}
+              onDeleted={() => handleDeleted(t)}
               onSelect={(append) => selectCandidate(t.text, append)}
               selected={text === t.text}
               pendingDelete={pendingDeletes.has(t.id)}

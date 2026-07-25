@@ -1305,10 +1305,18 @@ body {
    TranslationEditor's handleDeleted — dimmed underneath a semi-opaque
    "Deleted · Undo" overlay instead of a separate banner elsewhere on
    the page. position: relative here (not the base .translation-item)
-   scopes the overlay's positioning to just this state. */
+   scopes the overlay's positioning to just this state. Collapsed down to
+   just enough height for the overlay's own "Deleted · Undo" row rather
+   than keeping the candidate's full (possibly multi-line) natural
+   height — a deleted candidate is on its way out, not something worth
+   the same visual weight as a live one; overflow: hidden clips whatever
+   of the original text doesn't fit, and what's left still peeks through
+   faded underneath the overlay. */
 .translation-item--pending-delete {
   position: relative;
   cursor: default;
+  max-height: 40px;
+  overflow: hidden;
 }
 
 .translation-item--pending-delete .translation-text,

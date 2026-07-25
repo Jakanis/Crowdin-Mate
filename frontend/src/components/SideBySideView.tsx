@@ -14,6 +14,7 @@ interface SideBySideViewProps {
   canApprove: boolean;
   currentUserId: number | null;
   onJumpToTmMatch: (fileId: number, stringId: number) => void;
+  isActive: boolean;
 }
 
 function bestTranslationText(s: SourceString): string {
@@ -36,6 +37,7 @@ export function SideBySideView({
   canApprove,
   currentUserId,
   onJumpToTmMatch,
+  isActive,
 }: SideBySideViewProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   // Only ever one expanded row (with a real TranslationEditor mounted)
@@ -100,6 +102,7 @@ export function SideBySideView({
                       canApprove={canApprove}
                       currentUserId={currentUserId}
                       onJumpToMatch={onJumpToTmMatch}
+                      isActive={isActive}
                     />
                   ) : (
                     <div className="sbs-translation-preview">{bestTranslationText(s)}</div>

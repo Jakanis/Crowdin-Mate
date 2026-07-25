@@ -32,6 +32,17 @@ interface TabBarProps {
  * vertical-tabs mode) just grows a scrollable list the same way — no
  * picker or fade needed there, since the whole list is already one
  * glance away. */
+// Matches .tab-close's own width in styles.css — kept as a constant here
+// (rather than measured off a DOM ref) since it only ever needs to be
+// approximately right: the width below which we protect against an
+// accidental close, not a pixel-exact hit-test.
+const CLOSE_BTN_WIDTH = 26;
+// Extra scroll past whatever brought a tab fully into view, so the next
+// tab's edge still peeks in rather than landing flush with the strip's
+// own edge — reinforces "there's more here" the same way the fade does,
+// instead of a click quietly hiding the very affordance that triggered it.
+const TAB_PEEK_PX = 24;
+
 export function TabBar({
   openFiles,
   activeFileId,
@@ -45,6 +56,10 @@ export function TabBar({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  // Tabs whose currently-visible sliver is too narrow to safely carry a
+  // separately-clickable close button — see the close button's own
+  // onClick below for what "too narrow" does instead of closing.
+  const [closeBlockedIds, setCloseBlockedIds] = useState<Set<number>>(new Set());
 
   const tabRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,10 +68,34 @@ export function TabBar({
   // picker, or reached via Ctrl+Shift+arrows in App.tsx — scrolls into
   // view within its own strip, so switching tabs never silently leaves
   // you looking at a highlighted tab that's actually scrolled off-screen.
+  // Horizontal mode deliberately doesn't use scrollIntoView: that stops
+  // the instant the tab is flush with the edge, which can leave the
+  // strip looking like it has no more tabs beyond it. Scrolling TAB_PEEK_PX
+  // further keeps the next tab (or the fade over it) visibly peeking in.
   useEffect(() => {
     if (activeFileId == null) return;
-    tabRefs.current.get(activeFileId)?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeFileId]);
+    const tab = tabRefs.current.get(activeFileId);
+    if (!tab) return;
+
+    if (orientation !== "horizontal") {
+      tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+      return;
+    }
+    const container = scrollRef.current;
+    if (!container) return;
+    const tabLeft = tab.offsetLeft;
+    const tabRight = tabLeft + tab.offsetWidth;
+    const viewLeft = container.scrollLeft;
+    const viewRight = viewLeft + container.clientWidth;
+    if (tabLeft < viewLeft) {
+      container.scrollLeft = Math.max(0, tabLeft - TAB_PEEK_PX);
+    } else if (tabRight > viewRight) {
+      container.scrollLeft = Math.min(
+        container.scrollWidth - container.clientWidth,
+        tabRight - container.clientWidth + TAB_PEEK_PX,
+      );
+    }
+  }, [activeFileId, orientation]);
 
   // Plain vertical wheel scrolls this strip horizontally — without this,
   // a normal mouse (no horizontal wheel, no Shift held) can't scroll it
@@ -68,15 +107,28 @@ export function TabBar({
   // preventDefault() inside a handler passed via onWheel.
   //
   // Also tracks scroll position (mount, resize, tab-set changes, and
-  // every scroll/wheel event) to know which edge fade(s) to show.
+  // every scroll/wheel event) to know which edge fade(s) to show, and
+  // which tabs currently show too little of themselves to safely carry
+  // a separately-clickable close button (see the close button below).
   useEffect(() => {
     if (orientation !== "horizontal") return;
     const el = scrollRef.current;
     if (!el) return;
 
-    const updateFades = () => {
+    const updateScrollState = () => {
       setCanScrollLeft(el.scrollLeft > 0);
       setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+
+      const viewLeft = el.scrollLeft;
+      const viewRight = viewLeft + el.clientWidth;
+      const blocked = new Set<number>();
+      for (const [fileId, tab] of tabRefs.current) {
+        const tabLeft = tab.offsetLeft;
+        const tabRight = tabLeft + tab.offsetWidth;
+        const visibleWidth = Math.min(tabRight, viewRight) - Math.max(tabLeft, viewLeft);
+        if (visibleWidth < CLOSE_BTN_WIDTH * 2) blocked.add(fileId);
+      }
+      setCloseBlockedIds(blocked);
     };
     const onWheel = (e: WheelEvent) => {
       if (el.scrollWidth <= el.clientWidth) return;
@@ -84,14 +136,14 @@ export function TabBar({
       e.preventDefault();
     };
 
-    updateFades();
+    updateScrollState();
     el.addEventListener("wheel", onWheel, { passive: false });
-    el.addEventListener("scroll", updateFades);
-    const observer = new ResizeObserver(updateFades);
+    el.addEventListener("scroll", updateScrollState);
+    const observer = new ResizeObserver(updateScrollState);
     observer.observe(el);
     return () => {
       el.removeEventListener("wheel", onWheel);
-      el.removeEventListener("scroll", updateFades);
+      el.removeEventListener("scroll", updateScrollState);
       observer.disconnect();
     };
   }, [orientation, openFiles]);
@@ -151,6 +203,13 @@ export function TabBar({
       <button
         className="tab-close"
         onClick={(e) => {
+          // Too little of this tab is visible to safely tell "close" and
+          // "select" apart — a tab peeking in from the left edge shows
+          // its close button first, before any of its name. Rather than
+          // silently closing a tab the user meant to switch to, let the
+          // click fall through to the tab's own onClick (select) above
+          // by not stopping propagation or handling it here at all.
+          if (closeBlockedIds.has(f.id)) return;
           e.stopPropagation();
           onCloseTab(f.id);
         }}
