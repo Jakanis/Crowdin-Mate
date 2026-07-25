@@ -1,9 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { api, type SourceString, type TranslationInfo } from "../api/client";
+import { api, type DeletedTranslationInfo, type SourceString, type TranslationInfo } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
 import { useTmSuggestionsCollapsed } from "../theme";
 import { TmSourceDiff } from "./TmSourceDiff";
+
+function timeAgo(iso: string): string {
+  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
 
 interface TranslationEditorProps {
   projectId: number;
@@ -308,6 +318,18 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     return next;
   }, [s.translations, pendingDeletes]);
 
+  // Persisted history (deleted_translations, embedded per-string by
+  // get_file_strings) minus whatever's already shown inline via
+  // pendingDeletes' own "Deleted · Undo" overlay above — without this
+  // exclusion, a delete from earlier in THIS session (still tracked in
+  // pendingDeletes, still spliced into displayTranslations) would show
+  // up twice the moment anything else triggers a refetch, since by then
+  // it's already landed in deleted_translations server-side too.
+  const historicalDeletes = useMemo(
+    () => s.deleted_translations.filter((d) => !pendingDeletes.has(d.id)),
+    [s.deleted_translations, pendingDeletes],
+  );
+
   const undoMutation = useMutation({
     mutationFn: (translationId: number) => api.restoreTranslation(projectId, s.id, translationId, languageId),
     onMutate: (translationId) => {
@@ -447,6 +469,12 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         </ul>
       )}
 
+      <DeletedHistorySection
+        items={historicalDeletes}
+        restoringIds={restoringIds}
+        onUndo={(translationId) => undoMutation.mutate(translationId)}
+      />
+
       {tmMatches.length > 0 && (
         <div className="tm-suggestions-inline">
           <button
@@ -493,6 +521,65 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     </div>
   );
 });
+
+/**
+ * Collapsed-by-default, absent-if-empty section right under the
+ * candidate list — every past deletion for this string that Crowdin
+ * still keeps restorable (see delete_translation_endpoint's docstring),
+ * not just the one you deleted a moment ago in this same session (that
+ * one gets its own inline "Deleted · Undo" overlay in the candidate list
+ * above, via pendingDeletes). Collapsed by default since most strings
+ * have nothing here and it'd otherwise be dead weight under every single
+ * one; the count in the header is enough to know it's worth opening.
+ */
+function DeletedHistorySection({
+  items,
+  restoringIds,
+  onUndo,
+}: {
+  items: DeletedTranslationInfo[];
+  restoringIds: Set<number>;
+  onUndo: (translationId: number) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(true);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="tm-suggestions-inline">
+      <button
+        type="button"
+        className="tm-suggestions-inline-header"
+        onClick={() => setCollapsed(!collapsed)}
+        aria-expanded={!collapsed}
+      >
+        <span className={`tm-suggestions-inline-caret${collapsed ? "" : " tm-suggestions-inline-caret--open"}`}>▸</span>
+        <h4 className="tm-suggestions-inline-title">Deleted</h4>
+        <span className="tm-suggestions-inline-hint">{items.length}</span>
+      </button>
+      {!collapsed && (
+        <ul className="suggestion-list">
+          {items.map((d) => (
+            <li key={d.id} className="translation-item translation-item--history">
+              <div className="translation-text">{d.text}</div>
+              <div className="translation-meta">
+                {d.user_name && <span className="translation-author">{d.user_name}</span>}
+                <span className="hint">deleted {timeAgo(d.deleted_at)}</span>
+                <button
+                  className="link-button"
+                  onClick={() => onUndo(d.id)}
+                  disabled={restoringIds.has(d.id)}
+                >
+                  {restoringIds.has(d.id) ? "Restoring…" : "Undo"}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function TranslationItem({
   projectId,

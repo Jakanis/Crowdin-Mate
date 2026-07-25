@@ -639,8 +639,28 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
             )
         }
 
+        # Backs the collapsed "Deleted" section under each string's
+        # candidate list (TranslationEditor) — newest first, same as the
+        # live candidates above. Embedded here rather than a separate
+        # endpoint since it's small and always wanted right alongside the
+        # rest of a string's translation data.
+        deleted_by_string: dict[int, list] = {}
+        for row in conn.execute(
+            """
+            SELECT dt.string_id, dt.id, dt.text, dt.user_id, dt.user_name,
+                   dt.rating, dt.is_approved, dt.created_at, dt.deleted_at
+            FROM deleted_translations dt
+            JOIN source_strings s ON s.id = dt.string_id
+            WHERE s.file_id = ? AND dt.language_id = ?
+            ORDER BY dt.deleted_at DESC
+            """,
+            (file_id, language_id),
+        ):
+            deleted_by_string.setdefault(row["string_id"], []).append(dict(row))
+
     for s in strings:
         s["translations"] = translations_by_string.get(s["id"], [])
+        s["deleted_translations"] = deleted_by_string.get(s["id"], [])
         s["draft"] = drafts.get(s["id"])
         s["comment_count"] = comment_counts.get(s["id"], 0)
         label_ids = json.loads(s.pop("label_ids_json") or "[]")
@@ -903,11 +923,13 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
     Crowdin keeps a deleted translation genuinely restorable (see
     restore_translation_endpoint) indefinitely, not just for a short
     window — so before dropping it from the live `translations` table we
-    snapshot the full row into `deleted_translations`, which is what
-    backs the "Deleted" sidebar tab (DeletedTranslationsPanel). That's
-    what makes Undo available any time later, not just while the string
-    that had it is still open (TranslationEditor's own inline Undo
-    overlay is purely in-memory and lost the moment you navigate away)."""
+    snapshot the full row into `deleted_translations`, which get_file_strings
+    reads back per-string to feed the collapsed "Deleted" section under
+    each string's candidate list (TranslationEditor). That's what makes
+    Undo available any time later, not just during that same visit to the
+    string (the candidate list's own inline Undo overlay, for a delete
+    just now in this session, is purely in-memory and lost on navigation —
+    this is what backs it once you've moved on or come back later)."""
     client = get_client()
     try:
         await run_in_threadpool(
@@ -946,29 +968,6 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
             )
         conn.execute("DELETE FROM translations WHERE id = ?", (translation_id,))
     return {"status": "deleted"}
-
-
-@app.get("/projects/{project_id}/deleted-translations")
-async def list_deleted_translations(project_id: int, language_id: str):
-    """Backs the "Deleted" sidebar tab — every translation deleted (and
-    not yet restored) anywhere in this project/language, newest first,
-    with enough source-string/file context to show and jump to without a
-    second round trip per row."""
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT dt.id, dt.string_id, dt.language_id, dt.text, dt.user_id, dt.user_name,
-                   dt.rating, dt.is_approved, dt.created_at, dt.deleted_at,
-                   ss.text AS source_text, ss.identifier, ss.file_id, f.path AS file_path
-            FROM deleted_translations dt
-            JOIN source_strings ss ON ss.id = dt.string_id
-            JOIN files f ON f.id = ss.file_id
-            WHERE f.project_id = ? AND dt.language_id = ?
-            ORDER BY dt.deleted_at DESC
-            """,
-            (project_id, language_id),
-        ).fetchall()
-    return {"deleted": [dict(r) for r in rows]}
 
 
 @app.post("/projects/{project_id}/strings/{string_id}/translations/{translation_id}/restore")
