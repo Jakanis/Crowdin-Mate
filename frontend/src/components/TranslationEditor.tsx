@@ -27,6 +27,12 @@ interface TranslationEditorProps {
    * string, matching Crowdin's own "Automatically move to next string"
    * setting. Not passed in Side-by-Side, where "next" isn't meaningful. */
   onSaved?: () => void;
+  /** "Go to string" on a TM suggestion that traces back to a real
+   * translation elsewhere in the project — same callback RightSidebar
+   * already threads into TmPanel's identical feature (see
+   * _augment_tm_matches_with_source in main.py for where the who/when/
+   * jump-target data actually comes from). */
+  onJumpToMatch?: (fileId: number, stringId: number) => void;
 }
 
 /** Exposed via ref so a sibling (HighlightedSourceText, several levels
@@ -69,6 +75,20 @@ function TrashIcon() {
   );
 }
 
+function JumpIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M3.5 8H12.5M12.5 8L8.5 4M12.5 8L8.5 12"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /**
  * The translation-editing UI for one string: candidate list (click any
  * candidate to load its text into the edit box — this is how Crowdin's
@@ -79,7 +99,7 @@ function TrashIcon() {
  * the surrounding layout differs.
  */
 export const TranslationEditor = forwardRef<TranslationEditorHandle, TranslationEditorProps>(function TranslationEditor(
-  { projectId, fileId, languageId, s, canApprove, currentUserId, onSaved },
+  { projectId, fileId, languageId, s, canApprove, currentUserId, onSaved, onJumpToMatch },
   ref,
 ) {
   const queryClient = useQueryClient();
@@ -374,13 +394,21 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   // next frame since the textarea's DOM value only reflects the new text
   // after this render commits — selecting a range against the stale
   // value would misplace the cursor.
-  const selectCandidate = (candidateText: string) => {
-    setText(candidateText);
+  //
+  // Shift+click appends instead of replacing — separated by two blank
+  // lines, for stitching a candidate or TM suggestion onto the end of
+  // what's already there (e.g. a multi-paragraph string where different
+  // candidates each got one paragraph right) rather than always starting
+  // over from scratch. Reading el.value.length after the state commits
+  // (rather than computing the new length ourselves) keeps the cursor
+  // placement correct for both modes without duplicating that math.
+  const selectCandidate = (candidateText: string, append = false) => {
+    setText((prev) => (append && prev.trim() !== "" ? `${prev}\n\n\n${candidateText}` : candidateText));
     requestAnimationFrame(() => {
       const el = textareaRef.current;
       if (!el) return;
       el.focus();
-      el.selectionStart = el.selectionEnd = candidateText.length;
+      el.selectionStart = el.selectionEnd = el.value.length;
     });
   };
 
@@ -459,7 +487,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               currentUserId={currentUserId}
               onChanged={refetchStrings}
               onDeleted={() => handleDeleted(t, index)}
-              onSelect={() => selectCandidate(t.text)}
+              onSelect={(append) => selectCandidate(t.text, append)}
               selected={text === t.text}
               pendingDelete={pendingDeletes.has(t.id)}
               onUndoDelete={() => undoMutation.mutate(t.id)}
@@ -499,7 +527,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
                 <li
                   key={i}
                   className="suggestion-item suggestion-item--clickable"
-                  onClick={() => selectCandidate(m.target_text)}
+                  onClick={(e) => selectCandidate(m.target_text, e.shiftKey)}
                 >
                   <div className="suggestion-header">
                     <span className={`suggestion-relevance${isPerfect ? " suggestion-relevance--perfect" : ""}`}>
@@ -511,6 +539,29 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
                     {!isPerfect ? <TmSourceDiff currentText={s.text} matchText={m.source_text} /> : m.source_text}
                   </div>
                   <div className="suggestion-target">{m.target_text}</div>
+                  {(m.matched_user_name || m.updated_at) && (
+                    <div className="suggestion-meta">
+                      {m.matched_user_name ? (
+                        <span>
+                          {m.matched_user_name} · {timeAgo(m.matched_created_at as string)}
+                        </span>
+                      ) : (
+                        <span>Updated {timeAgo(m.updated_at as string)}</span>
+                      )}
+                      {m.matched_string_id != null && m.matched_file_id != null && (
+                        <button
+                          className="link-button suggestion-jump-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onJumpToMatch?.(m.matched_file_id as number, m.matched_string_id as number);
+                          }}
+                          title={m.matched_file_path ?? undefined}
+                        >
+                          <JumpIcon /> Go to string
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -602,7 +653,9 @@ function TranslationItem({
   currentUserId: number | null;
   onChanged: () => void;
   onDeleted: () => void;
-  onSelect: () => void;
+  /** append is true on Shift+click — see TranslationEditor's
+   * selectCandidate for what that does differently. */
+  onSelect: (append: boolean) => void;
   selected: boolean;
   pendingDelete: boolean;
   onUndoDelete: () => void;
@@ -656,7 +709,7 @@ function TranslationItem({
   return (
     <li
       className={`translation-item${t.is_approved ? " translation-item--approved" : ""}${selected ? " translation-item--selected" : ""}${pendingDelete ? " translation-item--pending-delete" : ""}`}
-      onClick={pendingDelete ? undefined : onSelect}
+      onClick={pendingDelete ? undefined : (e) => onSelect(e.shiftKey)}
     >
       <div className="translation-text">{t.text}</div>
       <div className="translation-meta">

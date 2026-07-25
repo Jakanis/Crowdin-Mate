@@ -13,6 +13,7 @@ interface ComfortableViewProps {
   canApprove: boolean;
   currentUserId: number | null;
   autoAdvance: boolean;
+  onJumpToTmMatch: (fileId: number, stringId: number) => void;
 }
 
 /** Matches Crowdin's own "Comfortable" editor view: one string at a time,
@@ -30,6 +31,7 @@ export function ComfortableView({
   canApprove,
   currentUserId,
   autoAdvance,
+  onJumpToTmMatch,
 }: ComfortableViewProps) {
   const editorRef = useRef<TranslationEditorHandle>(null);
 
@@ -81,6 +83,7 @@ export function ComfortableView({
           canApprove={canApprove}
           currentUserId={currentUserId}
           onSaved={autoAdvance && !isLast ? () => onFocusChange(focusedIndex + 1) : undefined}
+          onJumpToMatch={onJumpToTmMatch}
         />
       </div>
     </div>

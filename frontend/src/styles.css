@@ -863,11 +863,51 @@ body {
   gap: 2px;
 }
 
-.tab-bar-row .tab-bar {
+/* Wraps the scrollable .tab-bar plus its two edge fades — has to be a
+   non-scrolling sibling wrapper (not .tab-bar itself) so the fades stay
+   pinned to the visible edges regardless of how far .tab-bar has
+   scrolled internally, rather than scrolling away with its content. */
+.tab-bar-scroll-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
+}
+
+.tab-bar-row .tab-bar {
   overflow-x: auto;
   overflow-y: hidden;
+  /* Native browser tab strips have no visible horizontal scrollbar —
+     the edge fades plus wheel/drag scrolling already communicate and
+     handle overflow, so a scrollbar here would just be visual noise. */
+  scrollbar-width: none;
+}
+
+.tab-bar-row .tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-bar-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.tab-bar-fade--visible {
+  opacity: 1;
+}
+
+.tab-bar-fade--left {
+  left: 0;
+  background: linear-gradient(to right, var(--bg), transparent);
+}
+
+.tab-bar-fade--right {
+  right: 0;
+  background: linear-gradient(to left, var(--bg), transparent);
 }
 
 .tab-bar--vertical {
@@ -1522,6 +1562,12 @@ body {
   margin-top: 4px;
   opacity: 0.6;
   font-size: calc(12px * var(--ui-scale));
+}
+
+.suggestion-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .tm-panel {

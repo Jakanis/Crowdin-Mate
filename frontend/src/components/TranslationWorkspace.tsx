@@ -341,6 +341,7 @@ export function TranslationWorkspace({
             canApprove={canApprove}
             currentUserId={currentUserId}
             autoAdvance={autoAdvance}
+            onJumpToTmMatch={onJumpToTmMatch}
           />
         ) : (
           <SideBySideView
@@ -352,6 +353,7 @@ export function TranslationWorkspace({
             onFocusChange={onFocusChange}
             canApprove={canApprove}
             currentUserId={currentUserId}
+            onJumpToTmMatch={onJumpToTmMatch}
           />
         )}
 
