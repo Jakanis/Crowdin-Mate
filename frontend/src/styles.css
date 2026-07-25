@@ -843,8 +843,10 @@ body {
 /* --- open-file tab bar ---
    .tab-bar-row is the horizontal (default) mode: the bleed/border-bottom
    styling that used to live on .tab-bar itself, now wrapping a
-   clipped-not-scrolled .tab-bar plus the overflow dropdown. .tab-bar on
-   its own (no row wrapper) is the vertical sidebar mode instead — see
+   scrollable .tab-bar plus the tab picker. Every open tab always renders
+   here in order — none folded away — so .tab-bar just scrolls its own
+   region horizontally once its tabs no longer fit. .tab-bar on its own
+   (no row wrapper) is the vertical sidebar mode instead — see
    TabBar.tsx's orientation prop. */
 .tab-bar-row {
   display: flex;
@@ -864,17 +866,8 @@ body {
 .tab-bar-row .tab-bar {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-}
-
-.tab-bar-measure {
-  position: absolute;
-  visibility: hidden;
-  pointer-events: none;
-  left: -9999px;
-  top: -9999px;
-  display: flex;
-  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .tab-bar--vertical {
@@ -954,12 +947,12 @@ body {
   color: var(--danger);
 }
 
-.tab-overflow {
+.tab-picker {
   position: relative;
   flex-shrink: 0;
 }
 
-.tab-overflow-btn {
+.tab-picker-btn {
   border: 1px solid rgba(128, 128, 128, 0.25);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
@@ -971,17 +964,17 @@ body {
   color: inherit;
 }
 
-.tab-overflow-btn:hover {
+.tab-picker-btn:hover {
   background: rgba(128, 128, 128, 0.15);
 }
 
-.tab-overflow-backdrop {
+.tab-picker-backdrop {
   position: fixed;
   inset: 0;
   z-index: 20;
 }
 
-.tab-overflow-menu {
+.tab-picker-menu {
   position: absolute;
   top: 100%;
   right: 0;
@@ -997,7 +990,7 @@ body {
   margin-top: 2px;
 }
 
-.tab-overflow-item {
+.tab-picker-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1013,25 +1006,25 @@ body {
   gap: 8px;
 }
 
-.tab-overflow-item .tab-name {
+.tab-picker-item .tab-name {
   padding: 0;
 }
 
-.tab-overflow-item:hover {
+.tab-picker-item:hover {
   background: rgba(128, 128, 128, 0.1);
 }
 
-.tab-overflow-item--active {
+.tab-picker-item--active {
   font-weight: 600;
 }
 
-.tab-overflow-close {
+.tab-picker-close {
   opacity: 0.45;
   font-size: calc(15px * var(--ui-scale));
   flex-shrink: 0;
 }
 
-.tab-overflow-close:hover {
+.tab-picker-close:hover {
   opacity: 1;
   color: var(--danger);
 }
