@@ -445,6 +445,15 @@ function ProgressBar({ progress }: { progress: ProgressInfo }) {
 // stroke-dasharray/dashoffset then trims that ring down to a percentage.
 function ProgressPie({ progress }: { progress: ProgressInfo }) {
   const { translation_progress: t, approval_progress: a } = progress;
+
+  if (t === 100 && a === 100) {
+    return (
+      <span className="progress-mark" title={progressTitle(progress)}>
+        ✓
+      </span>
+    );
+  }
+
   const size = 20;
   const r = size / 4;
   const circumference = 2 * Math.PI * r;

@@ -27,6 +27,19 @@ def _unwrap(item: dict) -> dict:
     return item.get("data", item) if isinstance(item, dict) else item
 
 
+def _percent(count: int, total: int) -> int:
+    """Floors rather than rounds — round(999/1000*100) is 100, which would
+    show a file as fully translated/approved (and, per FileTree.tsx,
+    collapse its whole progress indicator to a bare checkmark) when one
+    single string genuinely isn't done yet. 100% only ever means
+    count >= total; everything short of that tops out at 99%, however
+    close, matching what a proofreader actually needs to know: is there
+    still something left to do here or not."""
+    if total <= 0 or count >= total:
+        return 100
+    return min(99, int(count / total * 100))
+
+
 def _find_language_row(rows: list[dict], language_id: str) -> dict | None:
     for item in rows:
         row = _unwrap(item)
@@ -53,8 +66,8 @@ def sync_directory_progress(project_id: int, directory_id: int, language_id: str
     total = phrases.get("total", 0)
     now = _now()
     progress = {
-        "translation_progress": round(phrases.get("translated", 0) / total * 100) if total else 100,
-        "approval_progress": round(phrases.get("approved", 0) / total * 100) if total else 100,
+        "translation_progress": _percent(phrases.get("translated", 0), total),
+        "approval_progress": _percent(phrases.get("approved", 0), total),
     }
     with get_conn() as conn:
         conn.execute(
@@ -89,8 +102,8 @@ def sync_file_progress(project_id: int, file_id: int, language_id: str) -> dict 
     total = phrases.get("total", 0)
     now = _now()
     progress = {
-        "translation_progress": round(phrases.get("translated", 0) / total * 100) if total else 100,
-        "approval_progress": round(phrases.get("approved", 0) / total * 100) if total else 100,
+        "translation_progress": _percent(phrases.get("translated", 0), total),
+        "approval_progress": _percent(phrases.get("approved", 0), total),
     }
     with get_conn() as conn:
         conn.execute(

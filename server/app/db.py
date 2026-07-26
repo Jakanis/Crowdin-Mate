@@ -174,6 +174,30 @@ def _reset_stale_glossary_matches(conn: sqlite3.Connection) -> None:
     )
 
 
+def _reset_rounded_progress_cache(conn: sqlite3.Connection) -> None:
+    """One-time cache bust: file_progress/directory_progress used to be
+    computed with round(), which turns e.g. 999/1000 translated into a
+    reported 100% — round(99.9) is 100 — silently showing a file as fully
+    done (and, per FileTree.tsx, collapsing its progress indicator to a
+    bare checkmark) when it genuinely wasn't. _percent in progress_sync.py
+    now floors instead, but a row already cached under the old formula
+    would otherwise keep showing its inflated value indefinitely (nothing
+    else invalidates it short of an actual translation change on that
+    file/directory — see invalidate_progress_for_file). Gated by an
+    app_config flag so this runs exactly once, not on every startup."""
+    done = conn.execute(
+        "SELECT value FROM app_config WHERE key = 'progress_rounding_version'"
+    ).fetchone()
+    if done is not None and done["value"] == "2":
+        return
+    conn.execute("DELETE FROM file_progress")
+    conn.execute("DELETE FROM directory_progress")
+    conn.execute(
+        "INSERT INTO app_config (key, value) VALUES ('progress_rounding_version', '2') "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    )
+
+
 def init_db() -> None:
     conn = _connect()
     try:
@@ -183,6 +207,7 @@ def init_db() -> None:
         _backfill_search_index(conn)
         _backfill_file_language_sync(conn)
         _reset_stale_glossary_matches(conn)
+        _reset_rounded_progress_cache(conn)
         conn.commit()
     finally:
         conn.close()
