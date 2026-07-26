@@ -324,7 +324,7 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
             sync.isPending
               ? "Syncing…"
               : sync.changed
-                ? "Changes detected on Crowdin — click to sync"
+                ? "Activity detected on Crowdin — click to check for changes"
                 : lastFullSyncAt
                   ? `Last synced ${timeAgo(lastFullSyncAt)}`
                   : "Never fully synced yet"
