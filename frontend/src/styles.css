@@ -955,6 +955,7 @@ body {
 }
 
 .tab {
+  position: relative;
   display: flex;
   align-items: stretch;
   font-size: calc(13px * var(--ui-scale));
@@ -1031,20 +1032,43 @@ body {
   pointer-events: none;
 }
 
-/* Smaller and tighter than the file tree's own .progress-pie/.progress-mark
-   (20px, margin-left: auto) — a tab is a much smaller, denser target, and
-   margin-left: auto here would fight the close button for the same free
-   space rather than sitting flush next to the tab name. */
-.tab .progress-pie {
-  width: 14px;
-  height: 14px;
-  margin: 0 2px 0 6px;
+/* Progress indicator for tabs: a thin strip flush against the tab's left
+   edge rather than a pie/checkmark competing with the name and close
+   button for room — see TabBar.tsx's TabProgressStrip. Fills bottom-up:
+   a neutral track (this element's own background) when empty, green from
+   the bottom up to approved%, blue continuing from there up to
+   translated% — same color convention as FileTree's horizontal bar, just
+   rotated. border-radius matches the tab's own top-left corner so the
+   strip doesn't visibly poke past it. */
+.tab-progress-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: rgba(128, 128, 128, 0.18);
+  border-radius: 6px 0 0 0;
+  overflow: hidden;
 }
 
-.tab .progress-mark {
-  margin: 0 2px 0 6px;
-  padding: 0;
-  font-size: calc(12px * var(--ui-scale));
+.tab-bar--vertical .tab-progress-strip {
+  border-radius: 4px 0 0 4px;
+}
+
+.tab-progress-strip-translated,
+.tab-progress-strip-approved {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.tab-progress-strip-translated {
+  background: var(--progress-translated);
+}
+
+.tab-progress-strip-approved {
+  bottom: 0;
+  background: var(--progress-approved);
 }
 
 .tab-picker {

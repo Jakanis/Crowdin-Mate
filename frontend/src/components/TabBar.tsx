@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ProgressInfo, TreeFile } from "../api/client";
-import { ProgressPie } from "./ProgressPie";
+import { progressTitle } from "./ProgressPie";
 
 interface TabBarProps {
   openFiles: TreeFile[];
@@ -52,6 +52,23 @@ const CLOSE_BTN_WIDTH = 26;
 // guard above treats as "too narrow to close" — the point of peeking is
 // to reveal enough of the next tab to read, not just its close button.
 const TAB_PEEK_PX = CLOSE_BTN_WIDTH * 1.5;
+
+// A thin vertical strip along the tab's left edge rather than a pie/
+// checkmark icon competing with the name and close button for room in an
+// already-tight strip. Same layering convention as FileTree's own
+// progress bar (green from 0 to approved%, blue from approved% to
+// translated%, on top of a neutral track) — just rotated to fill bottom-up
+// instead of left-to-right, so it reads at a glance without needing to
+// stop and parse a shape.
+function TabProgressStrip({ progress }: { progress: ProgressInfo }) {
+  const { translation_progress: t, approval_progress: a } = progress;
+  return (
+    <span className="tab-progress-strip" title={progressTitle(progress)}>
+      <span className="tab-progress-strip-translated" style={{ bottom: `${a}%`, height: `${t - a}%` }} />
+      <span className="tab-progress-strip-approved" style={{ height: `${a}%` }} />
+    </span>
+  );
+}
 
 export function TabBar({
   openFiles,
@@ -212,8 +229,8 @@ export function TabBar({
       }}
       title={f.path}
     >
+      {progress && <TabProgressStrip progress={progress} />}
       <span className="tab-name">{f.name}</span>
-      {progress && <ProgressPie progress={progress} />}
       <button
         className={`tab-close${closeBlockedIds.has(f.id) ? " tab-close--blocked" : ""}`}
         onClick={(e) => {
