@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { TreeFile } from "../api/client";
+import type { ProgressInfo, TreeFile } from "../api/client";
+import { ProgressPie } from "./ProgressPie";
 
 interface TabBarProps {
   openFiles: TreeFile[];
@@ -8,6 +9,11 @@ interface TabBarProps {
   onCloseTab: (fileId: number) => void;
   onReorderTabs: (draggedFileId: number, targetFileId: number) => void;
   orientation?: "horizontal" | "vertical";
+  // Translation/approval progress per open file, keyed by file id — see
+  // useOpenFilesProgress. Undefined (not just an empty Map) while the
+  // caller hasn't wired progress in at all, vs. a Map simply missing an
+  // entry once a fetch is still in flight for that file's directory.
+  fileProgress?: Map<number, ProgressInfo>;
 }
 
 /** Browser-tab-like bar for files open at once — supports opening a
@@ -54,6 +60,7 @@ export function TabBar({
   onCloseTab,
   onReorderTabs,
   orientation = "horizontal",
+  fileProgress,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
@@ -154,7 +161,9 @@ export function TabBar({
 
   if (openFiles.length === 0) return null;
 
-  const renderTab = (f: TreeFile) => (
+  const renderTab = (f: TreeFile) => {
+    const progress = fileProgress?.get(f.id);
+    return (
     <div
       key={f.id}
       ref={(el) => {
@@ -204,6 +213,7 @@ export function TabBar({
       title={f.path}
     >
       <span className="tab-name">{f.name}</span>
+      {progress && <ProgressPie progress={progress} />}
       <button
         className={`tab-close${closeBlockedIds.has(f.id) ? " tab-close--blocked" : ""}`}
         onClick={(e) => {
@@ -215,7 +225,8 @@ export function TabBar({
         ×
       </button>
     </div>
-  );
+    );
+  };
 
   if (orientation === "vertical") {
     return <div className="tab-bar tab-bar--vertical">{openFiles.map((f) => renderTab(f))}</div>;

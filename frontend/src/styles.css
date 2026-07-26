@@ -1031,6 +1031,22 @@ body {
   pointer-events: none;
 }
 
+/* Smaller and tighter than the file tree's own .progress-pie/.progress-mark
+   (20px, margin-left: auto) — a tab is a much smaller, denser target, and
+   margin-left: auto here would fight the close button for the same free
+   space rather than sitting flush next to the tab name. */
+.tab .progress-pie {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px 0 6px;
+}
+
+.tab .progress-mark {
+  margin: 0 2px 0 6px;
+  padding: 0;
+  font-size: calc(12px * var(--ui-scale));
+}
+
 .tab-picker {
   position: relative;
   flex-shrink: 0;

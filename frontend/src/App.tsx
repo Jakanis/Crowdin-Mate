@@ -10,6 +10,7 @@ import { TokenSetup } from "./components/TokenSetup";
 import { TranslationWorkspace } from "./components/TranslationWorkspace";
 import { useRightSidebarState } from "./rightSidebarState";
 import { useAutoAdvance, useOpenTabsLayout, useViewMode } from "./theme";
+import { useOpenFilesProgress } from "./useOpenFilesProgress";
 import { useResizableWidth } from "./useResizableWidth";
 import { useSyncTree } from "./useSyncTree";
 
@@ -61,6 +62,7 @@ export function App() {
   const [openFiles, setOpenFiles] = useState<TreeFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<number | null>(null);
   const [focusedStringIdByFile, setFocusedStringIdByFile] = useState<Record<number, number | null>>({});
+  const openFilesProgress = useOpenFilesProgress(projectId, languageId, openFiles);
 
   // Lifted here (rather than each consumer calling useAutoAdvance() on
   // its own) because unlike theme/UI-scale — whose effect lands on
@@ -414,6 +416,7 @@ export function App() {
                   onCloseTab={handleCloseTab}
                   onReorderTabs={handleReorderTabs}
                   orientation="vertical"
+                  fileProgress={openFilesProgress}
                 />
               ) : undefined
             }
@@ -427,6 +430,7 @@ export function App() {
               onSelectTab={setActiveFileId}
               onCloseTab={handleCloseTab}
               onReorderTabs={handleReorderTabs}
+              fileProgress={openFilesProgress}
             />
           )}
           {openFiles.length === 0 && <p className="hint">Select a file from the tree.</p>}

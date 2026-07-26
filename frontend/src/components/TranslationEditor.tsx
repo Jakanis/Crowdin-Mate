@@ -323,6 +323,14 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   );
   const bestActiveText = activeTranslations.find((t) => t.is_approved)?.text ?? activeTranslations[0]?.text ?? "";
   const dirty = text.trim() !== "" && text !== bestActiveText;
+  // Explains Save's disabled state rather than leaving a plain greyed-out
+  // button with no indication of which of the two distinct reasons (never
+  // typed anything vs. already matches what's saved) applies.
+  const saveDisabledReason = dirty
+    ? undefined
+    : text.trim() === ""
+      ? "Nothing to save — type a translation first"
+      : "No changes to save — this already matches the current translation";
 
   const handleDeleted = (t: TranslationInfo) => {
     setPendingDeletes((prev) => {
@@ -505,7 +513,12 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         placeholder="Type a translation and Save to submit it to Crowdin"
       />
       <div className="string-row-footer">
-        <button className="btn-primary" onClick={() => submit.mutate()} disabled={!dirty || submit.isPending}>
+        <button
+          className="btn-primary"
+          onClick={() => submit.mutate()}
+          disabled={!dirty || submit.isPending}
+          title={submit.isPending ? undefined : saveDisabledReason}
+        >
           {submit.isPending ? "Saving…" : "Save"}
         </button>
         <StatusBadge status={status} />
