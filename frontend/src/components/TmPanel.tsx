@@ -120,13 +120,20 @@ export function TmPanel({ projectId, stringId, languageId, sourceLanguageId, sou
 
   return (
     <div className="tm-panel">
-      <input
-        className="glossary-search-input"
-        type="text"
-        placeholder="Search translation memory…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="search-input-wrap">
+        <input
+          className="glossary-search-input"
+          type="text"
+          placeholder="Search translation memory…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button className="search-input-clear" onClick={() => setSearch("")} title="Clear search">
+            ×
+          </button>
+        )}
+      </div>
 
       <div className="suggestion-list">
         {searching ? (

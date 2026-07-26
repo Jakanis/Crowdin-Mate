@@ -59,13 +59,20 @@ export function GlossaryPanel({ projectId, stringId, languageId, sourceLanguageI
 
   return (
     <div className="glossary-panel">
-      <input
-        className="glossary-search-input"
-        type="text"
-        placeholder="Search glossary…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="search-input-wrap">
+        <input
+          className="glossary-search-input"
+          type="text"
+          placeholder="Search glossary…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button className="search-input-clear" onClick={() => setSearch("")} title="Clear search">
+            ×
+          </button>
+        )}
+      </div>
 
       <div className="suggestion-list">
         {searching ? (

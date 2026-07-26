@@ -41,7 +41,11 @@ const CLOSE_BTN_WIDTH = 26;
 // tab's edge still peeks in rather than landing flush with the strip's
 // own edge — reinforces "there's more here" the same way the fade does,
 // instead of a click quietly hiding the very affordance that triggered it.
-const TAB_PEEK_PX = 24;
+// Tied to CLOSE_BTN_WIDTH (1.5x) rather than its own arbitrary number, so
+// the peek is always comfortably wider than the sliver the close-button
+// guard above treats as "too narrow to close" — the point of peeking is
+// to reveal enough of the next tab to read, not just its close button.
+const TAB_PEEK_PX = CLOSE_BTN_WIDTH * 1.5;
 
 export function TabBar({
   openFiles,
@@ -201,15 +205,8 @@ export function TabBar({
     >
       <span className="tab-name">{f.name}</span>
       <button
-        className="tab-close"
+        className={`tab-close${closeBlockedIds.has(f.id) ? " tab-close--blocked" : ""}`}
         onClick={(e) => {
-          // Too little of this tab is visible to safely tell "close" and
-          // "select" apart — a tab peeking in from the left edge shows
-          // its close button first, before any of its name. Rather than
-          // silently closing a tab the user meant to switch to, let the
-          // click fall through to the tab's own onClick (select) above
-          // by not stopping propagation or handling it here at all.
-          if (closeBlockedIds.has(f.id)) return;
           e.stopPropagation();
           onCloseTab(f.id);
         }}

@@ -744,6 +744,41 @@ body {
   color: var(--fg);
 }
 
+/* Wraps a plain full-width search input (.search-input,
+   .glossary-search-input, .fsl-search-input all share this shape) with
+   an × button overlaid on the right, so you don't have to select and
+   delete the previous query by hand — same idea as file-tree-search's
+   own clear button, just laid out as an overlay instead of a sibling
+   since these inputs don't already sit in a flex row with other
+   controls next to them. */
+.search-input-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.search-input-wrap input {
+  padding-right: 28px;
+}
+
+.search-input-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  line-height: 1;
+  font-size: calc(15px * var(--ui-scale));
+  opacity: 0.5;
+  padding: 4px 6px;
+}
+
+.search-input-clear:hover {
+  opacity: 1;
+}
+
 .search-results {
   flex: 1;
   overflow-y: auto;
@@ -985,6 +1020,15 @@ body {
   opacity: 1;
   background: var(--danger-bg);
   color: var(--danger);
+}
+
+/* Too little of this tab is visible to safely tell "close" and "select"
+   apart (see TabBar.tsx's closeBlockedIds) — pointer-events: none takes
+   the button out of hit-testing entirely, so a click here lands on the
+   parent .tab instead (selecting it, not closing it) and the button
+   can't show its red hover highlight for an action it won't perform. */
+.tab-close--blocked {
+  pointer-events: none;
 }
 
 .tab-picker {

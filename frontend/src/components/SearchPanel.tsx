@@ -67,14 +67,21 @@ export function SearchPanel({ projectId, languageId, languageName, onJumpToResul
 
   return (
     <div className="search-panel">
-      <input
-        className="search-input"
-        type="text"
-        placeholder={`Search source or ${languageName} text…`}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        autoFocus
-      />
+      <div className="search-input-wrap">
+        <input
+          className="search-input"
+          type="text"
+          placeholder={`Search source or ${languageName} text…`}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          autoFocus
+        />
+        {input && (
+          <button className="search-input-clear" onClick={() => setInput("")} title="Clear search">
+            ×
+          </button>
+        )}
+      </div>
 
       {debounced.trim().length === 0 && <p className="hint">Type to search the whole project.</p>}
       {searchQuery.isLoading && <p className="hint">Searching…</p>}

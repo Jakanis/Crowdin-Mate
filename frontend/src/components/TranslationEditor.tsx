@@ -332,20 +332,28 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     });
   };
 
-  // Pending-deleted candidates are appended after every live one rather
-  // than spliced back into whatever slot they used to occupy — splicing
-  // by original position meant a translation submitted AFTER the delete
-  // (a genuinely new, still-live candidate) could land BELOW a deleted
-  // ghost that just happened to have a lower original index, which reads
-  // backwards: the freshest real candidate should always rank above
-  // anything already on its way out, never under it.
+  // Pending-deleted candidates are merged back in using the exact same
+  // ordering the backend itself uses (get_file_strings' own ORDER BY
+  // t.is_approved DESC, t.created_at DESC) rather than either extreme:
+  // splicing back at the original array index (a translation submitted
+  // AFTER the delete could land BELOW a ghost that just happened to sit
+  // at a lower index) or always appending at the very end (correct
+  // relative to anything newer, but shoves the ghost past older, still-
+  // live candidates it was never actually below). Sorting the combined
+  // set by each item's own is_approved/created_at — captured at delete
+  // time for the ghost, unchanged for everything live — naturally slots
+  // it back in wherever it always belonged, with a genuinely newer
+  // candidate still sorting above it on created_at alone.
   const displayTranslations = useMemo(() => {
     if (pendingDeletes.size === 0) return s.translations;
     const missing = Array.from(pendingDeletes.values()).filter(
       (t) => !s.translations.some((live) => live.id === t.id),
     );
     if (missing.length === 0) return s.translations;
-    return [...s.translations, ...missing];
+    return [...s.translations, ...missing].sort((a, b) => {
+      if (a.is_approved !== b.is_approved) return b.is_approved - a.is_approved;
+      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+    });
   }, [s.translations, pendingDeletes]);
 
   // Persisted history (deleted_translations, embedded per-string by

@@ -44,13 +44,20 @@ export function FileStringsList({ strings, focusedStringId, onSelect }: FileStri
 
   return (
     <div className="fsl-container">
-      <input
-        className="fsl-search-input"
-        type="text"
-        placeholder="Search strings in this file…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className="search-input-wrap">
+        <input
+          className="fsl-search-input"
+          type="text"
+          placeholder="Search strings in this file…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query && (
+          <button className="search-input-clear" onClick={() => setQuery("")} title="Clear search">
+            ×
+          </button>
+        )}
+      </div>
       {filtered.length === 0 ? (
         <p className="hint">No strings match "{query}".</p>
       ) : (
