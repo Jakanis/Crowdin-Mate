@@ -108,7 +108,7 @@ export function CommentsPanel({ projectId, stringId, languageId }: CommentsPanel
           )}
         </div>
         <div className="add-comment">
-          <button onClick={() => post.mutate()} disabled={!text.trim() || post.isPending}>
+          <button className="btn-primary" onClick={() => post.mutate()} disabled={!text.trim() || post.isPending}>
             {post.isPending ? "Posting…" : isIssue ? "Report issue" : "Post"}
           </button>
           {post.isError && <span className="error">{(post.error as Error).message}</span>}

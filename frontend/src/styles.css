@@ -1969,30 +1969,25 @@ body {
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
 }
 
-.file-tree-search input {
+.file-tree-search .search-input-wrap {
   flex: 1;
   min-width: 0;
+}
+
+.file-tree-search input {
+  width: 100%;
   font: inherit;
   font-size: calc(13px * var(--ui-scale));
-  padding: 5px 8px;
+  /* Right padding reserved unconditionally (not just while the clear
+     button is actually rendered) — otherwise the field's own width
+     visibly shifts the instant you type a first character, since a
+     flex sibling appearing/disappearing changes how much space this
+     input gets to begin with. */
+  padding: 5px 28px 5px 8px;
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 4px;
   background: transparent;
   color: inherit;
-}
-
-.file-tree-search-clear {
-  flex-shrink: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: calc(15px * var(--ui-scale));
-  opacity: 0.6;
-  padding: 2px 4px;
-}
-
-.file-tree-search-clear:hover {
-  opacity: 1;
 }
 
 .file-tree-sync-btn {

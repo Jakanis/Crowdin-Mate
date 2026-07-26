@@ -37,10 +37,25 @@ _states: dict[tuple[int, str], dict] = {}
 
 
 def _state_for(project_id: int, language_id: str) -> dict:
-    return _states.setdefault(
+    state = _states.setdefault(
         (project_id, language_id),
-        {"running": False, "errors": 0, "current_file_path": None, "stop_requested": False},
+        {"running": False, "errors": 0, "current_file_path": None, "stop_requested": False, "thread": None},
     )
+    # Self-heal: a thread that's no longer alive can't genuinely still be
+    # "running", whatever state it left behind. _run()'s own try/finally
+    # (below) already guarantees a normal or errored-out run resets this
+    # on its own, but this is the last line of defense against anything
+    # that kills the thread more abruptly than a caught exception (a hard
+    # process-level fault, for instance) — without it, a crash like that
+    # leaves running=True permanently, since nothing else ever revisits
+    # it: the "Index all files" button would stay stuck showing "Stop
+    # indexing" forever, and clicking Stop wouldn't help either, since
+    # stop_requested is only ever checked by the (already-dead) loop.
+    thread: threading.Thread | None = state.get("thread")
+    if state["running"] and thread is not None and not thread.is_alive():
+        state["running"] = False
+        state["current_file_path"] = None
+    return state
 
 
 def get_status(project_id: int, language_id: str) -> dict:
@@ -64,53 +79,78 @@ def get_status(project_id: int, language_id: str) -> dict:
 
     with _lock:
         state = _state_for(project_id, language_id)
-        running_info = {k: v for k, v in state.items() if k != "stop_requested"}
+        running_info = {k: v for k, v in state.items() if k not in ("stop_requested", "thread")}
 
     return {"total": total, "synced": synced, **running_info}
 
 
 def _run(project_id: int, language_id: str) -> None:
+    # Everything below is wrapped so state["running"] is GUARANTEED to
+    # reset no matter what happens — confirmed live: an earlier version
+    # only reset it after the per-file loop, with no try/finally around
+    # any of this, so a failure anywhere before or during that loop (the
+    # pending-files query included — a genuine DB error there is exactly
+    # as fatal as any other) left running=True forever, no exception ever
+    # logged. From the UI that reads as a stuck "Stop indexing" button
+    # that doing nothing when clicked, since stop_requested is only ever
+    # checked by the (already-dead) loop — see _state_for's own
+    # thread-liveness self-heal for the other half of this fix.
     try:
-        bulk_sync_source_strings(project_id)
+        # bulk_sync_source_strings fetches every source string project-wide
+        # in one paginated call before the per-file loop below even starts
+        # — for a project this size (tens of thousands of files) that can
+        # legitimately take minutes with nothing else to show for it
+        # otherwise, since current_file_path is only ever set once the
+        # loop begins. Reusing that same field here (rather than a new
+        # one) means the existing "current_file_path && <div>" in
+        # SearchPanel.tsx already renders it with zero frontend changes.
+        with _lock:
+            _state_for(project_id, language_id)["current_file_path"] = "Fetching all source strings…"
+        try:
+            bulk_sync_source_strings(project_id)
+        except Exception:
+            logger.exception("search index build: bulk source sync failed for project %s", project_id)
+
+        with get_conn() as conn:
+            pending = [
+                dict(row) for row in conn.execute(
+                    """
+                    SELECT id, path FROM files f
+                    WHERE f.project_id = ?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM file_search_sync s WHERE s.file_id = f.id AND s.language_id = ?
+                      )
+                    ORDER BY id
+                    """,
+                    (project_id, language_id),
+                )
+            ]
+
+        logger.info(
+            "search index build: %d file(s) to sync for project %s/%s", len(pending), project_id, language_id
+        )
+
+        for f in pending:
+            with _lock:
+                state = _state_for(project_id, language_id)
+                if state["stop_requested"]:
+                    break
+                state["current_file_path"] = f["path"]
+            try:
+                if not sync_file_target_text_fast(project_id, f["id"], language_id):
+                    sync_file_content(project_id, f["id"], language_id)
+            except Exception:
+                logger.exception("search index build: failed to sync file %s (%s)", f["id"], f["path"])
+                with _lock:
+                    _state_for(project_id, language_id)["errors"] += 1
     except Exception:
-        logger.exception("search index build: bulk source sync failed for project %s", project_id)
-
-    with get_conn() as conn:
-        pending = [
-            dict(row) for row in conn.execute(
-                """
-                SELECT id, path FROM files f
-                WHERE f.project_id = ?
-                  AND NOT EXISTS (
-                      SELECT 1 FROM file_search_sync s WHERE s.file_id = f.id AND s.language_id = ?
-                  )
-                ORDER BY id
-                """,
-                (project_id, language_id),
-            )
-        ]
-
-    logger.info("search index build: %d file(s) to sync for project %s/%s", len(pending), project_id, language_id)
-
-    for f in pending:
+        logger.exception("search index build: crashed for project %s/%s", project_id, language_id)
+    finally:
         with _lock:
             state = _state_for(project_id, language_id)
-            if state["stop_requested"]:
-                break
-            state["current_file_path"] = f["path"]
-        try:
-            if not sync_file_target_text_fast(project_id, f["id"], language_id):
-                sync_file_content(project_id, f["id"], language_id)
-        except Exception:
-            logger.exception("search index build: failed to sync file %s (%s)", f["id"], f["path"])
-            with _lock:
-                _state_for(project_id, language_id)["errors"] += 1
-
-    with _lock:
-        state = _state_for(project_id, language_id)
-        state["running"] = False
-        state["current_file_path"] = None
-    logger.info("search index build: finished (or stopped) for project %s/%s", project_id, language_id)
+            state["running"] = False
+            state["current_file_path"] = None
+        logger.info("search index build: finished (or stopped) for project %s/%s", project_id, language_id)
 
 
 def start(project_id: int, language_id: str) -> bool:
@@ -118,13 +158,13 @@ def start(project_id: int, language_id: str) -> bool:
     language. Different projects, or different languages of the same
     project, can build concurrently — each is an independent thread
     against its own file set."""
+    thread = threading.Thread(target=_run, args=(project_id, language_id), daemon=True)
     with _lock:
         state = _state_for(project_id, language_id)
         if state["running"]:
             return False
-        state.update(running=True, errors=0, current_file_path=None, stop_requested=False)
+        state.update(running=True, errors=0, current_file_path=None, stop_requested=False, thread=thread)
 
-    thread = threading.Thread(target=_run, args=(project_id, language_id), daemon=True)
     thread.start()
     return True
 

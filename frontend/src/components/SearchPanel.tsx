@@ -129,21 +129,24 @@ export function SearchPanel({ projectId, languageId, languageName, onJumpToResul
               Stop indexing
             </button>
           ) : (
-            <button onClick={() => build.mutate()} disabled={build.isPending || status.synced >= status.total}>
+            <button
+              onClick={() => build.mutate()}
+              disabled={build.isPending || status.synced >= status.total}
+              title={
+                status.synced >= status.total
+                  ? undefined
+                  : `Search itself already covers the whole project live — this index is only for ` +
+                    `when you're offline. Building it makes one API call per remaining file ` +
+                    `(${(status.total - status.synced).toLocaleString()} left) — expect this to ` +
+                    `take hours, not minutes.`
+              }
+            >
               {status.synced >= status.total ? "Fully indexed" : "Index all files for search"}
             </button>
           )}
           {status.errors > 0 && <span className="hint">{status.errors} file(s) failed to sync</span>}
           {status.running && status.current_file_path && (
             <div className="hint search-index-current">{status.current_file_path}</div>
-          )}
-          {!status.running && status.total > status.synced && (
-            <p className="hint">
-              Search itself already covers the whole project live — this index is only for when you're
-              offline. Building it makes one API call per remaining file (
-              {(status.total - status.synced).toLocaleString()} left) — expect this to take hours, not
-              minutes.
-            </p>
           )}
         </div>
       )}

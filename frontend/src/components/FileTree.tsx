@@ -305,17 +305,19 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   return (
     <div className="file-tree-panel">
       <div className="file-tree-search">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search files by path…"
-        />
-        {query && (
-          <button className="file-tree-search-clear" onClick={() => setQuery("")} title="Clear search">
-            ×
-          </button>
-        )}
+        <div className="search-input-wrap">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search files by path…"
+          />
+          {query && (
+            <button className="search-input-clear" onClick={() => setQuery("")} title="Clear search">
+              ×
+            </button>
+          )}
+        </div>
         <button
           className={`icon-btn file-tree-sync-btn${sync.changed ? " file-tree-sync-btn--changed" : ""}`}
           onClick={sync.trigger}
