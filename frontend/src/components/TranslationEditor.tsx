@@ -3,17 +3,8 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { api, type DeletedTranslationInfo, type SourceString, type TranslationInfo } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
 import { useTmSuggestionsCollapsed } from "../theme";
+import { fullDateTime, timeAgo } from "../timeAgo";
 import { TmSourceDiff } from "./TmSourceDiff";
-
-function timeAgo(iso: string): string {
-  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
 
 interface TranslationEditorProps {
   projectId: number;
@@ -592,11 +583,13 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
                   {(m.matched_user_name || m.updated_at) && (
                     <div className="suggestion-meta">
                       {m.matched_user_name ? (
-                        <span>
+                        <span title={fullDateTime(m.matched_created_at as string)}>
                           {m.matched_user_name} · {timeAgo(m.matched_created_at as string)}
                         </span>
                       ) : (
-                        <span>Updated {timeAgo(m.updated_at as string)}</span>
+                        <span title={fullDateTime(m.updated_at as string)}>
+                          Updated {timeAgo(m.updated_at as string)}
+                        </span>
                       )}
                       {m.matched_string_id != null && m.matched_file_id != null && (
                         <button
@@ -665,7 +658,9 @@ function DeletedHistorySection({
               <div className="translation-text">{d.text}</div>
               <div className="translation-meta">
                 {d.user_name && <span className="translation-author">{d.user_name}</span>}
-                <span className="hint">deleted {timeAgo(d.deleted_at)}</span>
+                <span className="hint" title={fullDateTime(d.deleted_at)}>
+                  deleted {timeAgo(d.deleted_at)}
+                </span>
                 <button
                   className="link-button"
                   onClick={() => onUndo(d.id)}
@@ -765,6 +760,11 @@ function TranslationItem({
       <div className="translation-meta">
         {t.is_approved && <span className="approved-badge">✓ Approved</span>}
         {t.user_name && <span className="translation-author">{t.user_name}</span>}
+        {t.created_at && (
+          <span className="translation-date" title={fullDateTime(t.created_at)}>
+            {timeAgo(t.created_at)}
+          </span>
+        )}
         <span className="translation-votes">
           <button
             className="vote-button"

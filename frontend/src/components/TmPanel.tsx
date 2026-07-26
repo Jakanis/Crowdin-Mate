@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, type TmMatch } from "../api/client";
+import { fullDateTime, timeAgo } from "../timeAgo";
 import { TmSourceDiff } from "./TmSourceDiff";
 
 interface TmPanelProps {
@@ -16,16 +17,6 @@ interface TmPanelProps {
 }
 
 const DEBOUNCE_MS = 300;
-
-function timeAgo(iso: string): string {
-  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
 
 function TmMatchItem({
   m,
@@ -56,11 +47,11 @@ function TmMatchItem({
       {(m.matched_user_name || m.updated_at) && (
         <div className="suggestion-meta">
           {m.matched_user_name ? (
-            <span>
+            <span title={fullDateTime(m.matched_created_at as string)}>
               {m.matched_user_name} · {timeAgo(m.matched_created_at as string)}
             </span>
           ) : (
-            <span>Updated {timeAgo(m.updated_at as string)}</span>
+            <span title={fullDateTime(m.updated_at as string)}>Updated {timeAgo(m.updated_at as string)}</span>
           )}
           {m.matched_string_id != null && m.matched_file_id != null && (
             <button

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { fullDateTime, timeAgo } from "../timeAgo";
 
 function useOnlineStatus(): boolean {
   const [online, setOnline] = useState(navigator.onLine);
@@ -15,16 +16,6 @@ function useOnlineStatus(): boolean {
     };
   }, []);
   return online;
-}
-
-function timeAgo(iso: string): string {
-  const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
 }
 
 /**
@@ -131,7 +122,7 @@ export function OfflineIndicator() {
                         <span className={`offline-queue-status offline-queue-status--${item.status}`}>
                           {item.status === "failed" ? "Failed" : "Queued"}
                         </span>
-                        <span>{timeAgo(item.created_at)}</span>
+                        <span title={fullDateTime(item.created_at)}>{timeAgo(item.created_at)}</span>
                         {item.status === "failed" && (
                           <>
                             <button
