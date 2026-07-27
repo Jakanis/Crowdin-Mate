@@ -1265,6 +1265,15 @@ body {
   font-size: calc(13px * var(--ui-scale));
   white-space: normal;
   cursor: default;
+  /* Selecting source text with a drag that passes over (or ends inside)
+     a highlighted term triggers this tooltip's :hover reveal mid-drag —
+     without this, the now-visible tooltip is genuine layout content at
+     that moment, so the in-progress selection can sweep its text
+     (target term, description, glossary name) in as if it sat right
+     after the term itself. user-select: none keeps it out of any
+     selection/copy regardless of when it happens to be visible. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Hover for mouse users, focus-within for keyboard nav (the term itself
