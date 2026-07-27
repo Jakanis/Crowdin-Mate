@@ -1283,9 +1283,16 @@ body {
   display: block;
 }
 
+/* These are <span> (inline), not <div> — deliberately: a block-level
+   element here, even hidden via user-select: none, still leaves a stray
+   "\n" in copied text when a drag-selection passes through this tooltip
+   while it's hover-revealed (confirmed live — see glossary-term-tooltip's
+   own comment). Line breaks between fields are genuine <br> elements in
+   HighlightedSourceText.tsx instead of block-level margins, which is also
+   why spacing here is font-size/weight only — vertical margin has no
+   effect on an inline element. */
 .glossary-term-tooltip-source {
   opacity: 1;
-  margin-bottom: 2px;
 }
 
 .glossary-term-tooltip-target {
@@ -1293,13 +1300,11 @@ body {
 }
 
 .glossary-term-tooltip-description {
-  margin-top: 6px;
   opacity: 1;
   line-height: 1.4;
 }
 
 .glossary-term-tooltip-glossary {
-  margin-top: 6px;
   font-size: calc(11px * var(--ui-scale));
   opacity: 1;
   text-transform: uppercase;

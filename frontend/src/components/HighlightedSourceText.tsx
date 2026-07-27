@@ -49,28 +49,79 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+interface MatchSpan {
+  start: number;
+  end: number;
+  match: GlossaryMatch;
+}
+
+// Crowdin's own glossary concordance search (see sync_glossary_matches'
+// docstring) returns matches purely on textual occurrence, with no
+// awareness of OTHER matches for the same string — confirmed live on
+// "The Dragonmaw Fortress is directly east of here...": it returns both
+// "Dragonmaw Fortress" (the correct, specific term) AND "The Drag" (a
+// wholly unrelated, genuine glossary entry for a different WoW zone —
+// Orgrimmar's "The Drag" — that just happens to share its first 8
+// characters with "The Dragonmaw"). A single combined regex + one
+// text.split() (the previous approach) can only ever resolve overlaps
+// that start at the SAME position (sorting longest-first correctly
+// prefers "The Hand of Gul'dan" over "Gul'dan" there) — it can't
+// resolve this case, where "The Drag" starts and matches FIRST while
+// scanning left-to-right, consuming through the exact span "Dragonmaw
+// Fortress" would have needed to start from, silently hiding the
+// correct longer match entirely for that occurrence.
+//
+// Finding every occurrence of every term independently, then resolving
+// overlaps by preferring the LONGEST span regardless of which one's
+// text happens to start first, fixes this generally: "Dragonmaw
+// Fortress" (19 chars) beats "The Drag" (8 chars) for that shared
+// stretch of text, while "The Drag" still highlights normally anywhere
+// it appears on its own, unrelated to a "Dragonmaw" mention.
+function findAllOccurrences(text: string, byLowerTerm: Map<string, GlossaryMatch>): MatchSpan[] {
+  const spans: MatchSpan[] = [];
+  for (const match of byLowerTerm.values()) {
+    const re = new RegExp(escapeRegExp(match.source_term), "gi");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) {
+      spans.push({ start: m.index, end: m.index + m[0].length, match });
+    }
+  }
+  return spans;
+}
+
+function resolveOverlaps(spans: MatchSpan[]): MatchSpan[] {
+  // Longest span first; same-length ties broken by earlier start, purely
+  // for stable, deterministic output rather than any semantic reason.
+  const byLengthDesc = [...spans].sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start);
+  const chosen: MatchSpan[] = [];
+  for (const span of byLengthDesc) {
+    if (chosen.some((c) => span.start < c.end && span.end > c.start)) continue;
+    chosen.push(span);
+  }
+  return chosen.sort((a, b) => a.start - b.start);
+}
+
 function renderHighlighted(text: string, matches: GlossaryMatch[], onTermClick?: (targetText: string) => void) {
   if (matches.length === 0) return text;
 
-  // Longest term first, so an overlapping shorter term (e.g. "Gul'dan")
-  // doesn't win over a longer one containing it (e.g. "The Hand of
-  // Gul'dan") purely because of match order. First match wins when the
-  // same term text appears more than once (e.g. two glossaries with the
-  // same entry) — good enough for a tooltip, not worth surfacing both.
+  // First match wins when the same term text appears more than once
+  // (e.g. two glossaries with the same entry) — good enough for a
+  // tooltip, not worth surfacing both.
   const byLowerTerm = new Map<string, GlossaryMatch>();
   for (const m of matches) {
     const key = m.source_term.toLowerCase();
     if (!byLowerTerm.has(key)) byLowerTerm.set(key, m);
   }
-  const terms = [...byLowerTerm.keys()].sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(`(${terms.map((t) => escapeRegExp(byLowerTerm.get(t)!.source_term)).join("|")})`, "gi");
-  const parts = text.split(pattern);
+  const spans = resolveOverlaps(findAllOccurrences(text, byLowerTerm));
+  if (spans.length === 0) return text;
 
-  return parts.map((part, i) => {
-    if (i % 2 === 0) return part;
-    const match = byLowerTerm.get(part.toLowerCase());
-    if (!match) return part;
-    return (
+  const nodes: (string | JSX.Element)[] = [];
+  let cursor = 0;
+  spans.forEach((span, i) => {
+    if (span.start > cursor) nodes.push(text.slice(cursor, span.start));
+    const match = span.match;
+    const part = text.slice(span.start, span.end);
+    nodes.push(
       <span key={i} className="glossary-term-highlight-wrap">
         <mark
           className="glossary-term-highlight"
@@ -91,12 +142,29 @@ function renderHighlighted(text: string, matches: GlossaryMatch[], onTermClick?:
           {part}
         </mark>
         <div className="glossary-term-tooltip">
-          <div className="glossary-term-tooltip-source">{match.source_term}</div>
-          <div className="glossary-term-tooltip-target">{match.target_term}</div>
-          {match.description && <div className="glossary-term-tooltip-description">{match.description}</div>}
-          {match.glossary_name && <div className="glossary-term-tooltip-glossary">{match.glossary_name}</div>}
+          <span className="glossary-term-tooltip-source">{match.source_term}</span>
+          <br />
+          <span className="glossary-term-tooltip-target">{match.target_term}</span>
+          {match.description && (
+            <>
+              <br />
+              <br />
+              <span className="glossary-term-tooltip-description">{match.description}</span>
+            </>
+          )}
+          {match.glossary_name && (
+            <>
+              <br />
+              <br />
+              <span className="glossary-term-tooltip-glossary">{match.glossary_name}</span>
+            </>
+          )}
         </div>
-      </span>
+      </span>,
     );
+    cursor = span.end;
   });
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+
+  return nodes;
 }
