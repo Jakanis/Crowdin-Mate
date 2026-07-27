@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProgressInfo, TreeFile } from "../api/client";
 import { progressTitle } from "./ProgressPie";
 
@@ -70,6 +70,45 @@ function TabProgressStrip({ progress }: { progress: ProgressInfo }) {
   );
 }
 
+function dirSegments(file: TreeFile): string[] {
+  return file.path.split("/").filter(Boolean).slice(0, -1);
+}
+
+// Two files with the same name but different folders (a common Crowdin
+// pattern — the same quest/item name reused across expansions, e.g.
+// gossip_tbc/B/ and chats_tbc/B/ both holding a "Borak Son of Oronok"
+// file) otherwise show up as identical, indistinguishable tabs. Trims
+// away whatever directory segments the whole same-name group already
+// agrees on — both a common leading part (rare) and a common trailing
+// part right above the filename (the usual case, like the shared "B"
+// subfolder above) — collapsing each into a single ".." and keeping only
+// the segment(s) that actually differ, e.g. "gossip_tbc/../Borak Son of
+// Oronok_21293.xml" vs. "chats_tbc/../Borak Son of Oronok_21293.xml".
+function disambiguatedLabel(file: TreeFile, group: TreeFile[]): string {
+  if (group.length <= 1) return file.name;
+
+  const mySegs = dirSegments(file);
+  const allSegs = group.map(dirSegments);
+  const minLen = Math.min(...allSegs.map((s) => s.length));
+
+  let prefixLen = 0;
+  while (prefixLen < minLen && allSegs.every((s) => s[prefixLen] === mySegs[prefixLen])) {
+    prefixLen++;
+  }
+
+  let suffixLen = 0;
+  while (
+    suffixLen < minLen - prefixLen &&
+    allSegs.every((s) => s[s.length - 1 - suffixLen] === mySegs[mySegs.length - 1 - suffixLen])
+  ) {
+    suffixLen++;
+  }
+
+  const middle = mySegs.slice(prefixLen, mySegs.length - suffixLen);
+  const parts = [...(prefixLen > 0 ? [".."] : []), ...middle, ...(suffixLen > 0 ? [".."] : [])];
+  return parts.length > 0 ? `/${parts.join("/")}/${file.name}` : file.name;
+}
+
 export function TabBar({
   openFiles,
   activeFileId,
@@ -91,6 +130,23 @@ export function TabBar({
 
   const tabRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Only disambiguates within the currently open set — a same-named file
+  // sitting elsewhere in the project that isn't open right now is no
+  // source of confusion, so it shouldn't cost every tab extra path noise.
+  const tabLabels = useMemo(() => {
+    const byName = new Map<string, TreeFile[]>();
+    for (const f of openFiles) {
+      const group = byName.get(f.name);
+      if (group) group.push(f);
+      else byName.set(f.name, [f]);
+    }
+    const labels = new Map<number, string>();
+    for (const f of openFiles) {
+      labels.set(f.id, disambiguatedLabel(f, byName.get(f.name)!));
+    }
+    return labels;
+  }, [openFiles]);
 
   // Whichever tab becomes active — clicked directly, jumped to via the
   // picker, or reached via Ctrl+Shift+arrows in App.tsx — scrolls into
@@ -230,7 +286,7 @@ export function TabBar({
       title={f.path}
     >
       {progress && <TabProgressStrip progress={progress} />}
-      <span className="tab-name">{f.name}</span>
+      <span className="tab-name">{tabLabels.get(f.id) ?? f.name}</span>
       <button
         className={`tab-close${closeBlockedIds.has(f.id) ? " tab-close--blocked" : ""}`}
         onClick={(e) => {
@@ -282,7 +338,7 @@ export function TabBar({
                     }}
                     title={f.path}
                   >
-                    <span className="tab-name">{f.name}</span>
+                    <span className="tab-name">{tabLabels.get(f.id) ?? f.name}</span>
                     <span
                       className="tab-picker-close"
                       onClick={(e) => {
