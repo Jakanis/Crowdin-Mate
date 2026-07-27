@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { ProgressInfo, TreeFile } from "../api/client";
 import { progressTitle } from "./ProgressPie";
 
@@ -268,8 +268,6 @@ export function TabBar({
       }}
       onDragOver={(e) => {
         if (draggedId == null || draggedId === f.id) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
         const rect = e.currentTarget.getBoundingClientRect();
         const side: "before" | "after" =
           orientation === "vertical"
@@ -279,12 +277,31 @@ export function TabBar({
             : e.clientX - rect.left < rect.width / 2
               ? "before"
               : "after";
+
+        // Dropping "after" the tab immediately to the dragged tab's own
+        // left, or "before" the one immediately to its right, would just
+        // reinsert it exactly where it already sits — not a real move, so
+        // don't offer it: no marker, and no preventDefault() means the
+        // browser falls back to its own "not allowed" cursor instead of
+        // "move".
+        const draggedIdx = openFiles.findIndex((x) => x.id === draggedId);
+        const targetIdx = openFiles.findIndex((x) => x.id === f.id);
+        const isNoOp =
+          (side === "after" && targetIdx === draggedIdx - 1) ||
+          (side === "before" && targetIdx === draggedIdx + 1);
+        if (isNoOp) {
+          setDragOver((prev) => (prev?.id === f.id ? null : prev));
+          return;
+        }
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
         setDragOver((prev) => (prev?.id === f.id && prev.side === side ? prev : { id: f.id, side }));
       }}
       onDragLeave={() => setDragOver((prev) => (prev?.id === f.id ? null : prev))}
       onDrop={(e) => {
         e.preventDefault();
-        if (draggedId != null && draggedId !== f.id) onReorderTabs(draggedId, f.id, dragOver?.side ?? "before");
+        if (draggedId != null && dragOver?.id === f.id) onReorderTabs(draggedId, f.id, dragOver.side);
         setDraggedId(null);
         setDragOver(null);
       }}
@@ -328,14 +345,41 @@ export function TabBar({
     );
   };
 
+  // The 2px flex gap between tabs (where the drop-position line itself
+  // visually sits) has no element under it at all — the tabs' own
+  // onDragOver never fires there since neither tab's box actually covers
+  // those pixels — so without this, that sliver was a dead zone where the
+  // browser fell back to its default "not allowed" cursor despite the
+  // line pointing right at it. Only engages when the pointer is directly
+  // over the container's own background (not bubbled up from a tab —
+  // that's the tabs' own handler's job) and simply keeps whatever
+  // dragOver a neighboring tab last set, since the gap is far too narrow
+  // for the target to have genuinely changed since then.
+  const onGapDragOver = (e: DragEvent) => {
+    if (e.target !== e.currentTarget || draggedId == null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+  const onGapDrop = (e: DragEvent) => {
+    if (e.target !== e.currentTarget) return;
+    e.preventDefault();
+    if (draggedId != null && dragOver != null) onReorderTabs(draggedId, dragOver.id, dragOver.side);
+    setDraggedId(null);
+    setDragOver(null);
+  };
+
   if (orientation === "vertical") {
-    return <div className="tab-bar tab-bar--vertical">{openFiles.map((f) => renderTab(f))}</div>;
+    return (
+      <div className="tab-bar tab-bar--vertical" onDragOver={onGapDragOver} onDrop={onGapDrop}>
+        {openFiles.map((f) => renderTab(f))}
+      </div>
+    );
   }
 
   return (
     <div className="tab-bar-row">
       <div className="tab-bar-scroll-wrap">
-        <div className="tab-bar" ref={scrollRef}>
+        <div className="tab-bar" ref={scrollRef} onDragOver={onGapDragOver} onDrop={onGapDrop}>
           {openFiles.map((f) => renderTab(f))}
         </div>
         <div className={`tab-bar-fade tab-bar-fade--left${canScrollLeft ? " tab-bar-fade--visible" : ""}`} />
