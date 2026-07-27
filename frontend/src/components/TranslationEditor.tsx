@@ -12,11 +12,6 @@ interface TranslationEditorProps {
   languageId: string;
   s: SourceString;
   canApprove: boolean;
-  /** Whether this account's project role permits voting on translations
-   * (see TranslationWorkspace's own computation for why this is
-   * separate from canApprove — proofreaders/managers get a 403 from
-   * Crowdin on vote attempts, since they approve directly instead). */
-  canVote: boolean;
   currentUserId: number | null;
   /** Called after a successful save (synced or durably queued while
    * offline) — Comfortable view uses this to auto-advance to the next
@@ -104,7 +99,7 @@ function JumpIcon() {
  * the surrounding layout differs.
  */
 export const TranslationEditor = forwardRef<TranslationEditorHandle, TranslationEditorProps>(function TranslationEditor(
-  { projectId, fileId, languageId, s, canApprove, canVote, currentUserId, onSaved, onJumpToMatch, isActive = true },
+  { projectId, fileId, languageId, s, canApprove, currentUserId, onSaved, onJumpToMatch, isActive = true },
   ref,
 ) {
   const queryClient = useQueryClient();
@@ -530,7 +525,6 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
               fileId={fileId}
               t={t}
               canApprove={canApprove}
-              canVote={canVote}
               currentUserId={currentUserId}
               onChanged={refetchStrings}
               onDeleted={() => handleDeleted(t)}
@@ -688,7 +682,6 @@ function TranslationItem({
   fileId,
   t,
   canApprove,
-  canVote,
   currentUserId,
   onChanged,
   onDeleted,
@@ -702,7 +695,6 @@ function TranslationItem({
   fileId: number;
   t: TranslationInfo;
   canApprove: boolean;
-  canVote: boolean;
   currentUserId: number | null;
   onChanged: () => void;
   onDeleted: () => void;
@@ -780,8 +772,8 @@ function TranslationItem({
               e.stopPropagation();
               vote.mutate("up");
             }}
-            disabled={!canVote || vote.isPending}
-            title={canVote ? "Vote up" : "Your project role can't vote — approve instead"}
+            disabled={vote.isPending}
+            title="Vote up"
           >
             ▲
           </button>
@@ -792,8 +784,8 @@ function TranslationItem({
               e.stopPropagation();
               vote.mutate("down");
             }}
-            disabled={!canVote || vote.isPending}
-            title={canVote ? "Vote down" : "Your project role can't vote — approve instead"}
+            disabled={vote.isPending}
+            title="Vote down"
           >
             ▼
           </button>

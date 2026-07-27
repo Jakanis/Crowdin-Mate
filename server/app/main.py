@@ -1066,6 +1066,19 @@ async def vote_translation(project_id: int, translation_id: int, body: VoteIn):
             translationId=translation_id, projectId=project_id,
         )
     except APIException as exc:
+        if exc.http_status == 403:
+            # Crowdin's own body here is just {"error":{"message":"Forbidden",
+            # "code":403}} — not something worth showing verbatim. We don't
+            # try to predict this from the member's role beforehand (role
+            # names aren't a reliable enough signal — see get_permissions'
+            # own docstring), so the button stays enabled and this is
+            # surfaced only once Crowdin itself actually rejects the vote,
+            # which in practice means a proofreader/manager-type role that
+            # approves directly instead of voting.
+            raise HTTPException(
+                status_code=403,
+                detail="Your project role doesn't allow voting on translations — try approving it instead.",
+            )
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
 
     # add_vote's response is just the vote record, not the translation's

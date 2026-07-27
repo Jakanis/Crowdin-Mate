@@ -236,17 +236,6 @@ export function TranslationWorkspace({
   if (strings.length === 0) return <p className="hint">No strings in this file.</p>;
 
   const canApprove = permissionsQuery.data?.is_member ?? false;
-  // Crowdin rejects vote attempts from proofreader/manager roles with a
-  // 403 — those roles approve directly instead of voting, so there's
-  // nothing for them to gain from it. Role name alone isn't a fully
-  // reliable signal in general (see get_permissions' own docstring on why
-  // canApprove doesn't try to use it), but this specific translator-vs-
-  // proofreader/manager split is a documented, stable distinction in
-  // Crowdin's role model — unlike "can approve," nothing here claims a
-  // translator can't ALSO have elevated rights, just that non-translator
-  // roles specifically can't vote. Defaults to false (no role fetched
-  // yet, or role missing) so a stale click can't 403 before this loads.
-  const canVote = permissionsQuery.data?.role === "translator";
   const currentUserId = permissionsQuery.data?.user_id ?? null;
   const focusedIndex = Math.max(0, strings.findIndex((s) => s.id === focusedStringId));
   const focusedSourceText = strings.find((s) => s.id === focusedStringId)?.text ?? null;
@@ -354,7 +343,6 @@ export function TranslationWorkspace({
             focusedIndex={focusedIndex}
             onFocusChange={(i) => onFocusChange(strings[i]?.id ?? null)}
             canApprove={canApprove}
-            canVote={canVote}
             currentUserId={currentUserId}
             autoAdvance={autoAdvance}
             onJumpToTmMatch={onJumpToTmMatch}
@@ -369,7 +357,6 @@ export function TranslationWorkspace({
             focusedStringId={focusedStringId}
             onFocusChange={onFocusChange}
             canApprove={canApprove}
-            canVote={canVote}
             currentUserId={currentUserId}
             onJumpToTmMatch={onJumpToTmMatch}
             isActive={isActive}
