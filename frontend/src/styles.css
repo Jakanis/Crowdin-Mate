@@ -989,8 +989,53 @@ body {
   font-weight: 600;
 }
 
-.tab--drag-over {
-  box-shadow: inset 2px 0 0 var(--accent);
+/* Where the dragged tab will actually land — a line sitting right at the
+   boundary with whichever neighbor it'd insert next to, rather than
+   highlighting the hovered tab's own border (which said "here" but not
+   "before or after this one"). --before/--after is recomputed from cursor
+   position on every dragover (see TabBar.tsx), not drag direction, so
+   this always matches exactly where the drop will land. */
+.tab-drop-indicator {
+  position: absolute;
+  background: var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.tab-drop-indicator--before {
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.tab-drop-indicator--after {
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+/* Sidebar tab list stacks vertically — rotate the line to the top/bottom
+   edge instead, same "boundary between tabs" idea along the axis tabs
+   actually stack in. */
+.tab-bar--vertical .tab-drop-indicator--before {
+  left: 0;
+  right: 0;
+  top: -3px;
+  bottom: auto;
+  width: auto;
+  height: 3px;
+}
+
+.tab-bar--vertical .tab-drop-indicator--after {
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  top: auto;
+  width: auto;
+  height: 3px;
 }
 
 .tab-name {

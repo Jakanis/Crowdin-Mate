@@ -7,7 +7,7 @@ interface TabBarProps {
   activeFileId: number | null;
   onSelectTab: (fileId: number) => void;
   onCloseTab: (fileId: number) => void;
-  onReorderTabs: (draggedFileId: number, targetFileId: number) => void;
+  onReorderTabs: (draggedFileId: number, targetFileId: number, side: "before" | "after") => void;
   orientation?: "horizontal" | "vertical";
   // Translation/approval progress per open file, keyed by file id — see
   // useOpenFilesProgress. Undefined (not just an empty Map) while the
@@ -81,9 +81,10 @@ function dirSegments(file: TreeFile): string[] {
 // away whatever directory segments the whole same-name group already
 // agrees on — both a common leading part (rare) and a common trailing
 // part right above the filename (the usual case, like the shared "B"
-// subfolder above) — collapsing each into a single ".." and keeping only
-// the segment(s) that actually differ, e.g. "gossip_tbc/../Borak Son of
-// Oronok_21293.xml" vs. "chats_tbc/../Borak Son of Oronok_21293.xml".
+// subfolder above) — collapsing each into a bare ".." (no surrounding
+// slashes — this is a compact label, not a real path) and keeping only
+// the segment(s) that actually differ: "gossip_tbc..Borak Son of
+// Oronok_21293.xml" vs. "chats_tbc..Borak Son of Oronok_21293.xml".
 function disambiguatedLabel(file: TreeFile, group: TreeFile[]): string {
   if (group.length <= 1) return file.name;
 
@@ -105,8 +106,18 @@ function disambiguatedLabel(file: TreeFile, group: TreeFile[]): string {
   }
 
   const middle = mySegs.slice(prefixLen, mySegs.length - suffixLen);
-  const parts = [...(prefixLen > 0 ? [".."] : []), ...middle, ...(suffixLen > 0 ? [".."] : [])];
-  return parts.length > 0 ? `/${parts.join("/")}/${file.name}` : file.name;
+  if (prefixLen === 0 && middle.length === 0 && suffixLen === 0) return file.name;
+
+  // Real path segments join with "/"; a collapsed-common run glues
+  // directly onto its neighbor with no slash, since ".." itself already
+  // reads as a separator (that's the whole point of shortening it).
+  const bits = [...(prefixLen > 0 ? [".."] : []), ...middle, ...(suffixLen > 0 ? [".."] : []), file.name];
+  let label = "";
+  for (let i = 0; i < bits.length; i++) {
+    if (i > 0 && bits[i] !== ".." && bits[i - 1] !== "..") label += "/";
+    label += bits[i];
+  }
+  return label;
 }
 
 export function TabBar({
@@ -119,7 +130,13 @@ export function TabBar({
   fileProgress,
 }: TabBarProps) {
   const [draggedId, setDraggedId] = useState<number | null>(null);
-  const [dragOverId, setDragOverId] = useState<number | null>(null);
+  // Which side of the hovered tab the dragged tab would land on — shown
+  // as a thin line right at that edge (the actual boundary between two
+  // tabs) rather than highlighting the hovered tab's own border, which
+  // said "here" but not "before or after this one". Side is recomputed
+  // from cursor position on every dragover, not inferred from drag
+  // direction, so what's drawn always matches exactly where it'll drop.
+  const [dragOver, setDragOver] = useState<{ id: number; side: "before" | "after" } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -243,7 +260,7 @@ export function TabBar({
         if (el) tabRefs.current.set(f.id, el);
         else tabRefs.current.delete(f.id);
       }}
-      className={`tab${f.id === activeFileId ? " tab--active" : ""}${dragOverId === f.id ? " tab--drag-over" : ""}`}
+      className={`tab${f.id === activeFileId ? " tab--active" : ""}`}
       draggable
       onDragStart={(e) => {
         setDraggedId(f.id);
@@ -253,18 +270,27 @@ export function TabBar({
         if (draggedId == null || draggedId === f.id) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setDragOverId(f.id);
+        const rect = e.currentTarget.getBoundingClientRect();
+        const side: "before" | "after" =
+          orientation === "vertical"
+            ? e.clientY - rect.top < rect.height / 2
+              ? "before"
+              : "after"
+            : e.clientX - rect.left < rect.width / 2
+              ? "before"
+              : "after";
+        setDragOver((prev) => (prev?.id === f.id && prev.side === side ? prev : { id: f.id, side }));
       }}
-      onDragLeave={() => setDragOverId((prev) => (prev === f.id ? null : prev))}
+      onDragLeave={() => setDragOver((prev) => (prev?.id === f.id ? null : prev))}
       onDrop={(e) => {
         e.preventDefault();
-        if (draggedId != null && draggedId !== f.id) onReorderTabs(draggedId, f.id);
+        if (draggedId != null && draggedId !== f.id) onReorderTabs(draggedId, f.id, dragOver?.side ?? "before");
         setDraggedId(null);
-        setDragOverId(null);
+        setDragOver(null);
       }}
       onDragEnd={() => {
         setDraggedId(null);
-        setDragOverId(null);
+        setDragOver(null);
       }}
       onClick={() => onSelectTab(f.id)}
       onMouseDown={(e) => {
@@ -285,6 +311,7 @@ export function TabBar({
       }}
       title={f.path}
     >
+      {dragOver?.id === f.id && <span className={`tab-drop-indicator tab-drop-indicator--${dragOver.side}`} />}
       {progress && <TabProgressStrip progress={progress} />}
       <span className="tab-name">{tabLabels.get(f.id) ?? f.name}</span>
       <button

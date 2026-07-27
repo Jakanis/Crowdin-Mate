@@ -247,14 +247,19 @@ export function App() {
     });
   };
 
-  const handleReorderTabs = (draggedFileId: number, targetFileId: number) => {
+  // side is exactly what TabBar's drop-position line showed — computed
+  // from where the cursor was over the target tab, not inferred from
+  // drag direction — so the drop always lands exactly where the line
+  // pointed instead of a direction-based guess that could disagree with it.
+  const handleReorderTabs = (draggedFileId: number, targetFileId: number, side: "before" | "after") => {
     setOpenFiles((prev) => {
       const fromIndex = prev.findIndex((f) => f.id === draggedFileId);
-      const toIndex = prev.findIndex((f) => f.id === targetFileId);
-      if (fromIndex === -1 || toIndex === -1) return prev;
+      if (fromIndex === -1 || draggedFileId === targetFileId) return prev;
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
+      const targetIndex = next.findIndex((f) => f.id === targetFileId);
+      if (targetIndex === -1) return prev;
+      next.splice(side === "after" ? targetIndex + 1 : targetIndex, 0, moved);
       return next;
     });
   };
