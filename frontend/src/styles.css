@@ -1844,11 +1844,44 @@ body {
   gap: 8px;
 }
 
+.right-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .right-sidebar-title {
   font-size: calc(14px * var(--ui-scale));
   font-weight: 650;
   margin: 0;
   opacity: 0.85;
+}
+
+/* Tilted when unpinned (the "not stuck in place" reading) vs. upright
+   and highlighted when pinned — same idea as a browser's pinned-tab
+   icon, just for whether this panel survives moving to another string. */
+.right-sidebar-pin {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: calc(13px * var(--ui-scale));
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.35;
+  transform: rotate(40deg);
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.right-sidebar-pin:hover {
+  opacity: 0.75;
+}
+
+.right-sidebar-pin--active {
+  opacity: 1;
+  transform: rotate(0deg);
+  background: var(--accent-bg);
 }
 
 .comments-sidebar-list {

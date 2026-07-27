@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { api } from "../api/client";
 import { CommentsPanel } from "./CommentsPanel";
 import { GlossaryPanel } from "./GlossaryPanel";
@@ -18,6 +19,10 @@ interface RightSidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
   activeTab: string;
   onActiveTabChange: (tab: string) => void;
+  /** Whether the panel stays open when you move to a different string —
+   * see useRightSidebarState's own doc comment. */
+  pinned: boolean;
+  onPinnedChange: (pinned: boolean) => void;
   onJumpToTmMatch: (fileId: number, stringId: number) => void;
 }
 
@@ -50,6 +55,8 @@ export function RightSidebar({
   onCollapsedChange,
   activeTab,
   onActiveTabChange,
+  pinned,
+  onPinnedChange,
   onJumpToTmMatch,
 }: RightSidebarProps) {
 
@@ -68,6 +75,22 @@ export function RightSidebar({
     staleTime: 60_000,
   });
   const commentCount = commentsQuery.data?.comments.length;
+
+  // Unpinned means "just needed this once" — moving on to a different
+  // string auto-collapses the panel instead of leaving it parked open.
+  // Skips the very first run so simply opening a tab (which mounts this
+  // component with whatever string was already focused) doesn't
+  // immediately collapse a sidebar you just explicitly opened; only a
+  // real navigation to a NEW string after that counts as "done with it".
+  const hasMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    if (!pinned) onCollapsedChange(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stringId]);
 
   const selectTab = (key: TabKey) => {
     if (!collapsed && key === activeTab) {
@@ -100,7 +123,20 @@ export function RightSidebar({
         <>
           <div className="resize-handle" onMouseDown={onResizeStart} />
           <aside className="right-sidebar-panel" style={{ width }}>
-          <h3 className="right-sidebar-title">{TABS.find((t) => t.key === activeTab)!.label}</h3>
+          <div className="right-sidebar-header">
+            <h3 className="right-sidebar-title">{TABS.find((t) => t.key === activeTab)!.label}</h3>
+            <button
+              className={`right-sidebar-pin${pinned ? " right-sidebar-pin--active" : ""}`}
+              onClick={() => onPinnedChange(!pinned)}
+              title={
+                pinned
+                  ? "Pinned — stays open when you move to a different string. Click to unpin."
+                  : "Unpinned — closes automatically when you move to a different string. Click to pin."
+              }
+            >
+              📌
+            </button>
+          </div>
           {activeTab === "comments" && (
             <CommentsPanel projectId={projectId} stringId={stringId} languageId={languageId} />
           )}

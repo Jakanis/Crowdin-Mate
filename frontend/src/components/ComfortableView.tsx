@@ -11,6 +11,7 @@ interface ComfortableViewProps {
   focusedIndex: number;
   onFocusChange: (index: number) => void;
   canApprove: boolean;
+  canVote: boolean;
   currentUserId: number | null;
   autoAdvance: boolean;
   onJumpToTmMatch: (fileId: number, stringId: number) => void;
@@ -30,6 +31,7 @@ export function ComfortableView({
   focusedIndex,
   onFocusChange,
   canApprove,
+  canVote,
   currentUserId,
   autoAdvance,
   onJumpToTmMatch,
@@ -83,6 +85,7 @@ export function ComfortableView({
           languageId={languageId}
           s={s}
           canApprove={canApprove}
+          canVote={canVote}
           currentUserId={currentUserId}
           onSaved={autoAdvance && !isLast ? () => onFocusChange(focusedIndex + 1) : undefined}
           onJumpToMatch={onJumpToTmMatch}

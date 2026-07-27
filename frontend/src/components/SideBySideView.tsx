@@ -12,6 +12,7 @@ interface SideBySideViewProps {
   focusedStringId: number | null;
   onFocusChange: (stringId: number) => void;
   canApprove: boolean;
+  canVote: boolean;
   currentUserId: number | null;
   onJumpToTmMatch: (fileId: number, stringId: number) => void;
   isActive: boolean;
@@ -35,6 +36,7 @@ export function SideBySideView({
   focusedStringId,
   onFocusChange,
   canApprove,
+  canVote,
   currentUserId,
   onJumpToTmMatch,
   isActive,
@@ -100,6 +102,7 @@ export function SideBySideView({
                       languageId={languageId}
                       s={s}
                       canApprove={canApprove}
+                      canVote={canVote}
                       currentUserId={currentUserId}
                       onJumpToMatch={onJumpToTmMatch}
                       isActive={isActive}

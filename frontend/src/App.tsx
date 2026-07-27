@@ -471,6 +471,8 @@ export function App() {
                 onRightSidebarCollapsedChange={rightSidebar.setCollapsed}
                 rightSidebarActiveTab={rightSidebar.activeTab}
                 onRightSidebarActiveTabChange={rightSidebar.setActiveTab}
+                rightSidebarPinned={rightSidebar.pinned}
+                onRightSidebarPinnedChange={rightSidebar.setPinned}
                 onJumpToTmMatch={handleJumpToSearchResult}
                 isActive={file.id === activeFileId}
               />
