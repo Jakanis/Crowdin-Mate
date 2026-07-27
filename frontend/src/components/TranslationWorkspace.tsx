@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import { notifyProgressChanged } from "../progressEvents";
 import type { ViewMode } from "../theme";
 import { ComfortableView } from "./ComfortableView";
 import { RightSidebar } from "./RightSidebar";
@@ -131,6 +132,11 @@ export function TranslationWorkspace({
     try {
       await api.resyncFile(projectId, fileId, languageId);
       queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
+      // Whatever this pulled in from Crowdin can change translated/
+      // approved counts — without this, the tab's progress strip (and
+      // the file tree's own bar) keep showing whatever was cached
+      // before the resync, same as any other action that changes them.
+      notifyProgressChanged(fileId);
     } catch {
       // Best-effort — the manual Refresh button remains available to
       // retry, and get_file_strings' own background revalidation will
