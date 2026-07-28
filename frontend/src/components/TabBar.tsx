@@ -53,19 +53,32 @@ const CLOSE_BTN_WIDTH = 26;
 // to reveal enough of the next tab to read, not just its close button.
 const TAB_PEEK_PX = CLOSE_BTN_WIDTH * 1.5;
 
+// Three states per metric — absent (0%), partial (anything in between),
+// full (100%) — rather than a continuous fill, so telling "almost done"
+// from "actually done" never requires zooming in or hovering for the
+// exact percentage (the tooltip still has that, for whoever wants it).
+function bucketPercent(pct: number): number {
+  if (pct <= 0) return 0;
+  if (pct >= 100) return 100;
+  return 50;
+}
+
 // A thin vertical strip along the tab's left edge rather than a pie/
 // checkmark icon competing with the name and close button for room in an
-// already-tight strip. Same layering convention as FileTree's own
-// progress bar (green from 0 to approved%, blue from approved% to
-// translated%, on top of a neutral track) — just rotated to fill bottom-up
-// instead of left-to-right, so it reads at a glance without needing to
-// stop and parse a shape.
+// already-tight strip. Same single-bar overlay as before — green
+// (approval) from the bottom up to its own bucket, blue (translation)
+// continuing from there up to its bucket, on a neutral track — just
+// fed bucketed 0/50/100 values instead of the raw percentages, so
+// "almost done" reads as visibly different from "done" without needing
+// to zoom in or hover for the exact number.
 function TabProgressStrip({ progress }: { progress: ProgressInfo }) {
   const { translation_progress: t, approval_progress: a } = progress;
+  const tb = bucketPercent(t);
+  const ab = bucketPercent(a);
   return (
     <span className="tab-progress-strip" title={progressTitle(progress)}>
-      <span className="tab-progress-strip-translated" style={{ bottom: `${a}%`, height: `${t - a}%` }} />
-      <span className="tab-progress-strip-approved" style={{ height: `${a}%` }} />
+      <span className="tab-progress-strip-translated" style={{ bottom: `${ab}%`, height: `${tb - ab}%` }} />
+      <span className="tab-progress-strip-approved" style={{ height: `${ab}%` }} />
     </span>
   );
 }

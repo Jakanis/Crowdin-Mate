@@ -17,9 +17,8 @@ interface SideBySideViewProps {
   isActive: boolean;
 }
 
-function bestTranslationText(s: SourceString): string {
-  const approved = s.translations.find((t) => t.is_approved);
-  return approved?.text ?? s.translations[0]?.text ?? "(no translation yet)";
+function bestTranslation(s: SourceString) {
+  return s.translations.find((t) => t.is_approved) ?? s.translations[0] ?? null;
 }
 
 /** Matches Crowdin's "Side-by-Side" view: every string in the file as a
@@ -105,7 +104,14 @@ export function SideBySideView({
                       isActive={isActive}
                     />
                   ) : (
-                    <div className="sbs-translation-preview">{bestTranslationText(s)}</div>
+                    <div className="sbs-translation-preview">
+                      {bestTranslation(s)?.is_approved && (
+                        <span className="approved-badge sbs-approved-badge" title="Approved">
+                          ✓
+                        </span>
+                      )}
+                      {bestTranslation(s)?.text ?? "(no translation yet)"}
+                    </div>
                   )}
                 </div>
               </div>

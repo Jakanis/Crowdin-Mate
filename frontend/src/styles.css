@@ -1097,10 +1097,13 @@ body {
    edge rather than a pie/checkmark competing with the name and close
    button for room — see TabBar.tsx's TabProgressStrip. Fills bottom-up:
    a neutral track (this element's own background) when empty, green from
-   the bottom up to approved%, blue continuing from there up to
-   translated% — same color convention as FileTree's horizontal bar, just
-   rotated. border-radius matches the tab's own top-left corner so the
-   strip doesn't visibly poke past it. */
+   the bottom up to approved-bucket%, blue continuing from there up to
+   translated-bucket% — same color convention as FileTree's horizontal
+   bar, just rotated, and fed bucketed 0/50/100 values (see
+   bucketPercent) instead of a continuous percentage, so "almost done"
+   reads as visibly different from "done" without needing to zoom in or
+   hover for the exact number. border-radius matches the tab's own
+   top-left corner so the strip doesn't visibly poke past it. */
 .tab-progress-strip {
   position: absolute;
   left: 0;
@@ -2459,4 +2462,8 @@ body {
   white-space: pre-wrap;
   line-height: 1.4;
   opacity: 0.75;
+}
+
+.sbs-approved-badge {
+  margin-right: 6px;
 }
