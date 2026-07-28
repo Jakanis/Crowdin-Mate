@@ -262,6 +262,30 @@ export function TabBar({
     };
   }, [orientation, openFiles]);
 
+  // Belt-and-suspenders alongside each tab's own onMouseDown below:
+  // confirmed live (desktop app, WebView2 on Windows) that middle-
+  // clicking a tab to close it triggered the OS-style autoscroll/pan
+  // cursor instead — only once the strip actually had something to
+  // scroll, i.e. exactly when this container (horizontal OR the
+  // vertical sidebar list, both genuinely scrollable) is overflowing.
+  // A capture-phase native listener on the scrollable container itself
+  // runs earlier than React's own bubble-phase synthetic dispatch, so
+  // if the per-tab handler's preventDefault() is ever too late (or the
+  // mousedown lands on the container instead of a tab, e.g. in the gap
+  // the drop-indicator sits in), this still catches it before
+  // Chromium's own arm-for-autoscroll check does. Unconditional on
+  // orientation — unlike the wheel-conversion effect above, this isn't
+  // horizontal-specific.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 1) e.preventDefault();
+    };
+    el.addEventListener("mousedown", onMouseDown, { capture: true });
+    return () => el.removeEventListener("mousedown", onMouseDown, { capture: true });
+  }, [orientation, openFiles]);
+
   if (openFiles.length === 0) return null;
 
   const renderTab = (f: TreeFile) => {
@@ -383,7 +407,7 @@ export function TabBar({
 
   if (orientation === "vertical") {
     return (
-      <div className="tab-bar tab-bar--vertical" onDragOver={onGapDragOver} onDrop={onGapDrop}>
+      <div className="tab-bar tab-bar--vertical" ref={scrollRef} onDragOver={onGapDragOver} onDrop={onGapDrop}>
         {openFiles.map((f) => renderTab(f))}
       </div>
     );
