@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, type SearchResult } from "../api/client";
+import { fullDateTime, timeAgo } from "../timeAgo";
 
 interface SearchPanelProps {
   projectId: number;
@@ -106,6 +107,15 @@ export function SearchPanel({ projectId, languageId, languageName, onJumpToResul
             {r.target_snippet && (
               <div className="search-result-target">
                 <Snippet text={r.target_snippet} />
+              </div>
+            )}
+            {(r.translator_name || r.submitted_at) && (
+              <div className="search-result-meta">
+                {r.is_approved && <span className="approved-badge">✓ Approved</span>}
+                {r.translator_name && <span>{r.translator_name}</span>}
+                {r.submitted_at && (
+                  <span title={fullDateTime(r.submitted_at)}>{timeAgo(r.submitted_at)}</span>
+                )}
               </div>
             )}
           </button>

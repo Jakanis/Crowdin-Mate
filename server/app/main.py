@@ -473,7 +473,15 @@ def _search_strings_local(project_id: int, q: str, language_id: str, limit: int)
     strings_fts_map.language_id = '' rows are source-only (no target
     language synced yet for that string) and match regardless of the
     requested language, so source text stays searchable before any
-    translation sync has happened."""
+    translation sync has happened.
+
+    translator_name/is_approved/submitted_at come from whichever cached
+    translation ranks best for that string+language (approved first,
+    else newest) — the FTS index itself only stores one combined blob
+    of every candidate's text per string (see search_fts.py), not which
+    individual translation actually matched, so this is "the string's
+    best translation," not necessarily "the one this snippet matched."
+    Good enough for an offline fallback path."""
     fts_query = '"' + q.replace('"', '""') + '"*'
     with get_conn() as conn:
         try:
@@ -485,20 +493,36 @@ def _search_strings_local(project_id: int, q: str, language_id: str, limit: int)
                     ss.identifier,
                     f.path AS file_path,
                     snippet(strings_fts, 1, '⟦', '⟧', '…', 12) AS source_snippet,
-                    snippet(strings_fts, 2, '⟦', '⟧', '…', 12) AS target_snippet
+                    snippet(strings_fts, 2, '⟦', '⟧', '…', 12) AS target_snippet,
+                    bt.user_name AS translator_name,
+                    bt.is_approved AS is_approved,
+                    bt.created_at AS submitted_at
                 FROM strings_fts
                 JOIN strings_fts_map m ON m.id = strings_fts.rowid
                 JOIN source_strings ss ON ss.id = m.string_id
                 JOIN files f ON f.id = ss.file_id
+                LEFT JOIN (
+                    SELECT string_id, language_id, user_name, is_approved, created_at,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY string_id, language_id
+                               ORDER BY is_approved DESC, created_at DESC
+                           ) AS rn
+                    FROM translations
+                ) bt ON bt.string_id = m.string_id AND bt.language_id = ? AND bt.rn = 1
                 WHERE strings_fts MATCH ? AND ss.project_id = ? AND (m.language_id = ? OR m.language_id = '')
                 ORDER BY rank
                 LIMIT ?
                 """,
-                (fts_query, project_id, language_id, limit),
+                (language_id, fts_query, project_id, language_id, limit),
             ).fetchall()
         except sqlite3.OperationalError as exc:
             raise HTTPException(status_code=400, detail=f"Bad search query: {exc}")
-    return [dict(r) for r in rows]
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["is_approved"] = bool(d["is_approved"])
+        results.append(d)
+    return results
 
 
 @app.get("/projects/{project_id}/search")

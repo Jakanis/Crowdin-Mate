@@ -809,6 +809,15 @@ body {
   color: var(--accent);
 }
 
+.search-result-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: calc(11px * var(--ui-scale));
+  opacity: 0.6;
+}
+
 .search-result mark {
   background: var(--warning-bg);
   color: inherit;

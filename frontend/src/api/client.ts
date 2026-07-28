@@ -182,6 +182,11 @@ export interface SearchResult {
   file_path: string;
   source_snippet: string;
   target_snippet: string;
+  /** Whichever translation the target_snippet came from — null when
+   * there's no translation at all yet (source-only match). */
+  translator_name: string | null;
+  submitted_at: string | null;
+  is_approved: boolean;
 }
 
 export interface SearchIndexStatus {
