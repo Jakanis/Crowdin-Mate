@@ -758,7 +758,7 @@ function TranslationItem({
     >
       <div className="translation-text">{t.text}</div>
       <div className="translation-meta">
-        {t.is_approved && <span className="approved-badge">✓ Approved</span>}
+        {!!t.is_approved && <span className="approved-badge">✓ Approved</span>}
         {t.user_name && <span className="translation-author">{t.user_name}</span>}
         {t.created_at && (
           <span className="translation-date" title={fullDateTime(t.created_at)}>

@@ -105,7 +105,7 @@ export function SideBySideView({
                     />
                   ) : (
                     <div className="sbs-translation-preview">
-                      {bestTranslation(s)?.is_approved && (
+                      {!!bestTranslation(s)?.is_approved && (
                         <span className="approved-badge sbs-approved-badge" title="Approved">
                           ✓
                         </span>
