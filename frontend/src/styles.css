@@ -980,6 +980,22 @@ body {
   width: 100%;
 }
 
+/* Horizontal tabs are content-sized (up to their own 200px cap), so the
+   close button already sits flush against the tab's own right edge —
+   "right after the text" and "on the right side" are the same place
+   there. A vertical tab instead stretches to the full sidebar width
+   (100% above), and without this, .tab-name only ever claims its own
+   text's width, leaving the close button stranded right after a short
+   name instead of at the tab's actual right edge. flex: 1 lets it
+   absorb the leftover space so the close button reaches the edge same
+   as horizontal; min-width: 0 keeps the ellipsis truncation working
+   once a name is long enough to need it (a flex item's default min-
+   width is its content size, which would otherwise stop it shrinking). */
+.tab-bar--vertical .tab-name {
+  flex: 1;
+  min-width: 0;
+}
+
 .tab-bar--vertical .tab--active {
   background: var(--accent-bg);
 }
