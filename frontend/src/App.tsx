@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api, type Project, type TreeFile } from "./api/client";
 import { OfflineIndicator } from "./components/OfflineIndicator";
@@ -45,8 +45,6 @@ function pickDefaultLanguage(project: Project): string | null {
 }
 
 export function App() {
-  const queryClient = useQueryClient();
-
   // Which project + target language is currently open. null until the
   // project list has loaded and a default has been picked (see the
   // effect below) — everything downstream waits on that.
@@ -205,14 +203,6 @@ export function App() {
       return next;
     });
   };
-
-  const resyncMutation = useMutation({
-    mutationFn: (fileId: number) => api.resyncFile(projectId as number, fileId, languageId as string),
-    onSuccess: (_result, fileId) => {
-      queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
-      clearStale(fileId);
-    },
-  });
 
   // The active tab's strings, fetched here too (in addition to inside
   // TranslationWorkspace) purely so the Sidebar's "Strings" tab can jump
@@ -439,17 +429,6 @@ export function App() {
             />
           )}
           {openFiles.length === 0 && <p className="hint">Select a file from the tree.</p>}
-          {activeFileId != null && staleFileIds.has(activeFileId) && (
-            <div className="stale-file-banner">
-              This file changed on Crowdin since it was opened.
-              <button onClick={() => resyncMutation.mutate(activeFileId)} disabled={resyncMutation.isPending}>
-                {resyncMutation.isPending ? "Reloading…" : "Reload"}
-              </button>
-              <button className="link-button" onClick={() => clearStale(activeFileId)}>
-                Dismiss
-              </button>
-            </div>
-          )}
           {openFiles.map((file) => (
             <div key={file.id} className="workspace-tab-panel" hidden={file.id !== activeFileId}>
               <TranslationWorkspace
@@ -475,6 +454,8 @@ export function App() {
                 onRightSidebarPinnedChange={rightSidebar.setPinned}
                 onJumpToTmMatch={handleJumpToSearchResult}
                 isActive={file.id === activeFileId}
+                isStale={staleFileIds.has(file.id)}
+                onStaleHandled={() => clearStale(file.id)}
               />
             </div>
           ))}

@@ -305,24 +305,6 @@ body {
   background: rgba(128, 128, 128, 0.1);
 }
 
-.stale-file-banner {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--warning-bg);
-  color: var(--warning);
-  font-size: calc(13px * var(--ui-scale));
-}
-
-.stale-file-banner button:not(.link-button) {
-  font-size: calc(12px * var(--ui-scale));
-  padding: 4px 10px;
-}
-
 .settings-menu {
   position: relative;
 }
@@ -2316,6 +2298,23 @@ body {
 
 .workspace-refresh-button {
   flex-shrink: 0;
+}
+
+/* Same accent treatment as the sidebar's own "changed on Crowdin" sync
+   button (.file-tree-sync-btn--changed below) — this file's own escape
+   hatch for the identical signal, rather than a separate banner
+   duplicating what this button already does. Declared after .icon-btn
+   (not up near .workspace-refresh-button's old banner neighbor) so it
+   actually wins the cascade — same specificity, and the later rule
+   wins when nothing else breaks the tie. */
+.workspace-refresh-button--stale {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-bg);
+}
+
+.workspace-refresh-button--stale:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 @keyframes icon-spin {

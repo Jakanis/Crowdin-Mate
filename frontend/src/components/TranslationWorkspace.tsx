@@ -35,6 +35,16 @@ interface TranslationWorkspaceProps {
    * this tab" as opposed to "this tab was opened a while ago and never
    * touched since." Drives the auto-refresh-on-activate effect below. */
   isActive: boolean;
+  /** Crowdin's tree sync (see useSyncTree/App.tsx) flagged this file as
+   * changed upstream since it was opened. Highlights the refresh button
+   * below rather than a separate banner — same escape hatch, just
+   * pointing at it instead of duplicating it. */
+  isStale: boolean;
+  /** Called once a refresh (auto or manual — both go through doRefresh
+   * below) actually completes, regardless of what triggered it, since
+   * either one means whatever made this file stale has now been pulled
+   * in. Lets App.tsx drop it from staleFileIds. */
+  onStaleHandled: () => void;
 }
 
 const MIN_AUTO_REFRESH_INTERVAL_MS = 20_000;
@@ -89,6 +99,8 @@ export function TranslationWorkspace({
   onRightSidebarPinnedChange,
   onJumpToTmMatch,
   isActive,
+  isStale,
+  onStaleHandled,
 }: TranslationWorkspaceProps) {
   const queryClient = useQueryClient();
   const stringsQuery = useQuery({
@@ -137,6 +149,7 @@ export function TranslationWorkspace({
       // the file tree's own bar) keep showing whatever was cached
       // before the resync, same as any other action that changes them.
       notifyProgressChanged(fileId);
+      onStaleHandled();
     } catch {
       // Best-effort — the manual Refresh button remains available to
       // retry, and get_file_strings' own background revalidation will
@@ -330,10 +343,14 @@ export function TranslationWorkspace({
           </div>
         )}
         <button
-          className="icon-btn workspace-refresh-button"
+          className={`icon-btn workspace-refresh-button${isStale ? " workspace-refresh-button--stale" : ""}`}
           onClick={forceRefresh}
           disabled={isRefreshing}
-          title="Re-check this file against Crowdin"
+          title={
+            isStale
+              ? "This file changed on Crowdin since it was opened — click to reload"
+              : "Re-check this file against Crowdin"
+          }
         >
           <RefreshIcon spinning={isRefreshing} />
         </button>
