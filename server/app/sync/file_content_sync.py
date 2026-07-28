@@ -38,6 +38,50 @@ def _unwrap(item: dict) -> dict:
     return item.get("data", item) if isinstance(item, dict) else item
 
 
+def _purge_stale_source_strings(conn, file_id: int, fresh_string_ids: list[int]) -> list[int]:
+    """Crowdin no longer lists these string ids under this file — either
+    genuinely deleted, or moved elsewhere in a way that gave the moved
+    content a brand-new id (confirmed live: moving strings to a new file
+    created fresh ids there rather than reassigning the existing ones,
+    so the old file's fresh listing simply stops including them). The
+    upsert loop below only ever adds/updates rows for ids Crowdin still
+    returns, so without this a file that shrinks or gets reorganized
+    keeps showing its old strings forever — exactly the bug reported
+    live (a file with strings moved out, plus new ones added, kept
+    showing the moved-out strings alongside the new ones)."""
+    if fresh_string_ids:
+        placeholders = ",".join("?" * len(fresh_string_ids))
+        rows = conn.execute(
+            f"SELECT id FROM source_strings WHERE file_id = ? AND id NOT IN ({placeholders})",
+            (file_id, *fresh_string_ids),
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT id FROM source_strings WHERE file_id = ?", (file_id,)).fetchall()
+    stale_ids = [r["id"] for r in rows]
+    if not stale_ids:
+        return []
+
+    placeholders = ",".join("?" * len(stale_ids))
+    for table in (
+        "translations", "deleted_translations", "comments",
+        "tm_matches", "glossary_matches", "suggestion_lookups", "translation_drafts",
+    ):
+        conn.execute(f"DELETE FROM {table} WHERE string_id IN ({placeholders})", stale_ids)
+
+    fts_rowids = [
+        row["id"] for row in conn.execute(
+            f"SELECT id FROM strings_fts_map WHERE string_id IN ({placeholders})", stale_ids
+        )
+    ]
+    if fts_rowids:
+        fts_placeholders = ",".join("?" * len(fts_rowids))
+        conn.execute(f"DELETE FROM strings_fts WHERE rowid IN ({fts_placeholders})", fts_rowids)
+        conn.execute(f"DELETE FROM strings_fts_map WHERE id IN ({fts_placeholders})", fts_rowids)
+
+    conn.execute(f"DELETE FROM source_strings WHERE id IN ({placeholders})", stale_ids)
+    return stale_ids
+
+
 def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
     client = get_client()
 
@@ -78,6 +122,13 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
     now = _now()
 
     with get_conn() as conn:
+        purged_ids = _purge_stale_source_strings(conn, file_id, string_ids)
+        if purged_ids:
+            logger.info(
+                "Synced file %s content: purged %d stale string(s) no longer present: %s",
+                file_id, len(purged_ids), purged_ids,
+            )
+
         for s in strings:
             conn.execute(
                 """
