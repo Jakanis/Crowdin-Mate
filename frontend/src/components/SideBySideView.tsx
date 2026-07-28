@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { SourceString } from "../api/client";
 import { HighlightedSourceText } from "./HighlightedSourceText";
 import { TranslationEditor, type TranslationEditorHandle } from "./TranslationEditor";
@@ -50,6 +50,23 @@ export function SideBySideView({
     estimateSize: () => 60,
     overscan: 6,
   });
+
+  // Switching away from this tab makes the whole panel display: none
+  // (see workspace-tab-panel's `hidden` attribute) without unmounting
+  // it — so the expanded row's real measured size (via measureElement
+  // below), taken while it had actual layout, can go stale relative to
+  // whatever's expanded by the time you switch back (a different row,
+  // or the same row now showing more candidates/suggestions than
+  // before). Confirmed live: switching back to a tab whose expanded row
+  // had grown taller than its cached measurement left the virtualizer's
+  // position math wrong enough that it dropped the first couple of rows
+  // from the rendered window entirely, despite scrollTop being 0.
+  // measure() clears every cached size so the next render remeasures
+  // from scratch against the panel's now-real (visible) layout.
+  useEffect(() => {
+    if (isActive) virtualizer.measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
 
   return (
     <div ref={parentRef} className="side-by-side-scroll">
