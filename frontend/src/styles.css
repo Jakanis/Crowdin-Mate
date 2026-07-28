@@ -1099,7 +1099,7 @@ body {
    a neutral track (this element's own background) when empty, green from
    the bottom up to approved-bucket%, blue continuing from there up to
    translated-bucket% — same color convention as FileTree's horizontal
-   bar, just rotated, and fed bucketed 0/50/100 values (see
+   bar, just rotated, and fed values bucketed to 10%-steps (see
    bucketPercent) instead of a continuous percentage, so "almost done"
    reads as visibly different from "done" without needing to zoom in or
    hover for the exact number. border-radius matches the tab's own
@@ -1109,7 +1109,7 @@ body {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 6px;
   background: rgba(128, 128, 128, 0.18);
   border-radius: 6px 0 0 0;
   overflow: hidden;

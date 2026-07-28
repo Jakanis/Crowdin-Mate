@@ -53,14 +53,14 @@ const CLOSE_BTN_WIDTH = 26;
 // to reveal enough of the next tab to read, not just its close button.
 const TAB_PEEK_PX = CLOSE_BTN_WIDTH * 1.5;
 
-// Three states per metric — absent (0%), partial (anything in between),
-// full (100%) — rather than a continuous fill, so telling "almost done"
+// Steps of 10 rather than a continuous fill, so telling "almost done"
 // from "actually done" never requires zooming in or hovering for the
 // exact percentage (the tooltip still has that, for whoever wants it).
+// Floors rather than rounds — same reasoning as _percent() on the
+// backend (progress_sync.py): rounding 99% up to the 100% bucket would
+// claim a file is fully done when one string genuinely isn't yet.
 function bucketPercent(pct: number): number {
-  if (pct <= 0) return 0;
-  if (pct >= 100) return 100;
-  return 50;
+  return Math.floor(pct / 10) * 10;
 }
 
 // A thin vertical strip along the tab's left edge rather than a pie/
@@ -68,7 +68,7 @@ function bucketPercent(pct: number): number {
 // already-tight strip. Same single-bar overlay as before — green
 // (approval) from the bottom up to its own bucket, blue (translation)
 // continuing from there up to its bucket, on a neutral track — just
-// fed bucketed 0/50/100 values instead of the raw percentages, so
+// fed bucketed 10%-step values instead of the raw percentages, so
 // "almost done" reads as visibly different from "done" without needing
 // to zoom in or hover for the exact number.
 function TabProgressStrip({ progress }: { progress: ProgressInfo }) {
