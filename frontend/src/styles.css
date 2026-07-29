@@ -2424,6 +2424,23 @@ body {
   }
 }
 
+/* Same accent-tinted "something changed upstream" language as the sidebar's
+   sync affordance and the stale refresh button, so this reads as part of
+   that family rather than an error. */
+.workspace-update-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  font-size: calc(12.5px * var(--ui-scale));
+}
+
 .workspace-body {
   flex: 1;
   min-width: 0;

@@ -1,11 +1,22 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { api, type FileStringsResponse } from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
 import type { ViewMode } from "../theme";
 import { ComfortableView } from "./ComfortableView";
 import { RightSidebar } from "./RightSidebar";
 import { SideBySideView } from "./SideBySideView";
+
+/** Whether two responses agree on everything Crowdin owns.
+ *
+ * `draft` is excluded deliberately: it's local, unsubmitted, and changes on
+ * every keystroke — comparing it would report the user's own typing as a
+ * remote change and raise the banner against themselves. */
+function sameServerState(a: FileStringsResponse, b: FileStringsResponse): boolean {
+  const strip = (r: FileStringsResponse) =>
+    JSON.stringify(r.strings.map(({ draft: _draft, ...rest }) => rest));
+  return strip(a) === strip(b);
+}
 
 interface TranslationWorkspaceProps {
   projectId: number;
@@ -137,13 +148,49 @@ export function TranslationWorkspace({
   const lastAutoRefreshRef = useRef(0);
   const refreshInFlightRef = useRef(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Which strings have an unsubmitted edit sitting in their box right now,
+  // reported up by TranslationEditor. Empty means nothing would be lost by
+  // swapping in fresher data, so a refresh applies silently; non-empty means
+  // it waits behind the banner below instead.
+  const dirtyStringsRef = useRef<Set<number>>(new Set());
+  // Fresh data that arrived while editing, parked until it's asked for.
+  const pendingFreshRef = useRef<FileStringsResponse | null>(null);
+  const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
+
+  const handleEditorDirtyChange = (stringId: number, dirty: boolean) => {
+    if (dirty) dirtyStringsRef.current.add(stringId);
+    else dirtyStringsRef.current.delete(stringId);
+  };
+
+  const applyFresh = (fresh: FileStringsResponse) => {
+    queryClient.setQueryData(["file-strings", projectId, fileId, languageId], fresh);
+    pendingFreshRef.current = null;
+    setHasPendingUpdate(false);
+  };
+
   const doRefresh = async () => {
     if (refreshInFlightRef.current) return;
     refreshInFlightRef.current = true;
     setIsRefreshing(true);
     try {
       await api.resyncFile(projectId, fileId, languageId);
-      queryClient.invalidateQueries({ queryKey: ["file-strings", projectId, fileId, languageId] });
+      // Fetched directly rather than via invalidateQueries, so arrival and
+      // application are separable: invalidate would push it straight into
+      // the UI, which is exactly the "my edit vanished" behaviour this
+      // exists to prevent.
+      const fresh = await api.getFileStrings(projectId, fileId, languageId);
+      const current = queryClient.getQueryData<FileStringsResponse>([
+        "file-strings", projectId, fileId, languageId,
+      ]);
+      if (!current || !sameServerState(current, fresh)) {
+        if (dirtyStringsRef.current.size > 0) {
+          pendingFreshRef.current = fresh;
+          setHasPendingUpdate(true);
+        } else {
+          applyFresh(fresh);
+        }
+      }
       // Whatever this pulled in from Crowdin can change translated/
       // approved counts — without this, the tab's progress strip (and
       // the file tree's own bar) keep showing whatever was cached
@@ -356,6 +403,32 @@ export function TranslationWorkspace({
         </button>
       </div>
 
+      {/* Only ever shown when a refresh found real changes AND there's an
+          unsubmitted edit in the box. With nothing in progress the new data
+          is already on screen — silently, because interrupting to announce
+          a change that cost you nothing is just noise. */}
+      {hasPendingUpdate && (
+        <div className="workspace-update-banner">
+          <span>This file changed on Crowdin. Your unsaved edit is still here.</span>
+          <button
+            className="link-button"
+            onClick={() => pendingFreshRef.current && applyFresh(pendingFreshRef.current)}
+          >
+            Load changes
+          </button>
+          <button
+            className="link-button"
+            onClick={() => {
+              pendingFreshRef.current = null;
+              setHasPendingUpdate(false);
+            }}
+            title="Keep what's on screen. The next refresh will offer it again."
+          >
+            Not now
+          </button>
+        </div>
+      )}
+
       <div className="workspace-body">
         {viewMode === "comfortable" ? (
           <ComfortableView
@@ -370,6 +443,7 @@ export function TranslationWorkspace({
             autoAdvance={autoAdvance}
             onJumpToTmMatch={onJumpToTmMatch}
             isActive={isActive}
+            onEditorDirtyChange={handleEditorDirtyChange}
           />
         ) : (
           <SideBySideView
@@ -383,6 +457,7 @@ export function TranslationWorkspace({
             currentUserId={currentUserId}
             onJumpToTmMatch={onJumpToTmMatch}
             isActive={isActive}
+            onEditorDirtyChange={handleEditorDirtyChange}
           />
         )}
 

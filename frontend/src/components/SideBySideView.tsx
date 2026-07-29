@@ -15,6 +15,9 @@ interface SideBySideViewProps {
   currentUserId: number | null;
   onJumpToTmMatch: (fileId: number, stringId: number) => void;
   isActive: boolean;
+  /** Reported up so TranslationWorkspace knows whether a background
+   * refresh would discard work in progress. */
+  onEditorDirtyChange: (stringId: number, dirty: boolean) => void;
 }
 
 function bestTranslation(s: SourceString) {
@@ -37,6 +40,7 @@ export function SideBySideView({
   currentUserId,
   onJumpToTmMatch,
   isActive,
+  onEditorDirtyChange,
 }: SideBySideViewProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   // Only ever one expanded row (with a real TranslationEditor mounted)
@@ -119,6 +123,7 @@ export function SideBySideView({
                       currentUserId={currentUserId}
                       onJumpToMatch={onJumpToTmMatch}
                       isActive={isActive}
+                      onDirtyChange={onEditorDirtyChange}
                     />
                   ) : (
                     <div className="sbs-translation-preview">

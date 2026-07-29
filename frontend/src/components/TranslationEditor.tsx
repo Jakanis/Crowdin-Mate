@@ -39,6 +39,10 @@ interface TranslationEditorProps {
    * survive indefinitely on a tab you've switched away from. Defaults to
    * true so standalone/test usage without this prop keeps working. */
   isActive?: boolean;
+  /** Reports whether this box currently holds unsubmitted work, so a
+   * background refresh can tell "nothing to lose, swap it in" from
+   * "ask first". Fires only on transitions, not per keystroke. */
+  onDirtyChange?: (stringId: number, dirty: boolean) => void;
 }
 
 /** Exposed via ref so a sibling (HighlightedSourceText, several levels
@@ -105,7 +109,10 @@ function JumpIcon() {
  * the surrounding layout differs.
  */
 export const TranslationEditor = forwardRef<TranslationEditorHandle, TranslationEditorProps>(function TranslationEditor(
-  { projectId, fileId, languageId, s, canApprove, currentUserId, onSaved, onJumpToMatch, isActive = true },
+  {
+    projectId, fileId, languageId, s, canApprove, currentUserId, onSaved, onJumpToMatch,
+    isActive = true, onDirtyChange,
+  },
   ref,
 ) {
   const queryClient = useQueryClient();
@@ -179,6 +186,45 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     draftTimeoutRef.current = window.setTimeout(flushDraft, DRAFT_DEBOUNCE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
+
+  // Follow the server while there's nothing at stake.
+  //
+  // The box's text is state, seeded once at mount, so a refresh that brought
+  // in someone else's newer translation updated the candidate list while
+  // leaving the box showing the old one — and worse, that made the box look
+  // dirty, since "dirty" means differing from the current server text.
+  //
+  // Adopt the new text only if the box still matched the PREVIOUS server
+  // text, i.e. the user had typed nothing of their own. A real edit (or a
+  // restored draft, which never equals the server text) is never touched;
+  // that case is what the workspace's update banner is for.
+  const serverText = bestTranslationText(s);
+  const lastServerTextRef = useRef(serverText);
+  useEffect(() => {
+    if (serverText === lastServerTextRef.current) return;
+    const wasClean = textRef.current.trim() === lastServerTextRef.current.trim();
+    lastServerTextRef.current = serverText;
+    if (!wasClean) return;
+    setText(serverText);
+    // Keep the draft bookkeeping in step, or the debounced save would fire
+    // and persist a dirty draft that merely echoes what Crowdin already has.
+    lastSavedDraftRef.current = serverText;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverText]);
+
+  // "Unsubmitted work" means the box differs from the translation that's
+  // actually on Crowdin — which is exactly what a refresh would replace it
+  // with. Compared against bestTranslationText rather than the saved draft:
+  // a draft IS unsubmitted work, so treating it as clean would let a
+  // refresh quietly discard it.
+  const isDirty = text.trim() !== bestTranslationText(s).trim();
+  useEffect(() => {
+    onDirtyChange?.(s.id, isDirty);
+    // Report clean on unmount, or a string edited and then scrolled out of
+    // the virtualized list would hold the banner open forever.
+    return () => onDirtyChange?.(s.id, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, s.id]);
 
   // Separate mount-only effect so its cleanup fires exactly once, on
   // unmount — switching strings/files remounts this component (it's
