@@ -79,6 +79,27 @@ async def _drain_loop() -> None:
 async def _startup() -> None:
     init_db()
     global _drain_task
+    # A scratch instance (CROWDIN_MATE_DATA_DIR set) does NOT drain on a
+    # timer. The override isolates the local cache, but not Crowdin — the
+    # token is shared machine-wide, so a test instance left online would
+    # quietly push whatever the offline-mode tests just queued into the real
+    # project: approving, voting on, deleting and commenting for real.
+    #
+    # Near miss that prompted this: a test run queued two comments, then the
+    # simulate-offline flag was turned off to check something else, leaving a
+    # 15-second timer pointed at a live project. Nothing was sent (the test
+    # directory had been recreated in between, so the queue was empty, and
+    # Crowdin was checked afterwards to confirm), but only by luck.
+    #
+    # "Retry now" in the UI still works, so draining deliberately is fine —
+    # what's disabled is doing it behind your back.
+    if config.DATA_DIR != config.DEFAULT_DATA_DIR:
+        logger.warning(
+            "Scratch data dir (%s) — automatic offline-queue draining is DISABLED so queued "
+            "test writes can't reach Crowdin on their own. Drain manually if you mean to.",
+            config.DATA_DIR,
+        )
+        return
     _drain_task = asyncio.create_task(_drain_loop())
 
 
@@ -114,6 +135,72 @@ async def get_offline_queue():
             )
         ]
     return {"items": items}
+
+
+@app.get("/projects/{project_id}/cache-status")
+async def get_cache_status(project_id: int, language_id: str):
+    """What's actually available with no connection, for the Online/Offline
+    panel.
+
+    The headline number is files_cached vs files_total: the tree lists every
+    file, but only ones whose per-string content has been synced for THIS
+    language are genuinely workable offline — and that count is usually a
+    tiny fraction, because content syncs lazily per file as you open it.
+    Without this the app looks fully cached right up until you're in a
+    basement discovering it isn't.
+
+    stale counts files Crowdin has touched since we last synced them, which
+    is the same comparison a per-file refresh uses.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM files WHERE project_id = ?) files_total,
+              (SELECT COUNT(*) FROM directories WHERE project_id = ?) directories,
+              (SELECT last_full_sync_at FROM projects WHERE id = ?) tree_synced_at,
+              (SELECT COUNT(*) FROM file_language_sync s JOIN files f ON f.id = s.file_id
+                WHERE s.language_id = ? AND f.project_id = ?) files_cached,
+              (SELECT COUNT(*) FROM file_language_sync s JOIN files f ON f.id = s.file_id
+                WHERE s.language_id = ? AND f.project_id = ?
+                  AND f.updated_at IS NOT NULL AND f.updated_at > s.synced_at) files_stale,
+              (SELECT COUNT(*) FROM source_strings WHERE project_id = ?) strings,
+              (SELECT COUNT(*) FROM translations t JOIN source_strings s ON s.id = t.string_id
+                WHERE t.language_id = ? AND s.project_id = ?) translations,
+              (SELECT COUNT(*) FROM file_search_sync s JOIN files f ON f.id = s.file_id
+                WHERE s.language_id = ? AND f.project_id = ?) search_indexed,
+              (SELECT COUNT(*) FROM suggestion_lookups l JOIN source_strings s ON s.id = l.string_id
+                WHERE l.kind = 'tm' AND l.language_id = ? AND s.project_id = ?) tm_lookups,
+              (SELECT COUNT(*) FROM glossary_terms WHERE project_id = ?) glossary_terms,
+              (SELECT MAX(synced_at) FROM glossary_terms WHERE project_id = ?) glossary_synced_at,
+              (SELECT COUNT(*) FROM translation_drafts d JOIN source_strings s ON s.id = d.string_id
+                WHERE d.dirty = 1 AND d.language_id = ? AND s.project_id = ?) pending_drafts,
+              (SELECT COUNT(*) FROM offline_queue WHERE status = 'done') queue_done
+            """,
+            (
+                project_id, project_id, project_id,
+                language_id, project_id,
+                language_id, project_id,
+                project_id,
+                language_id, project_id,
+                language_id, project_id,
+                language_id, project_id,
+                project_id, project_id,
+                language_id, project_id,
+            ),
+        ).fetchone()
+    return dict(row)
+
+
+@app.post("/offline-queue/clear-completed")
+async def clear_completed_queue_items():
+    """Drop 'done' rows. They're kept after a successful drain purely as a
+    record and nothing ever removed them, so they accumulate for the life of
+    the install — invisible in the panel (which lists only pending/failed)
+    but growing forever."""
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM offline_queue WHERE status = 'done'")
+        return {"deleted": cur.rowcount}
 
 
 @app.post("/offline-queue/drain")

@@ -497,14 +497,36 @@ body {
   width: 320px;
 }
 
+/* Sits last in the panel now (it's a testing affordance, not the point of
+   the menu), so the divider is above it rather than below — and it's one
+   line, with the explanation moved into the label's tooltip. */
 .offline-simulate-section {
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  padding-top: 10px;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
 }
 
-.offline-simulate-section .hint {
-  margin: 0;
-  font-size: calc(11px * var(--ui-scale));
+.cache-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cache-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: calc(12px * var(--ui-scale));
+}
+
+.cache-row-label {
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.cache-row-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .offline-queue-empty {

@@ -86,12 +86,13 @@ _migrate_legacy_keyring()
 #
 # The legacy rename is skipped when overridden: it moves an old install's
 # real cache, which has nothing to do with a scratch directory.
+DEFAULT_DATA_DIR = Path.home() / ".crowdin-mate"
 _ENV_DATA_DIR = os.environ.get("CROWDIN_MATE_DATA_DIR")
 if _ENV_DATA_DIR:
     DATA_DIR = Path(_ENV_DATA_DIR).expanduser()
 else:
     _OLD_DATA_DIR = Path.home() / ".classicua-client"
-    DATA_DIR = Path.home() / ".crowdin-mate"
+    DATA_DIR = DEFAULT_DATA_DIR
     if _OLD_DATA_DIR.exists() and not DATA_DIR.exists():
         _OLD_DATA_DIR.rename(DATA_DIR)
 DATA_DIR.mkdir(parents=True, exist_ok=True)

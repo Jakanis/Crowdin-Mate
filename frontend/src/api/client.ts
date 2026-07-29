@@ -197,6 +197,26 @@ export interface SearchIndexStatus {
   current_file_path: string | null;
 }
 
+/** What's genuinely usable with no connection. files_cached vs files_total
+ * is the number that matters: the tree lists every file, but only ones
+ * whose content has been synced for this language can be translated
+ * offline. */
+export interface CacheStatus {
+  files_total: number;
+  directories: number;
+  tree_synced_at: string | null;
+  files_cached: number;
+  files_stale: number;
+  strings: number;
+  translations: number;
+  search_indexed: number;
+  tm_lookups: number;
+  glossary_terms: number;
+  glossary_synced_at: string | null;
+  pending_drafts: number;
+  queue_done: number;
+}
+
 export interface OfflineQueueItem {
   id: number;
   operation_type: string;
@@ -274,6 +294,12 @@ export const api = {
       `/projects/${projectId}/search-index/stop?language_id=${encodeURIComponent(languageId)}`,
       { method: "POST" },
     ),
+  getCacheStatus: (projectId: number, languageId: string) =>
+    request<CacheStatus>(
+      `/projects/${projectId}/cache-status?language_id=${encodeURIComponent(languageId)}`,
+    ),
+  clearCompletedQueue: () =>
+    request<{ deleted: number }>("/offline-queue/clear-completed", { method: "POST" }),
   getOfflineQueue: () => request<{ items: OfflineQueueItem[] }>("/offline-queue"),
   drainOfflineQueue: () => request<{ drained: number }>("/offline-queue/drain", { method: "POST" }),
   retryOfflineQueueItem: (itemId: number) =>

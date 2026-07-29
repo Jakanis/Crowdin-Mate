@@ -34,13 +34,24 @@ function useOnlineStatus(): boolean {
 const COMMENT_OPERATIONS = new Set(["add_comment", "set_comment_status"]);
 
 interface OfflineIndicatorProps {
+  projectId: number;
+  languageId: string;
   /** Jump to the string a queued operation belongs to, so a failure is
    * one click from the thing that failed instead of a string id to go
    * hunt for. `openComments` is set for comment operations. */
   onJumpToItem?: (fileId: number, stringId: number, openComments: boolean) => void;
 }
 
-export function OfflineIndicator({ onJumpToItem }: OfflineIndicatorProps) {
+function CacheRow({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="cache-row" title={title}>
+      <span className="cache-row-label">{label}</span>
+      <span className="cache-row-value">{value}</span>
+    </div>
+  );
+}
+
+export function OfflineIndicator({ projectId, languageId, onJumpToItem }: OfflineIndicatorProps) {
   const queryClient = useQueryClient();
   const browserOnline = useOnlineStatus();
   const [open, setOpen] = useState(false);
@@ -76,6 +87,21 @@ export function OfflineIndicator({ onJumpToItem }: OfflineIndicatorProps) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["simulate-offline"] }),
   });
 
+  // Only fetched while the panel is open — it's a dozen COUNT(*)s over the
+  // whole cache, which is cheap (~0.2s on a 19k-file project) but pointless
+  // to run on a timer for a panel nobody's looking at.
+  const cacheQuery = useQuery({
+    queryKey: ["cache-status", projectId, languageId],
+    queryFn: () => api.getCacheStatus(projectId, languageId),
+    enabled: open,
+  });
+  const cache = cacheQuery.data;
+
+  const clearCompleted = useMutation({
+    mutationFn: api.clearCompletedQueue,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cache-status", projectId, languageId] }),
+  });
+
   const drainMutation = useMutation({
     mutationFn: api.drainOfflineQueue,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["offline-queue"] }),
@@ -106,18 +132,6 @@ export function OfflineIndicator({ onJumpToItem }: OfflineIndicatorProps) {
         <>
           <div className="settings-backdrop" onClick={() => setOpen(false)} />
           <div className="settings-popover offline-queue-popover">
-            <div className="settings-section offline-simulate-section">
-              <label className="settings-checkbox">
-                <input
-                  type="checkbox"
-                  checked={simulatedOffline}
-                  onChange={(e) => simulateOfflineMutation.mutate(e.target.checked)}
-                  disabled={simulateOfflineMutation.isPending}
-                />
-                Simulate offline (testing)
-              </label>
-              <p className="hint">Forces every save to queue locally instead of reaching Crowdin.</p>
-            </div>
             <div className="settings-section">
               <div className="settings-label">
                 Pending translations {pendingCount > 0 && `(${pendingCount})`}
@@ -183,6 +197,102 @@ export function OfflineIndicator({ onJumpToItem }: OfflineIndicatorProps) {
                   {drainMutation.isPending ? "Retrying…" : "Retry now"}
                 </button>
               )}
+            </div>
+
+            <div className="settings-section">
+              <div className="settings-label">Available offline</div>
+              {cacheQuery.isLoading && <p className="hint">Checking…</p>}
+              {cache && (
+                <div className="cache-rows">
+                  {/* Deliberately first and phrased as a ratio: the tree
+                      lists every file, but only these are workable with no
+                      connection, and the gap is usually enormous. */}
+                  <CacheRow
+                    label="Files ready"
+                    value={
+                      `${cache.files_cached.toLocaleString()} / ${cache.files_total.toLocaleString()}` +
+                      (cache.files_stale > 0 ? ` · ${cache.files_stale} stale` : "")
+                    }
+                    title={
+                      "Files whose strings and translations are fully cached for this language. " +
+                      "Content is cached per file as you open it, so the rest need a connection." +
+                      (cache.files_stale > 0
+                        ? ` ${cache.files_stale} have changed on Crowdin since they were cached.`
+                        : "")
+                    }
+                  />
+                  <CacheRow label="Strings" value={cache.strings.toLocaleString()} />
+                  <CacheRow label="Translations" value={cache.translations.toLocaleString()} />
+                  <CacheRow
+                    label="Search index"
+                    value={`${cache.search_indexed.toLocaleString()} files`}
+                    title="Files with a cached target-language snippet, used by search when offline."
+                  />
+                  <CacheRow
+                    label="Glossary"
+                    value={
+                      `${cache.glossary_terms.toLocaleString()} terms` +
+                      (cache.glossary_synced_at ? ` · ${timeAgo(cache.glossary_synced_at)}` : "")
+                    }
+                    title={cache.glossary_synced_at ? fullDateTime(cache.glossary_synced_at) : undefined}
+                  />
+                  <CacheRow
+                    label="TM lookups"
+                    value={cache.tm_lookups.toLocaleString()}
+                    title="Strings with cached translation-memory suggestions."
+                  />
+                  <CacheRow
+                    label="File tree"
+                    value={
+                      cache.tree_synced_at
+                        ? `${cache.directories.toLocaleString()} folders · ${timeAgo(cache.tree_synced_at)}`
+                        : "never synced"
+                    }
+                    title={cache.tree_synced_at ? fullDateTime(cache.tree_synced_at) : undefined}
+                  />
+                  {cache.pending_drafts > 0 && (
+                    <CacheRow
+                      label="Unsent drafts"
+                      value={cache.pending_drafts.toLocaleString()}
+                      title="Edits typed but not submitted. Kept locally and restored when you come back."
+                    />
+                  )}
+                  {cache.queue_done > 0 && (
+                    <div className="cache-row">
+                      <span className="cache-row-label">Completed queue items</span>
+                      <button
+                        className="link-button"
+                        onClick={() => clearCompleted.mutate()}
+                        disabled={clearCompleted.isPending}
+                        title="Successfully sent items are kept as a record and never removed on their own."
+                      >
+                        clear {cache.queue_done}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Testing affordance, so it sits last and stays one line —
+                the explanation lives in the tooltip rather than a paragraph
+                that outsizes everything above it. */}
+            <div className="settings-section offline-simulate-section">
+              <label
+                className="settings-checkbox"
+                title={
+                  "Points Crowdin API calls at an unresolvable hostname, so requests fail exactly " +
+                  "as they do with no connection — reads fall back to cache and writes queue."
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={simulatedOffline}
+                  onChange={(e) => simulateOfflineMutation.mutate(e.target.checked)}
+                  disabled={simulateOfflineMutation.isPending}
+                />
+                Simulate offline
+              </label>
             </div>
           </div>
         </>

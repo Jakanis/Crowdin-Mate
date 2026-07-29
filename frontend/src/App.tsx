@@ -384,7 +384,11 @@ export function App() {
             openTabsLayout={openTabsLayout.layout}
             onOpenTabsLayoutChange={openTabsLayout.setLayout}
           />
-          <OfflineIndicator onJumpToItem={handleJumpToQueueItem} />
+          <OfflineIndicator
+            projectId={projectId}
+            languageId={languageId}
+            onJumpToItem={handleJumpToQueueItem}
+          />
         </div>
       </header>
 
