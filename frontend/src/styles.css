@@ -10,9 +10,11 @@
    it unset and lets the media query decide. */
 :root {
   color-scheme: light;
-  --bg: #ffffff;
+  --bg: #f7f8fa;
   --bg-elevated: #ffffff;
+  --bg-editor: #ffffff;
   --fg: #1a1a1a;
+  --fg-muted: #5f6570;
   --accent: #3a7bd5;
   --accent-bg: rgba(58, 123, 213, 0.15);
   --success: #2a8a44;
@@ -34,9 +36,11 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #1e1e1e;
+    --bg: #191919;
     --bg-elevated: #2a2a2a;
+    --bg-editor: #1e1e1e;
     --fg: #e8e8e8;
+    --fg-muted: #a0a4a8;
     --accent: #6aa8f7;
     --accent-bg: rgba(106, 168, 247, 0.18);
     --success: #3ecf7e;
@@ -52,9 +56,11 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #ffffff;
+  --bg: #f7f8fa;
   --bg-elevated: #ffffff;
+  --bg-editor: #ffffff;
   --fg: #1a1a1a;
+  --fg-muted: #5f6570;
   --accent: #3a7bd5;
   --accent-bg: rgba(58, 123, 213, 0.15);
   --success: #2a8a44;
@@ -69,9 +75,11 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1e1e1e;
+  --bg: #191919;
   --bg-elevated: #2a2a2a;
+  --bg-editor: #1e1e1e;
   --fg: #e8e8e8;
+  --fg-muted: #a0a4a8;
   --accent: #6aa8f7;
   --accent-bg: rgba(106, 168, 247, 0.18);
   --success: #3ecf7e;
@@ -94,11 +102,28 @@
    via the media query, explicit override via the higher-specificity
    [data-theme=...] attribute combos), just additionally gated on
    [data-palette="crowdin"], and placed after the base blocks so it
-   wins the specificity tie when both apply. */
+   wins the specificity tie when both apply.
+
+   Three deliberate deviations from a literal copy of their tokens:
+
+   1. --fg is the *composite* of Crowdin's rgba(38, 50, 56, 0.87) over
+      white rather than the translucent value itself. Identical on screen,
+      but a translucent --fg multiplies with every `opacity` further down
+      the tree, so secondary text was landing at 0.87 x 0.5 = 0.44 alpha
+      (2.4:1 contrast — unreadable). Same reason --fg-muted exists at all:
+      it replaces those `opacity` rules on text with a real color.
+   2. --bg carries a slight green bias instead of Crowdin's cool
+      #f5f7f8, since the panels sit next to a green accent here.
+   3. --bg-editor is white, matching Crowdin's own #editor-center-layout —
+      their editor column is white while the strings panel beside it is
+      tinted, and that separation is what makes their light theme
+      readable. */
 :root[data-palette="crowdin"] {
-  --bg: #f5f7f8;
+  --bg: #eef4ef;
   --bg-elevated: #ffffff;
-  --fg: rgba(38, 50, 56, 0.87);
+  --bg-editor: #ffffff;
+  --fg: #424d52;
+  --fg-muted: #676e72;
   --accent: #43a047;
   --accent-bg: rgba(67, 160, 71, 0.15);
   --success: #6dc271;
@@ -113,9 +138,11 @@
 
 @media (prefers-color-scheme: dark) {
   :root[data-palette="crowdin"] {
-    --bg: #21252b;
+    --bg: #1c2026;
     --bg-elevated: #373e48;
-    --fg: rgba(255, 255, 255, 0.87);
+    --bg-editor: #21252b;
+    --fg: #e3e4e5;
+    --fg-muted: #a3a9b0;
     --accent: #6494ed;
     --accent-bg: rgba(100, 148, 237, 0.15);
     --success: #6dc271;
@@ -130,9 +157,11 @@
 }
 
 :root[data-theme="light"][data-palette="crowdin"] {
-  --bg: #f5f7f8;
+  --bg: #eef4ef;
   --bg-elevated: #ffffff;
-  --fg: rgba(38, 50, 56, 0.87);
+  --bg-editor: #ffffff;
+  --fg: #424d52;
+  --fg-muted: #676e72;
   --accent: #43a047;
   --accent-bg: rgba(67, 160, 71, 0.15);
   --success: #6dc271;
@@ -146,9 +175,11 @@
 }
 
 :root[data-theme="dark"][data-palette="crowdin"] {
-  --bg: #21252b;
+  --bg: #1c2026;
   --bg-elevated: #373e48;
-  --fg: rgba(255, 255, 255, 0.87);
+  --bg-editor: #21252b;
+  --fg: #e3e4e5;
+  --fg-muted: #a3a9b0;
   --accent: #6494ed;
   --accent-bg: rgba(100, 148, 237, 0.15);
   --success: #6dc271;
@@ -201,6 +232,7 @@ body {
   gap: 14px;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+  background: var(--bg-elevated);
 }
 
 .header-title {
@@ -352,7 +384,7 @@ body {
   font-size: calc(11px * var(--ui-scale));
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  opacity: 0.6;
+  color: var(--fg-muted);
 }
 
 .settings-segmented {
@@ -496,7 +528,7 @@ body {
 }
 
 .offline-queue-item-file {
-  opacity: 0.6;
+  color: var(--fg-muted);
   font-size: calc(11px * var(--ui-scale));
   margin-bottom: 4px;
   word-break: break-all;
@@ -702,6 +734,8 @@ body {
 .fsl-status {
   flex-shrink: 0;
   font-size: calc(12px * var(--ui-scale));
+  /* Stays an opacity rather than --fg-muted: the colour here is semantic
+     (success green), so it needs dimming, not replacing. */
   opacity: 0.6;
   color: var(--success);
 }
@@ -792,7 +826,7 @@ body {
   align-items: center;
   gap: 6px;
   font-size: calc(11px * var(--ui-scale));
-  opacity: 0.55;
+  color: var(--fg-muted);
   margin-bottom: 4px;
   word-break: break-all;
 }
@@ -801,7 +835,6 @@ body {
 .search-result-target {
   font-size: calc(12.5px * var(--ui-scale));
   line-height: 1.35;
-  opacity: 0.85;
 }
 
 .search-result-target {
@@ -815,7 +848,7 @@ body {
   gap: 8px;
   margin-top: 5px;
   font-size: calc(11px * var(--ui-scale));
-  opacity: 0.6;
+  color: var(--fg-muted);
 }
 
 .search-result mark {
@@ -836,7 +869,7 @@ body {
 
 .search-index-label {
   font-size: calc(11.5px * var(--ui-scale));
-  opacity: 0.7;
+  color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -857,6 +890,11 @@ body {
   word-break: break-all;
 }
 
+/* The editor column is its own surface, not the page background — the
+   thing that makes Crowdin's light theme readable is that their
+   #editor-center-layout is white while the strings panel beside it is
+   tinted. Everything left of here (.app-sidebar, and the vertical tab
+   bar that lives inside it) stays on --bg for exactly that contrast. */
 .app-main {
   flex: 1;
   min-width: 0;
@@ -864,6 +902,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: var(--bg-editor);
 }
 
 /* --- open-file tab bar ---
@@ -1323,7 +1362,7 @@ body {
 
 .string-context {
   font-size: calc(12px * var(--ui-scale));
-  opacity: 0.45;
+  color: var(--fg-muted);
   margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -1342,7 +1381,7 @@ body {
 
 .string-identifier {
   font-size: calc(11px * var(--ui-scale));
-  opacity: 0.5;
+  color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1422,7 +1461,7 @@ body {
 
 
 .string-meta {
-  opacity: 0.5;
+  color: var(--fg-muted);
 }
 
 /* --- translation list --- */
@@ -1501,7 +1540,6 @@ body {
   align-items: center;
   gap: 10px;
   font-size: calc(12px * var(--ui-scale));
-  opacity: 0.85;
   flex-wrap: wrap;
 }
 
@@ -1511,11 +1549,11 @@ body {
 }
 
 .translation-author {
-  opacity: 0.7;
+  color: var(--fg-muted);
 }
 
 .translation-date {
-  opacity: 0.7;
+  color: var(--fg-muted);
 }
 
 .translation-rating {
@@ -1697,11 +1735,11 @@ body {
 }
 
 .suggestion-source-name {
-  opacity: 0.5;
+  color: var(--fg-muted);
 }
 
 .suggestion-source {
-  opacity: 0.6;
+  color: var(--fg-muted);
   white-space: pre-wrap;
   line-height: 1.4;
   margin-bottom: 4px;
@@ -1725,7 +1763,7 @@ body {
 
 .suggestion-description {
   margin-top: 4px;
-  opacity: 0.6;
+  color: var(--fg-muted);
   font-size: calc(12px * var(--ui-scale));
 }
 
@@ -1779,12 +1817,12 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  opacity: 0.55;
+  color: var(--fg-muted);
 }
 
 .tm-suggestions-inline-hint {
   font-size: calc(11.5px * var(--ui-scale));
-  opacity: 0.5;
+  color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1931,7 +1969,6 @@ body {
 .comment-text {
   white-space: pre-wrap;
   line-height: 1.4;
-  opacity: 0.85;
 }
 
 .issue-tag,
@@ -2011,7 +2048,7 @@ body {
 
 .hint {
   padding: 16px;
-  opacity: 0.7;
+  color: var(--fg-muted);
   font-size: calc(14px * var(--ui-scale));
 }
 
@@ -2174,7 +2211,7 @@ body {
   flex-shrink: 0;
   padding: 4px 8px;
   font-size: calc(12px * var(--ui-scale));
-  opacity: 0.6;
+  color: var(--fg-muted);
 }
 
 .token-setup {
@@ -2294,7 +2331,7 @@ body {
   white-space: nowrap;
   font-size: calc(13.5px * var(--ui-scale));
   font-weight: 600;
-  opacity: 0.8;
+  color: var(--fg-muted);
 }
 
 .workspace-pager {
@@ -2375,7 +2412,7 @@ body {
 }
 
 .comfortable-pager-count {
-  opacity: 0.6;
+  color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2462,14 +2499,12 @@ body {
   font-size: calc(14px * var(--ui-scale));
   white-space: pre-wrap;
   line-height: 1.4;
-  opacity: 0.85;
 }
 
 .sbs-translation-preview {
   font-size: calc(14px * var(--ui-scale));
   white-space: pre-wrap;
   line-height: 1.4;
-  opacity: 0.75;
 }
 
 .sbs-approved-badge {
