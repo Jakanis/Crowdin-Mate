@@ -22,6 +22,7 @@ import threading
 import time
 from collections import deque
 
+import requests
 from crowdin_api import CrowdinClient
 from crowdin_api.exceptions import Throttled
 
@@ -59,40 +60,65 @@ def _throttle_for_sustained_rate() -> None:
         _recent_call_times.append(time.monotonic())
 
 
-class SimulatedOfflineError(ConnectionError):
-    """Raised instead of actually calling Crowdin when debug_mode's
-    simulate-offline toggle is on. Deliberately a ConnectionError
-    subclass, not some bespoke exception type: every existing
-    except-clause downstream (submit_translation, offline_queue.drain_once)
-    only ever special-cases `isinstance(exc, APIException)` to decide
-    terminal-vs-queue, never the exact exception type — so this is
-    genuinely indistinguishable to that logic from a real network
-    outage, and exercises the actual enqueue/drain/retry code path
-    rather than a fake UI-only state."""
+# Simulated offline points the SDK at a hostname that can never resolve,
+# rather than short-circuiting before the call. `.invalid` is reserved by
+# RFC 2606 precisely so it can never become a real name, so DNS fails
+# immediately and requests raises the very same ConnectionError a dead
+# connection produces.
+#
+# This replaces an earlier SimulatedOfflineError raised from a branch at
+# the top of call_with_limits. That version never touched the transport,
+# so it could only ever exercise the except-clauses — not the SDK's own
+# retry logic, not the rate limiter's bookkeeping, and not any code that
+# assumes a request was actually attempted. Failing for real at the
+# client boundary means "simulated offline" and "genuinely offline" run
+# the identical path, which is the only way testing offline mode proves
+# anything about being offline.
+_OFFLINE_BASE_URL = "simulated-offline.invalid/api/v2/"
 
+# What "couldn't reach Crowdin" actually looks like, defined once so every
+# endpoint that needs to fall back to cache agrees on it.
+#
+# Worth stating explicitly, because it is a trap: requests' ConnectionError
+# is NOT a subclass of Python's builtin ConnectionError — it derives from
+# RequestException(IOError). So `except ConnectionError` catches no real
+# outage at all. That, combined with endpoints catching only APIException,
+# is why a dead connection surfaced as a raw 500 instead of degrading.
+#
+# APIException is deliberately NOT in here: that means Crowdin answered
+# and refused. A refusal is an answer, not an outage, and must not be
+# masked by serving stale cache.
+OFFLINE_ERRORS = (requests.exceptions.RequestException,)
 
 _client: CrowdinClient | None = None
-_client_token: str | None = None
+_client_key: tuple[str, bool] | None = None
 
 
 def get_client() -> CrowdinClient:
     """Returns a CrowdinClient bound to the currently stored token.
 
     Rebuilds the client if the token changed (e.g. the user re-entered a
-    new PAT) so we never hold a stale credential.
+    new PAT) so we never hold a stale credential — and likewise if the
+    simulate-offline toggle flipped, since that's baked into the client's
+    base URL and the SDK builds its request-maker once per instance.
     """
-    global _client, _client_token
+    global _client, _client_key
     token = get_token()
     if token is None:
         raise RuntimeError("No Crowdin token configured. Call POST /auth/token first.")
 
-    if _client is None or _client_token != token:
+    offline = debug_mode.is_simulate_offline()
+    key = (token, offline)
+    if _client is None or _client_key != key:
         _client = CrowdinClient(
             token=token,
-            max_retries=3,   # SDK-level retry, for transient 5xx only
+            # 1, not 0: the SDK does `max_retries or self.MAX_RETRIES`, so a
+            # falsy 0 would silently restore its own default of 5.
+            max_retries=1 if offline else 3,   # SDK-level retry, for transient 5xx only
             retry_delay=0.5,
+            base_url=_OFFLINE_BASE_URL if offline else None,
         )
-        _client_token = token
+        _client_key = key
 
     return _client
 
@@ -102,13 +128,9 @@ def call_with_limits(fn, *args, **kwargs):
 
     Usage: call_with_limits(client.source_files.list_files, projectId=393919)
     """
-    if debug_mode.is_simulate_offline():
-        # Checked before the concurrency gate/rate limiter too — a
-        # simulated outage shouldn't consume a real rate-limit slot or
-        # wait behind other in-flight calls, it should fail instantly
-        # like a real dead connection would.
-        raise SimulatedOfflineError("Simulated offline mode is enabled (see debug_mode.py)")
-
+    # No simulate-offline branch here on purpose — see _OFFLINE_BASE_URL
+    # above. An outage is a transport failure, so it belongs at the client
+    # boundary, not in a guard that skips the transport entirely.
     with _concurrency_gate:
         attempt = 0
         while True:

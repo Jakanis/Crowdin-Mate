@@ -8,6 +8,7 @@ Manager on this machine) and are read back only inside this module.
 """
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -71,10 +72,28 @@ _migrate_legacy_keyring()
 # Pre-rename data directory — same reasoning as the keyring migration
 # above: move it wholesale (cache + everything else in it) rather than
 # leave an existing install's local cache orphaned by the rename.
-_OLD_DATA_DIR = Path.home() / ".classicua-client"
-DATA_DIR = Path.home() / ".crowdin-mate"
-if _OLD_DATA_DIR.exists() and not DATA_DIR.exists():
-    _OLD_DATA_DIR.rename(DATA_DIR)
+#
+# CROWDIN_MATE_DATA_DIR redirects the whole cache elsewhere. This exists so
+# offline mode can actually be tested: a throwaway instance otherwise shares
+# the real cache.sqlite3, so exercising the offline queue writes junk rows
+# into the database the user is translating against, and any cache the test
+# populates or invalidates is the live one.
+#
+# Deliberately only the data dir, not the keyring — a test instance should
+# still authenticate as you, since re-entering a token to test offline
+# behaviour would be its own obstacle. Cache is per-instance; credentials
+# are per-machine.
+#
+# The legacy rename is skipped when overridden: it moves an old install's
+# real cache, which has nothing to do with a scratch directory.
+_ENV_DATA_DIR = os.environ.get("CROWDIN_MATE_DATA_DIR")
+if _ENV_DATA_DIR:
+    DATA_DIR = Path(_ENV_DATA_DIR).expanduser()
+else:
+    _OLD_DATA_DIR = Path.home() / ".classicua-client"
+    DATA_DIR = Path.home() / ".crowdin-mate"
+    if _OLD_DATA_DIR.exists() and not DATA_DIR.exists():
+        _OLD_DATA_DIR.rename(DATA_DIR)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "cache.sqlite3"
 

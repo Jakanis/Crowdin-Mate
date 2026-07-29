@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import config, debug_mode, oauth, offline_queue
-from app.crowdin_client import call_with_limits, get_client
+from app.crowdin_client import OFFLINE_ERRORS, call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
 from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_project_glossary
@@ -291,6 +291,27 @@ async def oauth_callback(code: str | None = None, state: str | None = None, erro
     return page("Connected to Crowdin successfully!")
 
 
+def _cached_projects() -> list[dict]:
+    """Projects as last seen by a tree sync (tree_sync.py writes this row).
+    Only ever covers projects actually synced at some point — which is
+    exactly the set that's usable offline anyway, since an unsynced project
+    has no tree, strings or translations cached either."""
+    with get_conn() as conn:
+        return [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "identifier": row["identifier"],
+                "source_language_id": row["source_language"],
+                "target_languages": json.loads(row["target_languages_json"] or "[]"),
+            }
+            for row in conn.execute(
+                "SELECT id, name, identifier, source_language, target_languages_json "
+                "FROM projects ORDER BY name"
+            )
+        ]
+
+
 @app.get("/projects")
 async def list_projects():
     client = get_client()
@@ -298,6 +319,10 @@ async def list_projects():
         resp = await run_in_threadpool(call_with_limits, client.projects.with_fetch_all().list_projects)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # Without this the project picker can't populate at all offline, so
+        # there's no way back into a project whose content is fully cached.
+        return {"projects": _cached_projects(), "offline": True}
 
     projects = []
     for item in resp.get("data", []):
@@ -312,6 +337,21 @@ async def list_projects():
                 for lang in (p.get("targetLanguages") or [])
             ],
         })
+
+    # Keep the local mirror current so _cached_projects above has something
+    # to serve. Only touches rows a tree sync already created — this is a
+    # refresh of the picker's own fields, not a way to pre-create projects
+    # that were never synced (those have no cached content to work on).
+    with get_conn() as conn:
+        for p in projects:
+            conn.execute(
+                "UPDATE projects SET name = ?, identifier = ?, source_language = ?, "
+                "target_languages_json = ? WHERE id = ?",
+                (
+                    p["name"], p["identifier"], p["source_language_id"],
+                    json.dumps(p["target_languages"]), p["id"],
+                ),
+            )
     return {"projects": projects}
 
 
@@ -390,6 +430,34 @@ async def get_tree_progress(project_id: int, language_id: str, parent_id: int | 
     return result
 
 
+def _permissions_cache_key(project_id: int) -> str:
+    return f"permissions:{project_id}"
+
+
+def _cache_permissions(project_id: int, is_member: bool, role: str | None) -> None:
+    """Kept in app_config rather than its own table — it's one small JSON
+    blob per project, and the only reader is the offline branch below."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO app_config (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (_permissions_cache_key(project_id), json.dumps({"is_member": is_member, "role": role})),
+        )
+
+
+def _cached_permissions(project_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM app_config WHERE key = ?", (_permissions_cache_key(project_id),)
+        ).fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["value"])
+    except (ValueError, TypeError):
+        return None
+
+
 @app.get("/projects/{project_id}/permissions")
 async def get_permissions(project_id: int):
     """Whether the current account can approve translations in this
@@ -423,10 +491,28 @@ async def get_permissions(project_id: int):
         )
     except APIException as exc:
         if exc.http_status in (403, 404):
+            _cache_permissions(project_id, False, None)
             return {"is_member": False, "role": None, "user_id": user_id}
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # This endpoint had no cache at all, so a dead connection meant a
+        # 500, and the frontend's `is_member ?? false` turned that into
+        # "you may not approve" — offline silently stripped Approve and
+        # Vote from the UI.
+        #
+        # Cached answer if we have one. If we don't, fail OPEN rather than
+        # closed: with every write queueable, an optimistic approve that
+        # turns out to be unauthorised comes back as a queue item with
+        # Crowdin's own error on it and a link to the string. A wrongly
+        # HIDDEN button produces nothing to notice or recover from — it's
+        # indistinguishable from genuinely lacking the right.
+        cached = _cached_permissions(project_id)
+        if cached is not None:
+            return {**cached, "user_id": user_id, "offline": True}
+        return {"is_member": True, "role": None, "user_id": user_id, "offline": True, "assumed": True}
 
     member = resp.get("data", resp)
+    _cache_permissions(project_id, True, member.get("role"))
     return {"is_member": True, "role": member.get("role"), "user_id": user_id}
 
 
@@ -533,8 +619,9 @@ async def search_strings(project_id: int, q: str, language_id: str, limit: int =
     happen to be cached. Falls back to the local index on any failure
     to reach Crowdin at all, so search still works with no network,
     just narrower — deliberately catching more than APIException: a
-    genuine outage (or the simulate-offline debug toggle, see
-    SimulatedOfflineError's docstring) raises requests.ConnectionError/
+    genuine outage (or the simulate-offline debug toggle, which points the
+    SDK at an unresolvable host — see _OFFLINE_BASE_URL in
+    crowdin_client.py) raises requests.ConnectionError/
     Timeout, which never got far enough to receive an HTTP response to
     wrap as an APIException, so catching only that left a real or
     simulated outage surfacing as a raw 500 instead of degrading to the
@@ -1136,10 +1223,16 @@ async def vote_translation(project_id: int, translation_id: int, body: VoteIn):
 async def get_string_comments(project_id: int, string_id: int):
     """Fetches fresh from Crowdin (comments are the least cache-critical
     data and change independently of translations), caches, and returns."""
+    offline = False
     try:
         await run_in_threadpool(sync_string_comments, project_id, string_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # The read below is already served from the local table the sync
+        # writes into, so skipping the refresh degrades to "whatever was
+        # cached last time" for free.
+        offline = True
 
     with get_conn() as conn:
         comments = [
@@ -1152,7 +1245,7 @@ async def get_string_comments(project_id: int, string_id: int):
                 (string_id,),
             )
         ]
-    return {"comments": comments}
+    return {"comments": comments, "offline": offline}
 
 
 class CommentIn(BaseModel):
@@ -1274,12 +1367,19 @@ async def get_tm_matches(project_id: int, string_id: int, language_id: str):
     text doesn't change on its own the way comments or translations do,
     so there's no background revalidation here, only an explicit re-fetch
     if it's never been looked up before."""
+    offline = False
     if not has_looked_up(string_id, language_id, "tm"):
         source_text, source_lang = _get_source_text_and_language(project_id, string_id)
         try:
             await run_in_threadpool(sync_tm_matches, project_id, string_id, source_text, source_lang, language_id)
         except APIException as exc:
             raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+        except OFFLINE_ERRORS:
+            # Safe to swallow: sync_tm_matches marks the lookup only after
+            # the API call returns, so a string first opened while offline
+            # isn't recorded as "looked up, no matches" — it retries once
+            # there's a connection again, instead of being blank forever.
+            offline = True
 
     with get_conn() as conn:
         # A string that's already been translated is, by definition, in
@@ -1305,7 +1405,7 @@ async def get_tm_matches(project_id: int, string_id: int, language_id: str):
             )
         ]
         _augment_tm_matches_with_source(conn, matches, language_id, exclude_string_id=string_id)
-    return {"matches": matches}
+    return {"matches": matches, "offline": offline}
 
 
 @app.get("/projects/{project_id}/tm-search")
@@ -1321,6 +1421,12 @@ async def search_tm(project_id: int, q: str, source_language_id: str, target_lan
         )
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # The only genuinely un-degradable feature here: this searches
+        # Crowdin's TM by an arbitrary query, and there's no local mirror of
+        # the TM to search instead (unlike the glossary, which is synced).
+        # Reporting offline lets the panel say so instead of erroring.
+        return {"matches": [], "offline": True}
 
     with get_conn() as conn:
         _augment_tm_matches_with_source(conn, matches, target_language_id, exclude_string_id=None)
@@ -1330,6 +1436,7 @@ async def search_tm(project_id: int, q: str, source_language_id: str, target_lan
 @app.get("/projects/{project_id}/strings/{string_id}/glossary-matches")
 async def get_glossary_matches(project_id: int, string_id: int, language_id: str):
     """Same caching approach as TM matches — see docstring above."""
+    offline = False
     if not has_looked_up(string_id, language_id, "glossary"):
         source_text, source_lang = _get_source_text_and_language(project_id, string_id)
         try:
@@ -1338,6 +1445,10 @@ async def get_glossary_matches(project_id: int, string_id: int, language_id: str
             )
         except APIException as exc:
             raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+        except OFFLINE_ERRORS:
+            # Same reasoning as get_tm_matches above — the lookup marker is
+            # only written on success, so this retries when back online.
+            offline = True
 
     with get_conn() as conn:
         matches = [
@@ -1350,7 +1461,7 @@ async def get_glossary_matches(project_id: int, string_id: int, language_id: str
                 (string_id, language_id),
             )
         ]
-    return {"matches": matches}
+    return {"matches": matches, "offline": offline}
 
 
 @app.get("/projects/{project_id}/glossary/status")

@@ -57,6 +57,11 @@ _COLUMN_MIGRATIONS = {
         # last crawled the tree" — see check_and_sync_if_changed in
         # tree_sync.py.
         ("last_activity", "TEXT"),
+        # Crowdin's URL slug. Cached so the offline project list can still
+        # build "Open in Crowdin" links — list_projects is the only place
+        # this is returned, and that call is exactly what's unavailable
+        # offline. Populated by list_projects in main.py.
+        ("identifier", "TEXT"),
     ],
 }
 
