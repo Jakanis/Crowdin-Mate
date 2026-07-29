@@ -103,7 +103,7 @@ async def get_offline_queue():
                 """
                 SELECT q.id, q.operation_type, q.string_id, q.language_id, q.created_at,
                        q.attempts, q.last_attempt_at, q.last_error, q.status,
-                       s.text AS source_text, f.path AS file_path,
+                       s.text AS source_text, s.file_id AS file_id, f.path AS file_path,
                        json_extract(q.payload_json, '$.text') AS draft_text
                 FROM offline_queue q
                 LEFT JOIN source_strings s ON s.id = q.string_id
@@ -946,6 +946,60 @@ def _invalidate_progress_for_translation(translation_id: int) -> None:
         invalidate_progress_for_file(row["file_id"], row["language_id"])
 
 
+def _restore_translation_from_local_snapshot(
+    string_id: int, translation_id: int, language_id: str
+) -> bool:
+    """Move a row back from deleted_translations into translations.
+
+    The live restore path re-inserts from what Crowdin returns, which is
+    authoritative. Offline there's only the snapshot taken at delete time —
+    which is the same data, since a delete is what produced it. Returns
+    False when there's no snapshot (nothing to restore without a network).
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM deleted_translations WHERE id = ? AND language_id = ?",
+            (translation_id, language_id),
+        ).fetchone()
+        if row is None:
+            return False
+        conn.execute(
+            """
+            INSERT INTO translations
+                (id, string_id, language_id, text, user_id, user_name,
+                 rating, is_approved, approval_id, created_at, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                text=excluded.text, user_id=excluded.user_id,
+                user_name=excluded.user_name, rating=excluded.rating,
+                is_approved=excluded.is_approved, approval_id=excluded.approval_id,
+                created_at=excluded.created_at, synced_at=excluded.synced_at
+            """,
+            (
+                row["id"], row["string_id"], row["language_id"], row["text"],
+                row["user_id"], row["user_name"], row["rating"], row["is_approved"],
+                row["approval_id"], row["created_at"], now,
+            ),
+        )
+        conn.execute("DELETE FROM deleted_translations WHERE id = ?", (translation_id,))
+    return True
+
+
+def _translation_string_and_language(translation_id: int) -> tuple[int | None, str | None]:
+    """Denormalised onto each queue item so the queue UI can name the string
+    an operation belongs to — and link to it — without decoding per-operation
+    payload shapes. Looked up before the local delete in the delete path,
+    since the row is gone afterwards."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT string_id, language_id FROM translations WHERE id = ?", (translation_id,)
+        ).fetchone()
+    if row is None:
+        return None, None
+    return row["string_id"], row["language_id"]
+
+
 def _extract_validation_message(exc: APIException) -> str:
     """Crowdin's validation errors are nested JSON in `context`, not
     `exc.message` — pull out the human-readable bit if present."""
@@ -980,22 +1034,24 @@ async def approve_translation(project_id: int, translation_id: int):
         )
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # Approved locally with a NULL approval_id — Crowdin assigns that,
+        # and the queued item fills it in on drain. Un-approving before
+        # then still works: _do_unapprove resolves the id at drain time.
+        string_id, language_id = _translation_string_and_language(translation_id)
+        with get_conn() as conn:
+            offline_queue.apply_local_approval(conn, translation_id, None)
+        _invalidate_progress_for_translation(translation_id)
+        offline_queue.enqueue(
+            "approve",
+            {"project_id": project_id, "translation_id": translation_id},
+            string_id, language_id,
+        )
+        return {"status": "queued", "approval_id": None}
 
     approval = resp.get("data", resp)
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT string_id, language_id FROM translations WHERE id = ?", (translation_id,)
-        ).fetchone()
-        if row is not None:
-            conn.execute(
-                "UPDATE translations SET is_approved = 0, approval_id = NULL "
-                "WHERE string_id = ? AND language_id = ? AND id != ?",
-                (row["string_id"], row["language_id"], translation_id),
-            )
-        conn.execute(
-            "UPDATE translations SET is_approved = 1, approval_id = ? WHERE id = ?",
-            (approval["id"], translation_id),
-        )
+        offline_queue.apply_local_approval(conn, translation_id, approval["id"])
     _invalidate_progress_for_translation(translation_id)
     return {"status": "approved", "approval_id": approval["id"]}
 
@@ -1006,11 +1062,44 @@ async def unapprove_translation(project_id: int, translation_id: int):
     approval id, not the translation id, so we look up the one we stored."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT approval_id FROM translations WHERE id = ?", (translation_id,)
+            "SELECT approval_id, is_approved FROM translations WHERE id = ?", (translation_id,)
         ).fetchone()
 
-    if row is None or row["approval_id"] is None:
+    if row is None:
         raise HTTPException(status_code=404, detail="No stored approval for this translation")
+    # A NULL approval_id used to be a hard 404. It's now also what an
+    # approve-while-offline looks like before its queue item drains, so the
+    # only genuine error is un-approving something that isn't approved at
+    # all; the queued item resolves the id when it runs.
+    if row["approval_id"] is None and not row["is_approved"]:
+        raise HTTPException(status_code=404, detail="No stored approval for this translation")
+
+    def _apply_local_unapproval() -> None:
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE translations SET is_approved = 0, approval_id = NULL WHERE id = ?",
+                (translation_id,),
+            )
+        _invalidate_progress_for_translation(translation_id)
+
+    if row["approval_id"] is None:
+        # Approved offline and not yet drained. Nothing on Crowdin to
+        # remove, so cancel the pending approve rather than queueing an
+        # unapprove behind it — sending both would approve then immediately
+        # un-approve, generating notifications for work that never happened.
+        cancelled = offline_queue.cancel_pending(
+            "approve", translation_id=translation_id, project_id=project_id
+        )
+        _apply_local_unapproval()
+        if cancelled:
+            return {"status": "cancelled_pending_approval"}
+        string_id, language_id = _translation_string_and_language(translation_id)
+        offline_queue.enqueue(
+            "unapprove",
+            {"project_id": project_id, "translation_id": translation_id, "approval_id": None},
+            string_id, language_id,
+        )
+        return {"status": "queued"}
 
     client = get_client()
     try:
@@ -1020,13 +1109,20 @@ async def unapprove_translation(project_id: int, translation_id: int):
         )
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
-
-    with get_conn() as conn:
-        conn.execute(
-            "UPDATE translations SET is_approved = 0, approval_id = NULL WHERE id = ?",
-            (translation_id,),
+    except OFFLINE_ERRORS:
+        string_id, language_id = _translation_string_and_language(translation_id)
+        _apply_local_unapproval()
+        offline_queue.enqueue(
+            "unapprove",
+            {
+                "project_id": project_id, "translation_id": translation_id,
+                "approval_id": row["approval_id"],
+            },
+            string_id, language_id,
         )
-    _invalidate_progress_for_translation(translation_id)
+        return {"status": "queued"}
+
+    _apply_local_unapproval()
     return {"status": "unapproved"}
 
 
@@ -1049,6 +1145,10 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
     just now in this session, is purely in-memory and lost on navigation —
     this is what backs it once you've moved on or come back later)."""
     client = get_client()
+    queued = False
+    # Captured before the local delete below — both the queue's denormalised
+    # columns and the progress invalidation need the row to still exist.
+    string_id, language_id = _translation_string_and_language(translation_id)
     try:
         await run_in_threadpool(
             call_with_limits, client.string_translations.delete_translation,
@@ -1056,6 +1156,14 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
         )
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # If the translation was itself only submitted offline it has no
+        # Crowdin id yet, so deleting it means un-sending the submission
+        # rather than queueing a delete against something that isn't there.
+        cancelled = offline_queue.cancel_pending(
+            "add_translation", project_id=project_id, string_id=string_id
+        )
+        queued = not cancelled
 
     # Before the DELETE below, not after — the join this needs
     # (translations -> source_strings) only works while the row still
@@ -1085,6 +1193,13 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
                 ),
             )
         conn.execute("DELETE FROM translations WHERE id = ?", (translation_id,))
+    if queued:
+        offline_queue.enqueue(
+            "delete_translation",
+            {"project_id": project_id, "translation_id": translation_id},
+            string_id, language_id,
+        )
+        return {"status": "queued"}
     return {"status": "deleted"}
 
 
@@ -1107,6 +1222,28 @@ async def restore_translation_endpoint(project_id: int, string_id: int, translat
         )
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # Restoring undoes a delete. If that delete is still queued, drop it
+        # and the pair cancels out — the translation never left Crowdin.
+        cancelled = offline_queue.cancel_pending(
+            "delete_translation", project_id=project_id, translation_id=translation_id
+        )
+        restored = _restore_translation_from_local_snapshot(string_id, translation_id, language_id)
+        if not restored:
+            raise HTTPException(
+                status_code=404,
+                detail="No local snapshot of this deleted translation to restore while offline.",
+            )
+        if not cancelled:
+            offline_queue.enqueue(
+                "restore_translation",
+                {"project_id": project_id, "translation_id": translation_id},
+                string_id, language_id,
+            )
+            _invalidate_progress_for_translation(translation_id)
+            return {"status": "queued"}
+        _invalidate_progress_for_translation(translation_id)
+        return {"status": "cancelled_pending_delete"}
 
     t = resp.get("data", resp)
     user = t.get("user") or {}
@@ -1198,6 +1335,26 @@ async def vote_translation(project_id: int, translation_id: int, body: VoteIn):
                 detail="Your project role doesn't allow voting on translations — try approving it instead.",
             )
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # The live path deliberately refuses to guess +/-1 and recomputes the
+        # tally from Crowdin's vote list. Offline there's nothing to
+        # recompute from, so nudge by one and let _do_vote correct it
+        # authoritatively on drain.
+        string_id, language_id = _translation_string_and_language(translation_id)
+        delta = 1 if body.mark == "up" else -1
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE translations SET rating = rating + ? WHERE id = ?", (delta, translation_id)
+            )
+            row = conn.execute(
+                "SELECT rating FROM translations WHERE id = ?", (translation_id,)
+            ).fetchone()
+        offline_queue.enqueue(
+            "vote",
+            {"project_id": project_id, "translation_id": translation_id, "mark": body.mark},
+            string_id, language_id,
+        )
+        return {"status": "queued", "rating": row["rating"] if row else 0}
 
     # add_vote's response is just the vote record, not the translation's
     # aggregate tally — recompute rating from the authoritative vote list
@@ -1211,6 +1368,15 @@ async def vote_translation(project_id: int, translation_id: int, body: VoteIn):
         )
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # The vote itself landed; only the tally re-read failed. Don't fail
+        # the request over that — the next resync of the file corrects the
+        # rating, and re-queueing the vote would double-count it.
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT rating FROM translations WHERE id = ?", (translation_id,)
+            ).fetchone()
+        return {"status": "voted", "rating": row["rating"] if row else 0}
 
     votes = [v.get("data", v) for v in votes_resp.get("data", [])]
     rating = sum(1 if v.get("mark") == "up" else -1 for v in votes)
@@ -1279,8 +1445,61 @@ async def add_string_comment(project_id: int, string_id: int, body: CommentIn):
         comments = await run_in_threadpool(sync_string_comments, project_id, string_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # Crowdin assigns comment ids, so an offline comment gets a negative
+        # placeholder — negative because the id column is the primary key and
+        # every real Crowdin id is positive, so the two can never collide.
+        # The drain resyncs the string, which pulls the real row in; the
+        # placeholder is dropped then.
+        local_id = _insert_pending_comment(project_id, string_id, body)
+        offline_queue.enqueue(
+            "add_comment",
+            {
+                "project_id": project_id, "string_id": string_id, "text": body.text,
+                "language_id": body.language_id, "issue_type": body.issue_type,
+                "local_comment_id": local_id,
+            },
+            string_id, body.language_id,
+        )
+        with get_conn() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) c FROM comments WHERE string_id = ?", (string_id,)
+            ).fetchone()["c"]
+        return {"status": "queued", "count": count}
 
     return {"status": "posted", "count": len(comments)}
+
+
+def _insert_pending_comment(project_id: int, string_id: int, body: "CommentIn") -> int:
+    """Insert a placeholder comment row with a negative id, so a comment
+    written offline is visible in the panel straight away instead of
+    vanishing until the queue drains.
+
+    Negative ids are safe as placeholders because `comments.id` is the
+    primary key and every id Crowdin issues is positive — a placeholder can
+    never collide with a real row, and the frontend can tell them apart by
+    sign to mark them pending.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        row = conn.execute("SELECT MIN(id) m FROM comments").fetchone()
+        next_id = min(-1, (row["m"] or 0) - 1)
+        conn.execute(
+            """
+            INSERT INTO comments
+                (id, string_id, project_id, language_id, text, user_id, user_name,
+                 type, issue_type, issue_status, is_resolved, created_at, synced_at)
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, 0, ?, ?)
+            """,
+            (
+                next_id, string_id, project_id, body.language_id, body.text,
+                "issue" if body.issue_type else "comment",
+                body.issue_type,
+                "unresolved" if body.issue_type else None,
+                now, now,
+            ),
+        )
+    return next_id
 
 
 async def _set_comment_issue_status(project_id: int, string_id: int, comment_id: int, resolved: bool) -> None:
@@ -1305,6 +1524,30 @@ async def _set_comment_issue_status(project_id: int, string_id: int, comment_id:
         await run_in_threadpool(sync_string_comments, project_id, string_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        if comment_id < 0:
+            # A placeholder from an offline comment that hasn't been sent
+            # yet, so there's no Crowdin comment to change the status of.
+            # Refuse rather than queue: the real id doesn't exist until the
+            # add drains, and a status change keyed to a placeholder id
+            # could never be applied.
+            raise HTTPException(
+                status_code=409,
+                detail="This comment hasn't reached Crowdin yet — resolve it once it's been sent.",
+            )
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE comments SET is_resolved = ?, issue_status = ? WHERE id = ?",
+                (1 if resolved else 0, "resolved" if resolved else "unresolved", comment_id),
+            )
+        offline_queue.enqueue(
+            "set_comment_status",
+            {
+                "project_id": project_id, "string_id": string_id,
+                "comment_id": comment_id, "resolved": resolved,
+            },
+            string_id, None,
+        )
 
 
 @app.post("/projects/{project_id}/strings/{string_id}/comments/{comment_id}/resolve")

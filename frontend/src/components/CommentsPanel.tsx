@@ -65,25 +65,34 @@ export function CommentsPanel({ projectId, stringId, languageId }: CommentsPanel
       {query.isError && <p className="error">{(query.error as Error).message}</p>}
       {query.data && query.data.comments.length === 0 && <p className="hint">No comments yet.</p>}
       <div className="comments-sidebar-list">
-        {query.data?.comments.map((c) => (
-          <div key={c.id} className="comment">
-            <div className="comment-meta">
-              <strong>{c.user_name ?? "Unknown"}</strong>
-              {c.type === "issue" && <span className="issue-tag">{c.issue_type ?? "issue"}</span>}
-              {c.is_resolved ? <span className="resolved-tag">resolved</span> : null}
+        {query.data?.comments.map((c) => {
+          // A negative id is a placeholder for a comment written offline
+          // that hasn't reached Crowdin yet (see _insert_pending_comment) —
+          // it has no author or real id from Crowdin, so labelling it
+          // "Unknown" alongside a Resolve button that can't work would
+          // misrepresent your own unsent comment as someone else's.
+          const pending = c.id < 0;
+          return (
+            <div key={c.id} className={`comment${pending ? " comment--pending" : ""}`}>
+              <div className="comment-meta">
+                <strong>{pending ? "You" : c.user_name ?? "Unknown"}</strong>
+                {pending && <span className="issue-tag">not sent yet</span>}
+                {c.type === "issue" && <span className="issue-tag">{c.issue_type ?? "issue"}</span>}
+                {c.is_resolved ? <span className="resolved-tag">resolved</span> : null}
+              </div>
+              <div className="comment-text">{c.text}</div>
+              {c.type === "issue" && !pending && (
+                <button
+                  className="link-button"
+                  onClick={() => (c.is_resolved ? unresolve.mutate(c.id) : resolve.mutate(c.id))}
+                  disabled={resolve.isPending || unresolve.isPending}
+                >
+                  {c.is_resolved ? "Reopen" : "Resolve"}
+                </button>
+              )}
             </div>
-            <div className="comment-text">{c.text}</div>
-            {c.type === "issue" && (
-              <button
-                className="link-button"
-                onClick={() => (c.is_resolved ? unresolve.mutate(c.id) : resolve.mutate(c.id))}
-                disabled={resolve.isPending || unresolve.isPending}
-              >
-                {c.is_resolved ? "Reopen" : "Resolve"}
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="add-comment-form">
         <textarea

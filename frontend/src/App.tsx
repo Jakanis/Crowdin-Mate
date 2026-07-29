@@ -324,6 +324,17 @@ export function App() {
     setFocusedStringIdFor(fileId, stringId);
   };
 
+  // Same jump, plus revealing the comments panel when the queued operation
+  // that failed was a comment — landing on the string alone wouldn't show
+  // the thing that actually needs attention.
+  const handleJumpToQueueItem = (fileId: number, stringId: number, openComments: boolean) => {
+    handleJumpToSearchResult(fileId, stringId);
+    if (openComments) {
+      rightSidebar.setActiveTab("comments");
+      rightSidebar.setCollapsed(false);
+    }
+  };
+
   if (authStatus.isLoading) return <div className="app-shell">Loading…</div>;
 
   if (!authStatus.data?.configured) {
@@ -373,7 +384,7 @@ export function App() {
             openTabsLayout={openTabsLayout.layout}
             onOpenTabsLayoutChange={openTabsLayout.setLayout}
           />
-          <OfflineIndicator />
+          <OfflineIndicator onJumpToItem={handleJumpToQueueItem} />
         </div>
       </header>
 

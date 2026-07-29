@@ -208,6 +208,7 @@ export interface OfflineQueueItem {
   last_error: string | null;
   status: "pending" | "failed";
   source_text: string | null;
+  file_id: number | null;
   file_path: string | null;
   draft_text: string | null;
 }

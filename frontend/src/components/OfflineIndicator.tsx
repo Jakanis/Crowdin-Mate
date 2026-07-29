@@ -28,7 +28,19 @@ function useOnlineStatus(): boolean {
  * other reasons (Crowdin down, a permanent validation rejection) even
  * with a live connection.
  */
-export function OfflineIndicator() {
+/** Operations that act on a comment rather than a translation — a failure
+ * in one of these is only actionable with the comments panel open, so the
+ * jump opens it rather than just landing on the string. */
+const COMMENT_OPERATIONS = new Set(["add_comment", "set_comment_status"]);
+
+interface OfflineIndicatorProps {
+  /** Jump to the string a queued operation belongs to, so a failure is
+   * one click from the thing that failed instead of a string id to go
+   * hunt for. `openComments` is set for comment operations. */
+  onJumpToItem?: (fileId: number, stringId: number, openComments: boolean) => void;
+}
+
+export function OfflineIndicator({ onJumpToItem }: OfflineIndicatorProps) {
   const queryClient = useQueryClient();
   const browserOnline = useOnlineStatus();
   const [open, setOpen] = useState(false);
@@ -123,6 +135,21 @@ export function OfflineIndicator() {
                           {item.status === "failed" ? "Failed" : "Queued"}
                         </span>
                         <span title={fullDateTime(item.created_at)}>{timeAgo(item.created_at)}</span>
+                        {onJumpToItem && item.file_id != null && (
+                          <button
+                            className="link-button"
+                            onClick={() => {
+                              onJumpToItem(
+                                item.file_id!,
+                                item.string_id,
+                                COMMENT_OPERATIONS.has(item.operation_type),
+                              );
+                              setOpen(false);
+                            }}
+                          >
+                            Open string
+                          </button>
+                        )}
                         {item.status === "failed" && (
                           <>
                             <button

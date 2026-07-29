@@ -1983,6 +1983,14 @@ body {
   line-height: 1.4;
 }
 
+/* Written offline and still queued — same "provisional" reading as the
+   accent-tinted sync affordances elsewhere, so it's clearly your text
+   without looking like a comment that already posted. */
+.comment--pending {
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+}
+
 .issue-tag,
 .resolved-tag {
   font-size: calc(11px * var(--ui-scale));
