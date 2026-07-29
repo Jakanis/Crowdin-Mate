@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { api, type DeletedTranslationInfo, type SourceString, type TranslationInfo } from "../api/client";
+import {
+  api,
+  type DeletedTranslationInfo,
+  type FileStringsResponse,
+  type SourceString,
+  type TranslationInfo,
+} from "../api/client";
 import { notifyProgressChanged } from "../progressEvents";
 import { useTmSuggestionsCollapsed } from "../theme";
 import { fullDateTime, timeAgo } from "../timeAgo";
@@ -122,9 +128,44 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   const lastSavedDraftRef = useRef(text);
   const draftTimeoutRef = useRef<number | null>(null);
 
+  // Mirrors a just-persisted draft into the cached file-strings entry
+  // this component's own useState initializer reads on mount.
+  //
+  // Necessary because switching to another open tab and back genuinely
+  // remounts this component: the tab panel is hidden with `display:
+  // none`, so SideBySideView's virtualizer measures a zero-height
+  // scroll container, tears its rows down, and rebuilds them when the
+  // panel is shown again. The remounted editor re-derives `text` from
+  // whatever `s.draft` says. saveDraft only writes SQLite, so without
+  // this the cached `s` still holds whatever the last fetch returned —
+  // and the live edit gets replaced by a stale draft, or (when nothing
+  // has refetched since the file was opened, the common case) by
+  // bestTranslationText's already-submitted translation.
+  //
+  // setQueryData rather than invalidateQueries: this is local-only
+  // state we already know the value of, so there's nothing to go ask
+  // the backend for, and a refetch mid-edit would be a much bigger
+  // hammer. Applied synchronously, before the request resolves, so a
+  // remount racing the in-flight save still reads the right text.
+  const syncDraftToCache = (draftText: string) => {
+    queryClient.setQueryData<FileStringsResponse>(
+      ["file-strings", projectId, fileId, languageId],
+      (prev) =>
+        prev && {
+          ...prev,
+          strings: prev.strings.map((row) =>
+            row.id === s.id
+              ? { ...row, draft: { string_id: s.id, draft_text: draftText, dirty: 1 } }
+              : row,
+          ),
+        },
+    );
+  };
+
   const flushDraft = () => {
     if (textRef.current === lastSavedDraftRef.current) return;
     lastSavedDraftRef.current = textRef.current;
+    syncDraftToCache(textRef.current);
     api.saveDraft(projectId, s.id, languageId, textRef.current).catch(() => {
       // Best-effort — local persistence failing isn't worth surfacing as
       // a user-facing error; the in-memory text is still right there in
