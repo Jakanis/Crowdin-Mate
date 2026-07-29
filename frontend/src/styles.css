@@ -1780,10 +1780,15 @@ body {
   gap: 8px;
 }
 
-/* --- TM suggestions inline under the translation list (main editor) --- */
+/* --- TM suggestions inline under the translation list (main editor) ---
+   Kept deliberately tight: several of these stack up under every string
+   (Deleted, Suggestions, and machine-translation engines later), and
+   while collapsed each one is just a single label row, so generous
+   padding here costs vertical space on every string in exchange for
+   nothing. */
 .tm-suggestions-inline {
-  margin: 14px 0 0;
-  padding: 14px 0 0;
+  margin: 8px 0 0;
+  padding: 8px 0 0;
   border-top: 1px solid rgba(128, 128, 128, 0.2);
 }
 
@@ -1792,12 +1797,19 @@ body {
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 0 0 8px;
+  padding: 0 0 6px;
   border: none;
   background: none;
   color: inherit;
   cursor: pointer;
   text-align: left;
+}
+
+/* Collapsed, this padding separates the label from nothing at all —
+   keyed off the aria-expanded the header already sets, so there's no
+   extra modifier class to keep in sync. */
+.tm-suggestions-inline-header[aria-expanded="false"] {
+  padding-bottom: 0;
 }
 
 .tm-suggestions-inline-caret {
