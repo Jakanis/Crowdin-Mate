@@ -217,6 +217,18 @@ export interface CacheStatus {
   queue_done: number;
 }
 
+/** Progress of the opt-in "cache the whole project" job. `pending` counts
+ * files never cached for this language PLUS ones Crowdin has touched since,
+ * so it isn't simply total - cached. */
+export interface OfflineCacheStatus {
+  total: number;
+  cached: number;
+  pending: number;
+  running: boolean;
+  errors: number;
+  current_file_path: string | null;
+}
+
 export interface OfflineQueueItem {
   id: number;
   operation_type: string;
@@ -300,6 +312,20 @@ export const api = {
     ),
   clearCompletedQueue: () =>
     request<{ deleted: number }>("/offline-queue/clear-completed", { method: "POST" }),
+  getOfflineCacheStatus: (projectId: number, languageId: string) =>
+    request<OfflineCacheStatus>(
+      `/projects/${projectId}/offline-cache/status?language_id=${encodeURIComponent(languageId)}`,
+    ),
+  buildOfflineCache: (projectId: number, languageId: string) =>
+    request<OfflineCacheStatus & { started: boolean }>(
+      `/projects/${projectId}/offline-cache/build?language_id=${encodeURIComponent(languageId)}`,
+      { method: "POST" },
+    ),
+  stopOfflineCache: (projectId: number, languageId: string) =>
+    request<OfflineCacheStatus>(
+      `/projects/${projectId}/offline-cache/stop?language_id=${encodeURIComponent(languageId)}`,
+      { method: "POST" },
+    ),
   getOfflineQueue: () => request<{ items: OfflineQueueItem[] }>("/offline-queue"),
   drainOfflineQueue: () => request<{ drained: number }>("/offline-queue/drain", { method: "POST" }),
   retryOfflineQueueItem: (itemId: number) =>

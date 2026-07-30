@@ -27,7 +27,7 @@ from app.sync.file_content_sync import sync_file_content, sync_string_comments
 from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_project_glossary
 from app.sync.live_search import search_project_live
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
-from app.sync import search_index
+from app.sync import offline_cache, search_index
 from app.sync.suggestions_sync import has_looked_up, search_tm_live, sync_glossary_matches, sync_tm_matches
 from app.sync.tree_sync import has_project_changed, sync_project_tree
 
@@ -190,6 +190,29 @@ async def get_cache_status(project_id: int, language_id: str):
             ),
         ).fetchone()
     return dict(row)
+
+
+@app.post("/projects/{project_id}/offline-cache/build")
+async def build_offline_cache(project_id: int, language_id: str):
+    """Cache every file's content so the whole project is workable offline.
+
+    One API call per file with no bulk equivalent — on a project this size
+    that's hours, not minutes, which is why it's explicit and never
+    automatic. Safe to stop and restart: progress lives in the DB.
+    """
+    started = offline_cache.start(project_id, language_id)
+    return {"started": started, **offline_cache.get_status(project_id, language_id)}
+
+
+@app.get("/projects/{project_id}/offline-cache/status")
+async def offline_cache_status(project_id: int, language_id: str):
+    return offline_cache.get_status(project_id, language_id)
+
+
+@app.post("/projects/{project_id}/offline-cache/stop")
+async def stop_offline_cache(project_id: int, language_id: str):
+    offline_cache.request_stop(project_id, language_id)
+    return offline_cache.get_status(project_id, language_id)
 
 
 @app.post("/offline-queue/clear-completed")

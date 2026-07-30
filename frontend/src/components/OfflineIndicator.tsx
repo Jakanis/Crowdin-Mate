@@ -97,6 +97,29 @@ export function OfflineIndicator({ projectId, languageId, onJumpToItem }: Offlin
   });
   const cache = cacheQuery.data;
 
+  // Polled while running so the file path and counts move; otherwise only
+  // fetched with the panel open, same as the cache summary.
+  const precacheQuery = useQuery({
+    queryKey: ["offline-cache-status", projectId, languageId],
+    queryFn: () => api.getOfflineCacheStatus(projectId, languageId),
+    enabled: open,
+    refetchInterval: (query) => (query.state.data?.running ? 1000 : false),
+  });
+  const precache = precacheQuery.data;
+
+  const invalidateCacheViews = () => {
+    queryClient.invalidateQueries({ queryKey: ["offline-cache-status", projectId, languageId] });
+    queryClient.invalidateQueries({ queryKey: ["cache-status", projectId, languageId] });
+  };
+  const startPrecache = useMutation({
+    mutationFn: () => api.buildOfflineCache(projectId, languageId),
+    onSuccess: invalidateCacheViews,
+  });
+  const stopPrecache = useMutation({
+    mutationFn: () => api.stopOfflineCache(projectId, languageId),
+    onSuccess: invalidateCacheViews,
+  });
+
   const clearCompleted = useMutation({
     mutationFn: api.clearCompletedQueue,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cache-status", projectId, languageId] }),
@@ -269,6 +292,56 @@ export function OfflineIndicator({ projectId, languageId, onJumpToItem }: Offlin
                         clear {cache.queue_done}
                       </button>
                     </div>
+                  )}
+                </div>
+              )}
+
+              {precache && (
+                <div className="cache-precache">
+                  {precache.running ? (
+                    <>
+                      <div className="cache-progress-bar">
+                        <div
+                          className="cache-progress-bar-fill"
+                          style={{
+                            width: `${precache.total ? (precache.cached / precache.total) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="cache-precache-actions">
+                        <span className="cache-row-label">
+                          Caching… {precache.pending.toLocaleString()} left
+                          {precache.errors > 0 && ` · ${precache.errors} failed`}
+                        </span>
+                        <button
+                          className="link-button"
+                          onClick={() => stopPrecache.mutate()}
+                          disabled={stopPrecache.isPending}
+                        >
+                          Stop
+                        </button>
+                      </div>
+                      {precache.current_file_path && (
+                        <div className="cache-precache-current">{precache.current_file_path}</div>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => startPrecache.mutate()}
+                      disabled={startPrecache.isPending || precache.pending === 0}
+                      title={
+                        precache.pending === 0
+                          ? "Every file is cached and up to date for this language."
+                          : `Caches all ${precache.pending.toLocaleString()} remaining files so the ` +
+                            "whole project works with no connection. One request per file with no " +
+                            "bulk equivalent, so expect hours rather than minutes — start it before " +
+                            "you need it. Safe to stop and resume; progress is kept."
+                      }
+                    >
+                      {precache.pending === 0
+                        ? "Fully cached"
+                        : `Cache all files for offline (${precache.pending.toLocaleString()})`}
+                    </button>
                   )}
                 </div>
               )}

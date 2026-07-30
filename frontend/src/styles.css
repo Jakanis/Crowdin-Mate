@@ -529,6 +529,42 @@ body {
   text-align: right;
 }
 
+.cache-precache {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cache-progress-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(128, 128, 128, 0.25);
+  overflow: hidden;
+}
+
+.cache-progress-bar-fill {
+  height: 100%;
+  background: var(--progress-translated);
+  transition: width 0.3s ease;
+}
+
+.cache-precache-actions {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: calc(12px * var(--ui-scale));
+}
+
+/* Paths here are long and deep; wrapping mid-path beats an ellipsis that
+   hides which questline is being worked on. */
+.cache-precache-current {
+  font-size: calc(11px * var(--ui-scale));
+  color: var(--fg-muted);
+  word-break: break-all;
+}
+
 .offline-queue-empty {
   padding: 0;
   font-size: calc(12px * var(--ui-scale));
