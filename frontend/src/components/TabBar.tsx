@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import type { ProgressInfo, TreeFile } from "../api/client";
-import { progressTitle } from "./ProgressPie";
+import { ProgressHover } from "./ProgressPie";
 
 interface TabBarProps {
   openFiles: TreeFile[];
@@ -76,10 +76,10 @@ function TabProgressStrip({ progress }: { progress: ProgressInfo }) {
   const tb = bucketPercent(t);
   const ab = bucketPercent(a);
   return (
-    <span className="tab-progress-strip" title={progressTitle(progress)}>
+    <ProgressHover progress={progress} className="tab-progress-strip">
       <span className="tab-progress-strip-translated" style={{ bottom: `${ab}%`, height: `${tb - ab}%` }} />
       <span className="tab-progress-strip-approved" style={{ height: `${ab}%` }} />
-    </span>
+    </ProgressHover>
   );
 }
 

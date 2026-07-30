@@ -529,6 +529,92 @@ body {
   text-align: right;
 }
 
+/* --- progress hover card ---
+   Portalled to body (see ProgressHover) so the scroll containers these sit
+   in can't clip it, which is why this is position: fixed with coordinates
+   rather than absolute inside the trigger. */
+.progress-card {
+  position: fixed;
+  z-index: 60;
+  min-width: 200px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  background: var(--bg-elevated);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-size: calc(12px * var(--ui-scale));
+  pointer-events: none;
+}
+
+.progress-card-head {
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.22);
+  font-weight: 600;
+}
+
+.progress-card-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.progress-card-table + .progress-card-table {
+  margin-top: 2px;
+}
+
+.progress-card-table th {
+  padding: 4px 0 2px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.progress-card-table th:first-child {
+  text-align: left;
+}
+
+.progress-card-table td {
+  padding: 1px 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-card-label {
+  text-align: left;
+  padding-right: 14px;
+  font-weight: 600;
+}
+
+/* Ties each row to the part of the bar it accounts for, via a swatch rather
+   than by colouring the text. --progress-translated is tuned to be legible
+   as a FILL next to --progress-approved, not as type: in the Crowdin light
+   palette it's #9cc7ff, which lands around 1.7:1 on this card's white
+   background. The swatch keeps the association and leaves the label at full
+   contrast. */
+.progress-card-label::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: baseline;
+}
+
+.progress-card-label--translated::before {
+  background: var(--progress-translated);
+}
+
+.progress-card-label--approved::before {
+  background: var(--progress-approved);
+}
+
+.progress-card-total {
+  text-align: left;
+  padding-top: 3px;
+  color: var(--fg-muted);
+}
+
 .cache-precache {
   margin-top: 10px;
   display: flex;

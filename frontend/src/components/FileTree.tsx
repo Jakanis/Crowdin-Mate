@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ProgressInfo, type TreeDirectory, type TreeFile } from "../api/client";
 import { onProgressChanged } from "../progressEvents";
 import { timeAgo } from "../timeAgo";
-import { ProgressPie, progressTitle } from "./ProgressPie";
+import { ProgressHover, ProgressPie } from "./ProgressPie";
 
 interface SyncState {
   trigger: () => void;
@@ -413,19 +413,19 @@ function ProgressBar({ progress }: { progress: ProgressInfo }) {
 
   if (t === 100 && a === 100) {
     return (
-      <span className="progress-mark" title={progressTitle(progress)}>
+      <ProgressHover progress={progress} className="progress-mark">
         ✓
-      </span>
+      </ProgressHover>
     );
   }
 
   return (
-    <span
+    <ProgressHover
+      progress={progress}
       className={`progress-bar${t === 100 ? " progress-bar--complete" : ""}`}
-      title={progressTitle(progress)}
     >
       <span style={{ width: `${a}%`, background: APPROVED_COLOR }} />
       <span style={{ width: `${t - a}%`, background: TRANSLATED_COLOR }} />
-    </span>
+    </ProgressHover>
   );
 }

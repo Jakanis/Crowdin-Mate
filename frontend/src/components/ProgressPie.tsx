@@ -1,3 +1,5 @@
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ProgressInfo } from "../api/client";
 
 // Matches Crowdin's own color convention: blue for translated, green for
@@ -43,6 +45,124 @@ export function progressTitle(p: ProgressInfo): string {
   );
 }
 
+function hasCounts(p: ProgressInfo): boolean {
+  return p.phrases_total != null && p.words_total != null;
+}
+
+/** One unit's block, laid out like Crowdin's own progress popover: the unit
+ * name heads the label column, Todo and Done are the two number columns.
+ *
+ * Todo is derived rather than stored — the API reports what's done, and
+ * "how much is left" is the question a progress indicator is actually being
+ * asked. */
+function UnitTable({
+  unit, total, translated, approved,
+}: { unit: string; total: number; translated: number; approved: number }) {
+  const n = (v: number) => v.toLocaleString();
+  return (
+    <table className="progress-card-table">
+      <thead>
+        <tr>
+          <th>{unit}</th>
+          <th>Todo</th>
+          <th>Done</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td className="progress-card-label progress-card-label--translated">Translated</td>
+          <td>{n(Math.max(0, total - translated))}</td>
+          <td>{n(translated)}</td>
+        </tr>
+        <tr>
+          <td className="progress-card-label progress-card-label--approved">Approved</td>
+          <td>{n(Math.max(0, total - approved))}</td>
+          <td>{n(approved)}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colSpan={3} className="progress-card-total">Total: {n(total)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+
+function ProgressCard({ progress: p, x, y }: { progress: ProgressInfo; x: number; y: number }) {
+  return (
+    <div className="progress-card" style={{ left: x, top: y }} role="tooltip">
+      <div className="progress-card-head">
+        {p.translation_progress}% translated, {p.approval_progress}% approved
+      </div>
+      <UnitTable
+        unit="Strings"
+        total={p.phrases_total ?? 0}
+        translated={p.phrases_translated ?? 0}
+        approved={p.phrases_approved ?? 0}
+      />
+      <UnitTable
+        unit="Words"
+        total={p.words_total ?? 0}
+        translated={p.words_translated ?? 0}
+        approved={p.words_approved ?? 0}
+      />
+    </div>
+  );
+}
+
+const CARD_W = 210;
+const CARD_H = 230;
+
+/** Hover card wrapper for a progress indicator.
+ *
+ * A native `title` can't do this — it's plain text, and its proportional
+ * font won't hold columns aligned. So this renders a real element, into a
+ * portal on document.body: every one of these sits inside a scroll
+ * container with `overflow` set (the virtualized file tree, the tab bar),
+ * which would otherwise clip the card.
+ *
+ * Falls back to a plain `title` when counts are missing — rows cached
+ * before those columns existed have none, and an empty table would say
+ * less than the percentages alone. */
+export function ProgressHover({
+  progress, className, children,
+}: { progress: ProgressInfo; className?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  if (!hasCounts(progress)) {
+    return (
+      <span className={className} title={progressTitle(progress)}>
+        {children}
+      </span>
+    );
+  }
+
+  const show = () => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Flip toward whichever side has room, so a card on a tab at the far
+    // right or a deep tree row near the bottom stays fully on screen.
+    const x = Math.min(r.left, window.innerWidth - CARD_W - 8);
+    const y = r.bottom + CARD_H > window.innerHeight ? r.top - CARD_H - 6 : r.bottom + 6;
+    setPos({ x: Math.max(8, x), y: Math.max(8, y) });
+  };
+
+  return (
+    <span
+      ref={ref}
+      className={className}
+      onMouseEnter={show}
+      onMouseLeave={() => setPos(null)}
+    >
+      {children}
+      {pos && createPortal(<ProgressCard progress={progress} x={pos.x} y={pos.y} />, document.body)}
+    </span>
+  );
+}
+
 // Built from stacked solid-stroke circles rather than a conic-gradient —
 // see the note above .progress-bar in styles.css for why. A circle
 // stroked at half its own radius, with stroke-width equal to that
@@ -56,9 +176,9 @@ export function ProgressPie({ progress }: { progress: ProgressInfo }) {
 
   if (t === 100 && a === 100) {
     return (
-      <span className="progress-mark" title={progressTitle(progress)}>
+      <ProgressHover progress={progress} className="progress-mark">
         ✓
-      </span>
+      </ProgressHover>
     );
   }
 
@@ -68,8 +188,8 @@ export function ProgressPie({ progress }: { progress: ProgressInfo }) {
   const dash = (pct: number) => `${(circumference * pct) / 100} ${circumference}`;
 
   return (
+    <ProgressHover progress={progress}>
     <svg className="progress-pie" viewBox={`0 0 ${size} ${size}`}>
-      <title>{progressTitle(progress)}</title>
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TRACK_COLOR} strokeWidth={size / 2} />
       <circle
         cx={size / 2}
@@ -92,5 +212,6 @@ export function ProgressPie({ progress }: { progress: ProgressInfo }) {
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
     </svg>
+    </ProgressHover>
   );
 }
