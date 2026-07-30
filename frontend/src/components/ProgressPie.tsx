@@ -34,12 +34,12 @@ export function progressTitle(p: ProgressInfo): string {
   const head = `${p.translation_progress}% translated, ${p.approval_progress}% approved`;
   if (p.phrases_total == null || p.words_total == null) return head;
   const n = (v: number) => v.toLocaleString();
+  const line = (label: string, translated: number, approved: number, total: number) =>
+    `${label} ${n(translated)}/${n(total)} translated, ${n(approved)}/${n(total)} approved`;
   return (
     `${head}\n` +
-    `Strings: ${n(p.phrases_translated ?? 0)} translated, ` +
-    `${n(p.phrases_approved ?? 0)} approved of ${n(p.phrases_total)}\n` +
-    `Words:   ${n(p.words_translated ?? 0)} translated, ` +
-    `${n(p.words_approved ?? 0)} approved of ${n(p.words_total)}`
+    `${line("Strings:", p.phrases_translated ?? 0, p.phrases_approved ?? 0, p.phrases_total)}\n` +
+    `${line("Words:  ", p.words_translated ?? 0, p.words_approved ?? 0, p.words_total)}`
   );
 }
 
