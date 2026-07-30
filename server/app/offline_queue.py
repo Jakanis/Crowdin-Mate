@@ -26,6 +26,7 @@ from crowdin_api.exceptions import APIException
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn
 from app.sync.progress_sync import invalidate_progress_for_file
+from app.sync.suggestions_sync import invalidate_tm_lookups
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +126,6 @@ def apply_local_approval(conn, translation_id: int, approval_id: int | None) -> 
 
 
 def _do_add_translation(client, payload: dict) -> None:
-    from app.sync.suggestions_sync import invalidate_tm_lookups
-
     call_with_limits(
         client.string_translations.add_translation,
         projectId=payload["project_id"],
@@ -134,9 +133,6 @@ def _do_add_translation(client, payload: dict) -> None:
         languageId=payload["language_id"],
         text=payload["text"],
     )
-    # Same reasoning as the live submit path in main.py — a translation
-    # written offline is just as much a new TM entry once it lands.
-    invalidate_tm_lookups(payload["language_id"])
 
 
 def _do_approve(client, payload: dict) -> None:
@@ -286,6 +282,13 @@ _HANDLERS = {
     "vote": _do_vote,
 }
 
+# Operations that change what the project's translation memory serves, so a
+# cached TM lookup taken before them is stale. Applied centrally after a
+# successful drain rather than inside each handler, using the queue row's own
+# language_id — the same reasoning as the live paths in main.py. Voting is
+# absent on purpose: a rating doesn't change which translation the TM returns.
+_AFFECTS_TM = {"add_translation", "approve", "unapprove", "delete_translation", "restore_translation"}
+
 # Only a translation submission owns a draft. The others act on an existing
 # translation, so clearing dirty for them would discard an unrelated
 # in-progress edit on the same string.
@@ -329,6 +332,8 @@ def drain_once(max_items: int = 20) -> int:
                 ).fetchone() if row["string_id"] is not None else None
             if file_row is not None:
                 invalidate_progress_for_file(file_row["file_id"], row["language_id"])
+            if op in _AFFECTS_TM and row["language_id"] is not None:
+                invalidate_tm_lookups(row["language_id"])
             succeeded += 1
 
         except Exception as exc:  # noqa: BLE001 - outbox must never crash on a bad item

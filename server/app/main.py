@@ -1123,6 +1123,25 @@ def _restore_translation_from_local_snapshot(
     return True
 
 
+def _invalidate_tm_for_translation(translation_id: int) -> None:
+    """Approving, un-approving, deleting or restoring changes WHICH
+    translation the TM serves for that source text, not merely whether one
+    exists — so a lookup cached beforehand is stale in exactly the way one
+    cached before a submit is.
+
+    Confirmed live on string 284 ("Ally of the Tauren"), which has an
+    approved translation from 2020 and a newer unapproved one from 2023:
+    the concordance search returns the APPROVED text at 100%, not the more
+    recent one. Approval decides the entry, so approval has to invalidate.
+
+    Paired with _invalidate_progress_for_translation at every call site,
+    since the same four actions change both.
+    """
+    _, language_id = _translation_string_and_language(translation_id)
+    if language_id is not None:
+        invalidate_tm_lookups(language_id)
+
+
 def _translation_string_and_language(translation_id: int) -> tuple[int | None, str | None]:
     """Denormalised onto each queue item so the queue UI can name the string
     an operation belongs to — and link to it — without decoding per-operation
@@ -1179,6 +1198,7 @@ async def approve_translation(project_id: int, translation_id: int):
         with get_conn() as conn:
             offline_queue.apply_local_approval(conn, translation_id, None)
         _invalidate_progress_for_translation(translation_id)
+        _invalidate_tm_for_translation(translation_id)
         offline_queue.enqueue(
             "approve",
             {"project_id": project_id, "translation_id": translation_id},
@@ -1190,6 +1210,7 @@ async def approve_translation(project_id: int, translation_id: int):
     with get_conn() as conn:
         offline_queue.apply_local_approval(conn, translation_id, approval["id"])
     _invalidate_progress_for_translation(translation_id)
+    _invalidate_tm_for_translation(translation_id)
     return {"status": "approved", "approval_id": approval["id"]}
 
 
@@ -1218,6 +1239,7 @@ async def unapprove_translation(project_id: int, translation_id: int):
                 (translation_id,),
             )
         _invalidate_progress_for_translation(translation_id)
+        _invalidate_tm_for_translation(translation_id)
 
     if row["approval_id"] is None:
         # Approved offline and not yet drained. Nothing on Crowdin to
@@ -1306,6 +1328,7 @@ async def delete_translation_endpoint(project_id: int, translation_id: int):
     # (translations -> source_strings) only works while the row still
     # exists.
     _invalidate_progress_for_translation(translation_id)
+    _invalidate_tm_for_translation(translation_id)
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM translations WHERE id = ?", (translation_id,)).fetchone()
@@ -1378,8 +1401,10 @@ async def restore_translation_endpoint(project_id: int, string_id: int, translat
                 string_id, language_id,
             )
             _invalidate_progress_for_translation(translation_id)
+            _invalidate_tm_for_translation(translation_id)
             return {"status": "queued"}
         _invalidate_progress_for_translation(translation_id)
+        _invalidate_tm_for_translation(translation_id)
         return {"status": "cancelled_pending_delete"}
 
     t = resp.get("data", resp)
