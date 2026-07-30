@@ -82,7 +82,14 @@ def _purge_stale_source_strings(conn, file_id: int, fresh_string_ids: list[int])
     return stale_ids
 
 
-def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
+def sync_file_content(
+    project_id: int, file_id: int, language_id: str, include_candidates: bool = True
+) -> dict:
+    """include_candidates=False swaps the per-string translation fetch for a
+    single per-file one. Much cheaper, but it only recovers the current
+    translation per string — see the branch below. Used by the offline
+    pre-cache, where covering 19,000 files matters more than knowing every
+    superseded candidate in each."""
     client = get_client()
 
     strings_resp = call_with_limits(
@@ -105,19 +112,48 @@ def sync_file_content(project_id: int, file_id: int, language_id: str) -> dict:
         a = _unwrap(a)
         approval_by_translation[a["translationId"]] = a["id"]
 
-    # All translations for each string (per-string call).
     translations: list[dict] = []
-    for sid in string_ids:
+    if include_candidates:
+        # All translations for each string (per-string call).
+        for sid in string_ids:
+            t_resp = call_with_limits(
+                client.string_translations.with_fetch_all().list_string_translations,
+                projectId=project_id,
+                stringId=sid,
+                languageId=language_id,
+            )
+            for t in t_resp.get("data", []):
+                t = _unwrap(t)
+                t["_string_id"] = sid  # this endpoint's rows don't carry stringId
+                translations.append(t)
+    else:
+        # One paginated call for the whole file instead of one per string —
+        # the difference between ~6 requests per file and ~3, and far more
+        # than that for a string-heavy file.
+        #
+        # The tradeoff, confirmed live: this returns only the CURRENT
+        # translation per string, never the candidate history. On string 284
+        # the per-string endpoint returns 2 candidates and this one returns
+        # 1. So it's right for bulk pre-caching (where the goal is coverage)
+        # and wrong for opening a file to work on it, which is why the
+        # caller chooses.
+        #
+        # Unlike a file export — the other bulk option — these rows carry a
+        # real translationId, so what they produce can still be approved,
+        # voted on and deleted rather than being a read-only snapshot.
         t_resp = call_with_limits(
-            client.string_translations.with_fetch_all().list_string_translations,
+            client.string_translations.with_fetch_all().list_language_translations,
             projectId=project_id,
-            stringId=sid,
+            fileId=file_id,
             languageId=language_id,
         )
         for t in t_resp.get("data", []):
             t = _unwrap(t)
-            t["_string_id"] = sid  # this endpoint's rows don't carry stringId
-            translations.append(t)
+            # This endpoint names them differently to list_string_translations.
+            t["id"] = t.get("translationId")
+            t["_string_id"] = t.get("stringId")
+            if t["id"] is not None and t["_string_id"] is not None:
+                translations.append(t)
 
     now = _now()
 

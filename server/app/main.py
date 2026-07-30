@@ -813,7 +813,13 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
             dict(row) for row in conn.execute(
                 """
                 SELECT id, identifier, text, context, max_length, has_plurals, is_hidden, label_ids_json
-                FROM source_strings WHERE file_id = ? ORDER BY id
+                FROM source_strings WHERE file_id = ?
+                -- position is real file order, recovered from a file export
+                -- (see the column's note in db.py). id is a global sequence,
+                -- so on its own it puts a string that survived a re-upload
+                -- above its own file's title. Files never exported have no
+                -- position and sort last, keeping the old id order.
+                ORDER BY position IS NULL, position, id
                 """,
                 (file_id,),
             )

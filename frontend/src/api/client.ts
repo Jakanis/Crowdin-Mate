@@ -63,6 +63,14 @@ export interface TreeResponse {
 export interface ProgressInfo {
   translation_progress: number;
   approval_progress: number;
+  /** Raw counts behind the percentages, shown in the tooltip. Optional
+   * because rows cached before these columns existed don't have them. */
+  phrases_total?: number | null;
+  phrases_translated?: number | null;
+  phrases_approved?: number | null;
+  words_total?: number | null;
+  words_translated?: number | null;
+  words_approved?: number | null;
 }
 
 export interface TreeProgressResponse {

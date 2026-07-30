@@ -42,12 +42,50 @@ _COLUMN_MIGRATIONS = {
     ],
     "source_strings": [
         ("label_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+        # Position within the file, 0-based.
+        #
+        # Needed because string order is not derivable from anything the
+        # API returns. list_strings sorts by id and offers no position
+        # field (orderBy accepts only id/text/identifier/context/
+        # createdAt/updatedAt/type), and id is a global sequence, not a
+        # per-file one. So a string that survived a re-upload while its
+        # siblings were recreated keeps a much lower id and sorts to the
+        # top — confirmed live on Imbuing the Headpiece_10782.xml, where
+        # OBJECTIVE (id 104078) rendered above TITLE (id 129096) even
+        # though the file has TITLE first.
+        #
+        # A file export DOES preserve real file order, so this is filled
+        # in wherever an export is parsed. NULL for files never exported,
+        # which get_file_strings sorts last, falling back to today's
+        # id order for them.
+        ("position", "INTEGER"),
     ],
     "tm_matches": [
         ("updated_at", "TEXT"),
     ],
     "files": [
         ("search_synced_at", "TEXT"),
+    ],
+    # Raw counts behind the percentages. Both breakdowns already arrive
+    # in the same progress response we fetch anyway (confirmed live:
+    # phrases {total,translated,approved} AND words {...}), and used to
+    # be reduced to two rounded integers and thrown away — so "5/5
+    # strings, 135/135 words" cost nothing extra to keep.
+    "file_progress": [
+        ("phrases_total", "INTEGER"),
+        ("phrases_translated", "INTEGER"),
+        ("phrases_approved", "INTEGER"),
+        ("words_total", "INTEGER"),
+        ("words_translated", "INTEGER"),
+        ("words_approved", "INTEGER"),
+    ],
+    "directory_progress": [
+        ("phrases_total", "INTEGER"),
+        ("phrases_translated", "INTEGER"),
+        ("phrases_approved", "INTEGER"),
+        ("words_total", "INTEGER"),
+        ("words_translated", "INTEGER"),
+        ("words_approved", "INTEGER"),
     ],
     "projects": [
         # Crowdin's own project-level "last activity" timestamp — confirmed

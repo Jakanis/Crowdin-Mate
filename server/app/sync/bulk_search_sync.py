@@ -117,7 +117,14 @@ def sync_file_target_text_fast(project_id: int, file_id: int, language_id: str) 
         logger.info("fast target sync: falling back to per-string sync for file %s", file_id, exc_info=True)
         return False
 
-    target_by_identifier = {el.get("name"): (el.text or "") for el in root.findall("string") if el.get("name")}
+    elements = [el for el in root.findall("string") if el.get("name")]
+    target_by_identifier = {el.get("name"): (el.text or "") for el in elements}
+    # The export is the only place real file order is observable — the API
+    # sorts strings by a global id sequence and exposes no position field,
+    # so a string that outlived a re-upload sorts above its own file's
+    # title. Recording it here means every file this path touches renders
+    # in the order it actually has on Crowdin.
+    position_by_identifier = {el.get("name"): i for i, el in enumerate(elements)}
     if not target_by_identifier:
         return True
 
@@ -127,6 +134,11 @@ def sync_file_target_text_fast(project_id: int, file_id: int, language_id: str) 
             "SELECT id, identifier, text FROM source_strings WHERE file_id = ?", (file_id,)
         ).fetchall()
         for row in rows:
+            position = position_by_identifier.get(row["identifier"])
+            if position is not None:
+                conn.execute(
+                    "UPDATE source_strings SET position = ? WHERE id = ?", (position, row["id"])
+                )
             target_text = target_by_identifier.get(row["identifier"])
             if target_text is None:
                 continue

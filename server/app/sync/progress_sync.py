@@ -40,6 +40,25 @@ def _percent(count: int, total: int) -> int:
     return min(99, int(count / total * 100))
 
 
+def _counts(row: dict) -> dict:
+    """Raw phrase and word counts from the same response the percentages
+    come from. Kept because a percentage alone can't answer "how much is
+    left" — 99% of a 5-string file and 99% of a 900-string one are very
+    different amounts of work — and because words are the fairer measure
+    when file sizes vary this much. Costs no extra API call: both
+    breakdowns are already in the payload."""
+    phrases = row.get("phrases") or {}
+    words = row.get("words") or {}
+    return {
+        "phrases_total": phrases.get("total", 0),
+        "phrases_translated": phrases.get("translated", 0),
+        "phrases_approved": phrases.get("approved", 0),
+        "words_total": words.get("total", 0),
+        "words_translated": words.get("translated", 0),
+        "words_approved": words.get("approved", 0),
+    }
+
+
 def _find_language_row(rows: list[dict], language_id: str) -> dict | None:
     for item in rows:
         row = _unwrap(item)
@@ -68,18 +87,30 @@ def sync_directory_progress(project_id: int, directory_id: int, language_id: str
     progress = {
         "translation_progress": _percent(phrases.get("translated", 0), total),
         "approval_progress": _percent(phrases.get("approved", 0), total),
+        **_counts(row),
     }
     with get_conn() as conn:
         conn.execute(
             """
-            INSERT INTO directory_progress (directory_id, language_id, translation_progress, approval_progress, cached_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO directory_progress (directory_id, language_id, translation_progress, approval_progress, cached_at,
+                phrases_total, phrases_translated, phrases_approved,
+                words_total, words_translated, words_approved)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(directory_id, language_id) DO UPDATE SET
                 translation_progress=excluded.translation_progress,
                 approval_progress=excluded.approval_progress,
-                cached_at=excluded.cached_at
+                cached_at=excluded.cached_at,
+                phrases_total=excluded.phrases_total,
+                phrases_translated=excluded.phrases_translated,
+                phrases_approved=excluded.phrases_approved,
+                words_total=excluded.words_total,
+                words_translated=excluded.words_translated,
+                words_approved=excluded.words_approved
             """,
-            (directory_id, language_id, progress["translation_progress"], progress["approval_progress"], now),
+            (directory_id, language_id, progress["translation_progress"],
+             progress["approval_progress"], now,
+             *[progress[k] for k in ("phrases_total", "phrases_translated", "phrases_approved",
+                                     "words_total", "words_translated", "words_approved")]),
         )
     return progress
 
@@ -104,18 +135,30 @@ def sync_file_progress(project_id: int, file_id: int, language_id: str) -> dict 
     progress = {
         "translation_progress": _percent(phrases.get("translated", 0), total),
         "approval_progress": _percent(phrases.get("approved", 0), total),
+        **_counts(row),
     }
     with get_conn() as conn:
         conn.execute(
             """
-            INSERT INTO file_progress (file_id, language_id, translation_progress, approval_progress, cached_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO file_progress (file_id, language_id, translation_progress, approval_progress, cached_at,
+                phrases_total, phrases_translated, phrases_approved,
+                words_total, words_translated, words_approved)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(file_id, language_id) DO UPDATE SET
                 translation_progress=excluded.translation_progress,
                 approval_progress=excluded.approval_progress,
-                cached_at=excluded.cached_at
+                cached_at=excluded.cached_at,
+                phrases_total=excluded.phrases_total,
+                phrases_translated=excluded.phrases_translated,
+                phrases_approved=excluded.phrases_approved,
+                words_total=excluded.words_total,
+                words_translated=excluded.words_translated,
+                words_approved=excluded.words_approved
             """,
-            (file_id, language_id, progress["translation_progress"], progress["approval_progress"], now),
+            (file_id, language_id, progress["translation_progress"],
+             progress["approval_progress"], now,
+             *[progress[k] for k in ("phrases_total", "phrases_translated", "phrases_approved",
+                                     "words_total", "words_translated", "words_approved")]),
         )
     return progress
 
@@ -166,10 +209,10 @@ def get_children_progress(project_id: int, parent_directory_id: int | None, lang
         ]
 
         cached_dirs = {
-            row["directory_id"]: {"translation_progress": row["translation_progress"], "approval_progress": row["approval_progress"]}
+            row["directory_id"]: {k: row[k] for k in row.keys() if k != "directory_id"}
             for row in conn.execute(
                 f"""
-                SELECT directory_id, translation_progress, approval_progress FROM directory_progress
+                SELECT directory_id, translation_progress, approval_progress, phrases_total, phrases_translated, phrases_approved, words_total, words_translated, words_approved FROM directory_progress
                 WHERE language_id = ? AND directory_id IN ({",".join("?" * len(child_dirs))})
                 """,
                 (language_id, *child_dirs),
@@ -177,10 +220,10 @@ def get_children_progress(project_id: int, parent_directory_id: int | None, lang
         } if child_dirs else {}
 
         cached_files = {
-            row["file_id"]: {"translation_progress": row["translation_progress"], "approval_progress": row["approval_progress"]}
+            row["file_id"]: {k: row[k] for k in row.keys() if k != "file_id"}
             for row in conn.execute(
                 f"""
-                SELECT file_id, translation_progress, approval_progress FROM file_progress
+                SELECT file_id, translation_progress, approval_progress, phrases_total, phrases_translated, phrases_approved, words_total, words_translated, words_approved FROM file_progress
                 WHERE language_id = ? AND file_id IN ({",".join("?" * len(child_files))})
                 """,
                 (language_id, *child_files),

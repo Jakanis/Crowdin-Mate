@@ -20,8 +20,27 @@ const TRANSLATED_COLOR = "var(--progress-translated)";
 const APPROVED_COLOR = "var(--progress-approved)";
 const TRACK_COLOR = "rgba(128, 128, 128, 0.18)";
 
+/** Percentages alone can't answer "how much is left" — 99% of a 5-string
+ * file and 99% of a 900-string one are very different amounts of work — so
+ * the raw counts go in the tooltip behind them. Words as well as strings,
+ * since word count is the fairer measure when file sizes vary this much.
+ * Both breakdowns already arrive in the progress response (see _counts in
+ * progress_sync.py), so this costs no extra request.
+ *
+ * Counts are optional: rows cached before those columns existed have none,
+ * and fall back to the percentages-only form rather than rendering
+ * "undefined". */
 export function progressTitle(p: ProgressInfo): string {
-  return `${p.translation_progress}% translated, ${p.approval_progress}% approved`;
+  const head = `${p.translation_progress}% translated, ${p.approval_progress}% approved`;
+  if (p.phrases_total == null || p.words_total == null) return head;
+  const n = (v: number) => v.toLocaleString();
+  return (
+    `${head}\n` +
+    `Strings: ${n(p.phrases_translated ?? 0)} translated, ` +
+    `${n(p.phrases_approved ?? 0)} approved of ${n(p.phrases_total)}\n` +
+    `Words:   ${n(p.words_translated ?? 0)} translated, ` +
+    `${n(p.words_approved ?? 0)} approved of ${n(p.words_total)}`
+  );
 }
 
 // Built from stacked solid-stroke circles rather than a conic-gradient —

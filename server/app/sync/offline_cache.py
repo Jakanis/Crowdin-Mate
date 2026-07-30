@@ -29,6 +29,7 @@ import logging
 import threading
 
 from app.db import get_conn
+from app.sync.bulk_search_sync import bulk_sync_source_strings, sync_file_target_text_fast
 from app.sync.file_content_sync import sync_file_content
 
 logger = logging.getLogger(__name__)
@@ -120,6 +121,17 @@ def _run(project_id: int, language_id: str) -> None:
             len(pending), project_id, language_id,
         )
 
+        # Every source string project-wide in a handful of paginated calls,
+        # rather than waiting for the per-file loop to reach each file. Same
+        # call search_index.py already leads with; running it here means a
+        # freshly-cached file usually needs only its translations fetched.
+        with _lock:
+            _state_for(project_id, language_id)["current_file_path"] = "Fetching all source strings…"
+        try:
+            bulk_sync_source_strings(project_id)
+        except Exception:
+            logger.exception("offline cache build: bulk source sync failed for project %s", project_id)
+
         for f in pending:
             with _lock:
                 state = _state_for(project_id, language_id)
@@ -127,7 +139,18 @@ def _run(project_id: int, language_id: str) -> None:
                     break
                 state["current_file_path"] = f["path"]
             try:
-                sync_file_content(project_id, f["id"], language_id)
+                # Current translation per string, not the full candidate
+                # history — one request for the file instead of one per
+                # string. Opening a file still does the full sync, so the
+                # depth is there where you're actually working.
+                sync_file_content(project_id, f["id"], language_id, include_candidates=False)
+                # One more call, which buys two things the translation fetch
+                # can't: real file order (the API exposes no position field,
+                # so an export is the only place it's observable — see the
+                # position column note in db.py) and search coverage for
+                # this file. Failure is non-fatal; it just means this file
+                # keeps id ordering and stays out of the offline index.
+                sync_file_target_text_fast(project_id, f["id"], language_id)
             except Exception:
                 # One unreadable file must not abandon the other 19,000.
                 logger.exception(
