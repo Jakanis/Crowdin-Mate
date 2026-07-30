@@ -125,6 +125,8 @@ def apply_local_approval(conn, translation_id: int, approval_id: int | None) -> 
 
 
 def _do_add_translation(client, payload: dict) -> None:
+    from app.sync.suggestions_sync import invalidate_tm_lookups
+
     call_with_limits(
         client.string_translations.add_translation,
         projectId=payload["project_id"],
@@ -132,6 +134,9 @@ def _do_add_translation(client, payload: dict) -> None:
         languageId=payload["language_id"],
         text=payload["text"],
     )
+    # Same reasoning as the live submit path in main.py — a translation
+    # written offline is just as much a new TM entry once it lands.
+    invalidate_tm_lookups(payload["language_id"])
 
 
 def _do_approve(client, payload: dict) -> None:

@@ -35,17 +35,57 @@ def _mark_looked_up(conn, string_id: int, language_id: str, kind: str, now: str)
     )
 
 
-def has_looked_up(string_id: int, language_id: str, kind: str) -> bool:
+def invalidate_tm_lookups(language_id: str) -> int:
+    """Forget which strings have had their TM looked up, for one language.
+
+    Called after a translation is submitted. It has to clear EVERY string,
+    not just the one submitted: what changed is the translation memory
+    itself, and the whole point is that the phrase you just wrote turns up
+    as a suggestion on the NEXT similar string. Its own string is the one
+    place it can't help — get_tm_matches filters out a string's own current
+    translation as noise.
+
+    Deletes the markers but deliberately leaves tm_matches rows in place.
+    They're a superset of what the next lookup will write, so keeping them
+    means an offline string still shows its last known suggestions instead
+    of nothing, while online it re-queries and replaces them.
+    """
+    with get_conn() as conn:
+        cur = conn.execute(
+            "DELETE FROM suggestion_lookups WHERE kind = 'tm' AND language_id = ?", (language_id,)
+        )
+        return cur.rowcount
+
+
+def has_looked_up(string_id: int, language_id: str, kind: str, max_age_seconds: int | None = None) -> bool:
     """Row count in tm_matches/glossary_matches alone can't tell "never
     looked up" apart from "looked up, found nothing" — and a clean
     zero-match result is the common case for unique prose in this
-    project. This checks the separate marker table instead."""
+    project. This checks the separate marker table instead.
+
+    max_age_seconds treats a marker older than that as absent. synced_at was
+    always recorded and never read, so a lookup was permanent: a string
+    whose TM was checked once kept that answer for the life of the install,
+    even as the project's translation memory grew around it. Callers that
+    care about freshness now pass a ceiling; glossary, which only changes
+    when someone edits the glossary itself, still doesn't."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT 1 FROM suggestion_lookups WHERE string_id = ? AND language_id = ? AND kind = ?",
+            "SELECT synced_at FROM suggestion_lookups "
+            "WHERE string_id = ? AND language_id = ? AND kind = ?",
             (string_id, language_id, kind),
         ).fetchone()
-    return row is not None
+    if row is None:
+        return False
+    if max_age_seconds is None:
+        return True
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(row["synced_at"])).total_seconds()
+    except (ValueError, TypeError):
+        # Unparseable timestamp — treat as stale rather than trusting it
+        # forever, which is the failure mode this whole change exists for.
+        return False
+    return age < max_age_seconds
 
 
 def sync_tm_matches(project_id: int, string_id: int, source_text: str, source_lang: str, target_lang: str) -> int:

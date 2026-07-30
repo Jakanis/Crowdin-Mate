@@ -28,7 +28,13 @@ from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_pr
 from app.sync.live_search import search_project_live
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
 from app.sync import offline_cache, search_index
-from app.sync.suggestions_sync import has_looked_up, search_tm_live, sync_glossary_matches, sync_tm_matches
+from app.sync.suggestions_sync import (
+    has_looked_up,
+    invalidate_tm_lookups,
+    search_tm_live,
+    sync_glossary_matches,
+    sync_tm_matches,
+)
 from app.sync.tree_sync import has_project_changed, sync_project_tree
 
 logging.basicConfig(level=logging.INFO)
@@ -61,6 +67,15 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
     return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
 
 _QUEUE_DRAIN_INTERVAL_SECONDS = 15
+
+# How long a TM lookup stays trusted without re-asking Crowdin.
+#
+# Only covers translations by OTHER people, since your own already clear the
+# markers on submit. Ten minutes because the cost is one ~1s request per
+# string you actually open, and the failure mode it replaces was a cache
+# that never expired at all. Raise it if you're usually the only person
+# working in a project; there's nothing else to weigh.
+TM_MAX_AGE_SECONDS = 600
 _drain_task: asyncio.Task | None = None
 
 
@@ -1032,6 +1047,12 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
     if file_id is not None:
         invalidate_progress_for_file(file_id, body.language_id)
 
+    # The phrase just submitted is now in the project's translation memory,
+    # so every other string's cached TM answer predates it. Clearing the
+    # markers is what makes it turn up on the next similar string — the
+    # thing a TM is mostly for.
+    invalidate_tm_lookups(body.language_id)
+
     return {
         "status": "synced",
         "translation": {
@@ -1722,12 +1743,21 @@ def _augment_tm_matches_with_source(conn, matches: list[dict], language_id: str,
 
 @app.get("/projects/{project_id}/strings/{string_id}/tm-matches")
 async def get_tm_matches(project_id: int, string_id: int, language_id: str):
-    """Cached indefinitely once fetched — a TM match for a given source
-    text doesn't change on its own the way comments or translations do,
-    so there's no background revalidation here, only an explicit re-fetch
-    if it's never been looked up before."""
+    """Re-checked when the translation memory may have moved on.
+
+    This used to cache indefinitely, on the reasoning that a TM match for a
+    given source text doesn't change on its own. The source text doesn't —
+    but the memory being searched does, every time anyone translates
+    anything. So a string checked once kept that answer forever, and the
+    phrase you just wrote never showed up on the next similar string, which
+    is most of what a TM is for.
+
+    Two triggers now. Submitting a translation clears the markers outright
+    (see invalidate_tm_lookups), so your own work is available immediately.
+    The TTL below is for everyone else's, which nothing local can observe.
+    """
     offline = False
-    if not has_looked_up(string_id, language_id, "tm"):
+    if not has_looked_up(string_id, language_id, "tm", max_age_seconds=TM_MAX_AGE_SECONDS):
         source_text, source_lang = _get_source_text_and_language(project_id, string_id)
         try:
             await run_in_threadpool(sync_tm_matches, project_id, string_id, source_text, source_lang, language_id)
