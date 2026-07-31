@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 from crowdin_api.exceptions import APIException
 
-from app.crowdin_client import call_with_limits, get_client
+from app.crowdin_client import add_translation, call_with_limits, get_client
 from app.db import get_conn
 from app.sync.progress_sync import invalidate_progress_for_file
 from app.sync.suggestions_sync import invalidate_tm_lookups
@@ -56,10 +56,13 @@ def enqueue(
         return cur.lastrowid
 
 
-def enqueue_add_translation(project_id: int, string_id: int, language_id: str, text: str) -> int:
+def enqueue_add_translation(
+    project_id: int, string_id: int, language_id: str, text: str, provider: str | None = None
+) -> int:
     return enqueue(
         "add_translation",
-        {"project_id": project_id, "string_id": string_id, "language_id": language_id, "text": text},
+        {"project_id": project_id, "string_id": string_id, "language_id": language_id,
+         "text": text, "provider": provider},
         string_id,
         language_id,
     )
@@ -126,12 +129,16 @@ def apply_local_approval(conn, translation_id: int, approval_id: int | None) -> 
 
 
 def _do_add_translation(client, payload: dict) -> None:
+    # Carries provider through, so a translation taken from a TM suggestion
+    # while offline is still recorded as such once it reaches Crowdin.
     call_with_limits(
-        client.string_translations.add_translation,
-        projectId=payload["project_id"],
-        stringId=payload["string_id"],
-        languageId=payload["language_id"],
-        text=payload["text"],
+        add_translation,
+        client,
+        payload["project_id"],
+        payload["string_id"],
+        payload["language_id"],
+        payload["text"],
+        payload.get("provider"),
     )
 
 

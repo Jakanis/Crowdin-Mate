@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import config, debug_mode, oauth, offline_queue
-from app.crowdin_client import OFFLINE_ERRORS, call_with_limits, get_client
+from app.crowdin_client import OFFLINE_ERRORS, add_translation, call_with_limits, get_client
 from app.db import get_conn, init_db
 from app.sync.file_content_sync import sync_file_content, sync_string_comments
 from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_project_glossary
@@ -922,6 +922,10 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
 class TranslationIn(BaseModel):
     language_id: str
     text: str
+    # "tm" when the text was taken from a translation-memory suggestion and
+    # submitted unchanged. Crowdin stores this and shows it in its editor;
+    # see add_translation in crowdin_client.py. None for typed-from-scratch.
+    provider: str | None = None
 
 
 def _save_draft(string_id: int, language_id: str, text: str) -> None:
@@ -965,11 +969,13 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
     try:
         resp = await run_in_threadpool(
             call_with_limits,
-            client.string_translations.add_translation,
-            projectId=project_id,
-            stringId=string_id,
-            languageId=body.language_id,
-            text=body.text,
+            add_translation,
+            client,
+            project_id,
+            string_id,
+            body.language_id,
+            body.text,
+            body.provider,
         )
     except Exception as exc:  # noqa: BLE001 - see the terminal-vs-queue split below
         # Genuine offline (no network at all) raises requests.ConnectionError/
@@ -987,7 +993,8 @@ async def submit_translation(project_id: int, string_id: int, body: TranslationI
             # will be drained automatically once conditions recover.
             logger.warning("Live translation submit failed for string %s, queuing: %s", string_id, exc)
             await run_in_threadpool(
-                offline_queue.enqueue_add_translation, project_id, string_id, body.language_id, body.text
+                offline_queue.enqueue_add_translation,
+                project_id, string_id, body.language_id, body.text, body.provider
             )
             return {"status": "queued", "reason": str(exc)}
 

@@ -352,10 +352,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ enabled }),
     }),
-  submitTranslation: (projectId: number, stringId: number, languageId: string, text: string) =>
+  submitTranslation: (
+    projectId: number, stringId: number, languageId: string, text: string, provider?: string,
+  ) =>
     request<SubmitTranslationResult>(`/projects/${projectId}/strings/${stringId}/translations`, {
       method: "POST",
-      body: JSON.stringify({ language_id: languageId, text }),
+      body: JSON.stringify({ language_id: languageId, text, provider }),
     }),
   saveDraft: (projectId: number, stringId: number, languageId: string, text: string) =>
     request<{ status: string }>(`/projects/${projectId}/strings/${stringId}/draft`, {

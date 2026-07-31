@@ -66,9 +66,21 @@ export interface TranslationEditorHandle {
  * Absent for translations typed from scratch — the common case, which
  * deserves no badge at all. */
 function ProvenanceBadge({ translation: t }: { translation: TranslationInfo }) {
-  if (t.provider === "tm") {
+  // Crowdin distinguishes the project's own memory from the shared one
+  // across your account — both are "from TM" to a translator, so they get
+  // the same badge and differ only in the tooltip. Found on TestProjectYK,
+  // which had a global_tm translation; assuming a single "tm" value would
+  // have mislabelled it as a machine-translation engine.
+  if (t.provider === "tm" || t.provider === "global_tm") {
     return (
-      <span className="provenance-badge" title="Submitted from a translation-memory suggestion">
+      <span
+        className="provenance-badge"
+        title={
+          t.provider === "global_tm"
+            ? "Submitted from a global translation-memory suggestion"
+            : "Submitted from a translation-memory suggestion"
+        }
+      >
         TM
       </span>
     );
@@ -311,7 +323,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   };
 
   const submit = useMutation({
-    mutationFn: () => api.submitTranslation(projectId, s.id, languageId, text),
+    mutationFn: () => api.submitTranslation(projectId, s.id, languageId, text, submittedProvider),
     onMutate: () => {
       setStatus("saving");
       setErrorMessage(null);
@@ -560,7 +572,20 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   // over from scratch. Reading el.value.length after the state commits
   // (rather than computing the new length ourselves) keeps the cursor
   // placement correct for both modes without duplicating that math.
-  const selectCandidate = (candidateText: string, append = false) => {
+  // The exact text of a TM suggestion that was dropped into the box, so a
+  // submit can be reported to Crowdin as coming from the memory.
+  //
+  // Deliberately compared by value at submit time rather than tracked as a
+  // sticky "came from TM" flag: edit the suggestion and it's your own
+  // wording, not the memory's, so it shouldn't be credited as such. Editing
+  // and then changing it back to exactly the suggestion counts again, which
+  // is also right. Only set on replace, never on shift-click append, since
+  // an appended mixture isn't one suggestion.
+  const [tmSourceText, setTmSourceText] = useState<string | null>(null);
+  const submittedProvider = tmSourceText !== null && text === tmSourceText ? "tm" : undefined;
+
+  const selectCandidate = (candidateText: string, append = false, fromTm = false) => {
+    if (fromTm && !append) setTmSourceText(candidateText);
     setText((prev) => (append && prev.trim() !== "" ? `${prev}\n\n\n${candidateText}` : candidateText));
     requestAnimationFrame(() => {
       const el = textareaRef.current;
@@ -690,7 +715,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
                 <li
                   key={i}
                   className="suggestion-item suggestion-item--clickable"
-                  onClick={(e) => selectCandidate(m.target_text, e.shiftKey)}
+                  onClick={(e) => selectCandidate(m.target_text, e.shiftKey, true)}
                 >
                   <div className="suggestion-header">
                     <span className={`suggestion-relevance${isPerfect ? " suggestion-relevance--perfect" : ""}`}>

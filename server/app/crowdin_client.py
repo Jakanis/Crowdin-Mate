@@ -123,6 +123,33 @@ def get_client() -> CrowdinClient:
     return _client
 
 
+def add_translation(client, project_id: int, string_id: int, language_id: str, text: str,
+                    provider: str | None = None):
+    """add_translation, plus the `provider` field the SDK doesn't expose.
+
+    Crowdin records where a translation came from — "tm" for one taken from
+    a translation-memory suggestion — and shows it in its own editor. Its
+    add_translation() builds a fixed request_data dict with no room for it,
+    so this mirrors that method and adds the field, going through the same
+    requester (same session, auth and base URL, so simulated offline still
+    applies) rather than a bare requests call.
+
+    Confirmed live against TestProjectYK: posting provider="tm" returns 201
+    with provider='tm', a control post without it returns provider=None, and
+    re-reading both from the API shows the value persisted server-side — so
+    it's accepted and stored, merely undocumented in the SDK.
+    """
+    resource = client.string_translations
+    data = {"stringId": string_id, "languageId": language_id, "text": text}
+    if provider:
+        data["provider"] = provider
+    return resource.requester.request(
+        method="post",
+        path=resource.get_translations_path(projectId=project_id),
+        request_data=data,
+    )
+
+
 def call_with_limits(fn, *args, **kwargs):
     """Run one Crowdin SDK call under the concurrency + rate + 429 guards.
 
