@@ -85,6 +85,12 @@ function ProvenanceBadge({ translation: t }: { translation: TranslationInfo }) {
       </span>
     );
   }
+  // Any other provider is an engine name — machine translation or AI.
+  // Rendered as-is rather than mapped, since the set is per-project and
+  // unknown values are better shown than swallowed. Worth a friendlier
+  // label once AI/MT suggestions are actually offered here (see BACKLOG),
+  // at which point selectCandidate should pass the engine's provider
+  // instead of the hardcoded "tm".
   if (t.provider) {
     return (
       <span className="provenance-badge" title={`Machine translation via ${t.provider}`}>
