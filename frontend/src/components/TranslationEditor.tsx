@@ -253,6 +253,8 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
     lastServerTextRef.current = serverText;
     if (!wasClean) return;
     setText(serverText);
+    // Whatever is in the box now came from Crowdin, not from a suggestion.
+    setAppliedProvider(null);
     // Keep the draft bookkeeping in step, or the debounced save would fire
     // and persist a dirty draft that merely echoes what Crowdin already has.
     lastSavedDraftRef.current = serverText;
@@ -572,20 +574,24 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
   // over from scratch. Reading el.value.length after the state commits
   // (rather than computing the new length ourselves) keeps the cursor
   // placement correct for both modes without duplicating that math.
-  // The exact text of a TM suggestion that was dropped into the box, so a
-  // submit can be reported to Crowdin as coming from the memory.
+  // Set when a TM suggestion is applied, and cleared by ANY subsequent
+  // change to the box — typing, inserting a glossary term, picking another
+  // candidate, or the editor adopting newer server text.
   //
-  // Deliberately compared by value at submit time rather than tracked as a
-  // sticky "came from TM" flag: edit the suggestion and it's your own
-  // wording, not the memory's, so it shouldn't be credited as such. Editing
-  // and then changing it back to exactly the suggestion counts again, which
-  // is also right. Only set on replace, never on shift-click append, since
-  // an appended mixture isn't one suggestion.
-  const [tmSourceText, setTmSourceText] = useState<string | null>(null);
-  const submittedProvider = tmSourceText !== null && text === tmSourceText ? "tm" : undefined;
+  // Deliberately not a value comparison against the suggestion. Reverting an
+  // edit back to the identical text does NOT restore the flag: the claim
+  // being made to Crowdin is "this came straight from the memory", and once
+  // you've been through it by hand that's no longer what happened, however
+  // the characters ended up. Only set on replace, never on shift-click
+  // append, since a mixture of two sources isn't one suggestion.
+  //
+  // Resets on remount (switching string or tab), which is correct — the
+  // provenance of a restored draft isn't knowable.
+  const [appliedProvider, setAppliedProvider] = useState<string | null>(null);
+  const submittedProvider = appliedProvider ?? undefined;
 
   const selectCandidate = (candidateText: string, append = false, fromTm = false) => {
-    if (fromTm && !append) setTmSourceText(candidateText);
+    setAppliedProvider(fromTm && !append ? "tm" : null);
     setText((prev) => (append && prev.trim() !== "" ? `${prev}\n\n\n${candidateText}` : candidateText));
     requestAnimationFrame(() => {
       const el = textareaRef.current;
@@ -610,6 +616,7 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         const end = el?.selectionEnd ?? text.length;
         const next = text.slice(0, start) + insertText + text.slice(end);
         setText(next);
+        setAppliedProvider(null);
         const cursorPos = start + insertText.length;
         requestAnimationFrame(() => {
           if (!el) return;
@@ -635,7 +642,10 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         ref={textareaRef}
         className="string-target"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setAppliedProvider(null);
+        }}
         onKeyDown={(e) => {
           if (!(e.ctrlKey || e.metaKey) || e.key !== "Enter") return;
           e.preventDefault();
