@@ -39,6 +39,16 @@ _COLUMN_MIGRATIONS = {
         ("rating", "INTEGER NOT NULL DEFAULT 0"),
         ("is_approved", "INTEGER NOT NULL DEFAULT 0"),
         ("approval_id", "INTEGER"),
+        # Where the translation came from, as Crowdin records it:
+        # provider is null for typed-from-scratch and 'tm' for one accepted
+        # from a TM suggestion (confirmed live — 2 of 55 sampled
+        # translations in this project carry 'tm', authored by real users),
+        # and is_pre_translated marks the ones Crowdin's own pre-translate
+        # produced. Only list_string_translations returns these; the bulk
+        # per-file endpoint the offline pre-cache uses does not, so
+        # fast-cached rows have provider NULL until a full sync of that file.
+        ("provider", "TEXT"),
+        ("is_pre_translated", "INTEGER NOT NULL DEFAULT 0"),
     ],
     "source_strings": [
         ("label_ids_json", "TEXT NOT NULL DEFAULT '[]'"),

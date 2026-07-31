@@ -217,8 +217,9 @@ def sync_file_content(
                 """
                 INSERT INTO translations
                     (id, string_id, language_id, text, user_id, user_name,
-                     rating, is_approved, approval_id, created_at, synced_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     rating, is_approved, approval_id, created_at, synced_at,
+                     provider, is_pre_translated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     text=excluded.text,
                     user_id=excluded.user_id,
@@ -227,7 +228,13 @@ def sync_file_content(
                     is_approved=excluded.is_approved,
                     approval_id=excluded.approval_id,
                     created_at=excluded.created_at,
-                    synced_at=excluded.synced_at
+                    synced_at=excluded.synced_at,
+                    -- Only the per-string endpoint reports these. The bulk
+                    -- one used by the offline pre-cache doesn't, so COALESCE
+                    -- keeps a known provider rather than letting a later
+                    -- fast sync blank it back out.
+                    provider=COALESCE(excluded.provider, translations.provider),
+                    is_pre_translated=MAX(excluded.is_pre_translated, translations.is_pre_translated)
                 """,
                 (
                     translation_id,
@@ -241,6 +248,8 @@ def sync_file_content(
                     approval_id,
                     _iso(t.get("createdAt")),
                     now,
+                    t.get("provider"),
+                    1 if t.get("isPreTranslated") else 0,
                 ),
             )
 

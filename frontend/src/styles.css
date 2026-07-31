@@ -1692,6 +1692,20 @@ body {
   font-weight: 600;
 }
 
+/* Neutral rather than accent-coloured: provenance is a fact about the
+   translation, not a status like approved, and colouring it would compete
+   with the approved badge sitting next to it. */
+.provenance-badge {
+  padding: 1px 5px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 3px;
+  font-size: calc(10px * var(--ui-scale));
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
 .translation-author {
   color: var(--fg-muted);
 }

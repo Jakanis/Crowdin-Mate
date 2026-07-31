@@ -88,6 +88,12 @@ export interface TranslationInfo {
   is_approved: number;
   approval_id: number | null;
   created_at: string | null;
+  /** How the translation was produced, as Crowdin records it: null when
+   * typed from scratch, "tm" when accepted from a TM suggestion, an engine
+   * name for machine translation. Only the per-string sync reports it, so
+   * a file cached by the fast offline pass has null until fully synced. */
+  provider?: string | null;
+  is_pre_translated?: number | null;
 }
 
 export interface DeletedTranslationInfo {

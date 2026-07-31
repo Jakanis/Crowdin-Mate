@@ -849,7 +849,8 @@ async def get_file_strings(project_id: int, file_id: int, language_id: str, back
         for row in conn.execute(
             """
             SELECT t.string_id, t.id, t.text, t.user_id, t.user_name, t.rating,
-                   t.is_approved, t.approval_id, t.created_at
+                   t.is_approved, t.approval_id, t.created_at,
+                   t.provider, t.is_pre_translated
             FROM translations t
             JOIN source_strings s ON s.id = t.string_id
             WHERE s.file_id = ? AND t.language_id = ?

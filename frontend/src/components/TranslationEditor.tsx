@@ -55,6 +55,41 @@ export interface TranslationEditorHandle {
   insertAtCursor: (text: string) => void;
 }
 
+/** Where a translation came from, when it wasn't simply typed.
+ *
+ * Crowdin records this and shows it in its own editor; the two values seen
+ * live in this project are provider "tm" (accepted from a TM suggestion)
+ * and isPreTranslated (produced by Crowdin's pre-translate). Anything else
+ * in provider is a machine-translation engine name, shown as-is rather than
+ * guessed at, since the set of engines is per-project.
+ *
+ * Absent for translations typed from scratch — the common case, which
+ * deserves no badge at all. */
+function ProvenanceBadge({ translation: t }: { translation: TranslationInfo }) {
+  if (t.provider === "tm") {
+    return (
+      <span className="provenance-badge" title="Submitted from a translation-memory suggestion">
+        TM
+      </span>
+    );
+  }
+  if (t.provider) {
+    return (
+      <span className="provenance-badge" title={`Machine translation via ${t.provider}`}>
+        {t.provider}
+      </span>
+    );
+  }
+  if (t.is_pre_translated) {
+    return (
+      <span className="provenance-badge" title="Added by Crowdin's pre-translate">
+        Pre-translated
+      </span>
+    );
+  }
+  return null;
+}
+
 function bestTranslationText(s: SourceString): string {
   const approved = s.translations.find((t) => t.is_approved);
   return approved?.text ?? s.translations[0]?.text ?? "";
@@ -846,6 +881,7 @@ function TranslationItem({
       <div className="translation-text">{t.text}</div>
       <div className="translation-meta">
         {!!t.is_approved && <span className="approved-badge">✓ Approved</span>}
+        <ProvenanceBadge translation={t} />
         {t.user_name && <span className="translation-author">{t.user_name}</span>}
         {t.created_at && (
           <span className="translation-date" title={fullDateTime(t.created_at)}>
