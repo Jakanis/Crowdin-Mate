@@ -2093,27 +2093,39 @@ body {
 /* Tilted when unpinned (the "not stuck in place" reading) vs. upright
    and highlighted when pinned — same idea as a browser's pinned-tab
    icon, just for whether this panel survives moving to another string. */
+/* Monochrome, taking the panel's own muted text colour. It used to be the
+   📌 emoji, whose fixed red can't be restyled and read as a warning next to
+   otherwise-grey chrome — for a control whose whole job is to sit quietly
+   in a header. State is carried by tilt and weight instead of colour:
+   tilted and faint when unpinned, upright and full-strength when pinned. */
 .right-sidebar-pin {
+  display: inline-flex;
+  align-items: center;
   border: none;
   background: none;
   cursor: pointer;
-  font-size: calc(13px * var(--ui-scale));
   line-height: 1;
   padding: 2px 4px;
   border-radius: 4px;
-  opacity: 0.35;
+  color: var(--fg-muted);
+  opacity: 0.72;
   transform: rotate(40deg);
-  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease, color 0.15s ease;
 }
 
+/* 0.72, not lower: at 0.55 the unpinned pin measured 2.27:1 on the light
+   panel, which is below the 3:1 usually wanted for a meaningful control and
+   made it genuinely hard to spot. Quiet is the goal, invisible isn't. */
+
 .right-sidebar-pin:hover {
-  opacity: 0.75;
+  opacity: 1;
+  color: var(--fg);
 }
 
 .right-sidebar-pin--active {
   opacity: 1;
   transform: rotate(0deg);
-  background: var(--accent-bg);
+  color: var(--fg);
 }
 
 .comments-sidebar-list {

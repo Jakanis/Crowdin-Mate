@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { SourceString, TreeDirectory, TreeFile } from "../api/client";
 import { FileStringsList } from "./FileStringsList";
+import { PinIcon } from "./PinIcon";
 import { FileTree } from "./FileTree";
 import { SearchPanel } from "./SearchPanel";
 
@@ -143,7 +144,7 @@ export function Sidebar({
           onClick={() => setPinned(!pinned)}
           title={pinned ? "Unpin — hides when you click away" : "Pin — keeps this panel open"}
         >
-          📌
+          <PinIcon />
         </button>
       </div>
 

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api } from "../api/client";
+import { PinIcon } from "./PinIcon";
 import { CommentsPanel } from "./CommentsPanel";
 import { GlossaryPanel } from "./GlossaryPanel";
 import { TmPanel } from "./TmPanel";
@@ -140,7 +141,7 @@ export function RightSidebar({
               onClick={() => onPinnedChange(!pinned)}
               title={pinned ? "Unpin — hides when you click away" : "Pin — keeps this panel open"}
             >
-              📌
+              <PinIcon />
             </button>
           </div>
           {activeTab === "comments" && (
