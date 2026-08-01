@@ -11,16 +11,41 @@ how the UI itself only reveals those rows at that moment.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.crowdin_client import OFFLINE_ERRORS, call_with_limits, get_client
 from app.db import get_conn
 
 logger = logging.getLogger(__name__)
 
+# How long a cached DIRECTORY aggregate is trusted before it's fetched
+# again. Without this, `cached_at` was written on both progress tables and
+# never read by anything: a row cached the moment a folder was first
+# expanded stayed authoritative forever, and only a change YOU made (which
+# invalidates that file's own ancestry) ever moved it. Measured on a real
+# install: 940 of 987 directory rows and 19,775 of 19,899 file rows were a
+# week old, so every folder outside the handful the user had personally
+# edited was reporting numbers from the day it was first opened.
+#
+# Directories only. A folder here holds a median of 6 files but up to 391,
+# and get_children_progress costs one API call per uncached child, so
+# expiring file rows would turn each expansion of a big folder into
+# hundreds of calls every time the window lapsed. Directory fan-out is
+# bounded and small by comparison — 32 children at the root, 60 under the
+# widest parent — so refreshing those is a handful of calls. Files instead
+# stay cached until something is known to have changed them: your own edit,
+# or a translation-change scan (see translation_changes.mark_files_for_recache).
+DIRECTORY_PROGRESS_MAX_AGE_SECONDS = 900
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _directory_progress_cutoff() -> str:
+    return (
+        datetime.now(timezone.utc) - timedelta(seconds=DIRECTORY_PROGRESS_MAX_AGE_SECONDS)
+    ).isoformat()
 
 
 def _unwrap(item: dict) -> dict:
@@ -248,16 +273,27 @@ def get_children_progress(project_id: int, parent_directory_id: int | None, lang
             )
         ]
 
-        cached_dirs = {
-            row["directory_id"]: {k: row[k] for k in row.keys() if k != "directory_id"}
+        # cached_at comes back alongside the numbers so a row past
+        # DIRECTORY_PROGRESS_MAX_AGE_SECONDS can be re-fetched below. The
+        # stale row is still kept and still returned — it's only replaced
+        # once a fresh fetch actually succeeds, so an expired aggregate with
+        # no connection shows its last known value instead of no bar at all.
+        cutoff = _directory_progress_cutoff()
+        cached_dirs: dict[int, dict] = {}
+        stale_dirs: set[int] = set()
+        if child_dirs:
             for row in conn.execute(
                 f"""
-                SELECT directory_id, translation_progress, approval_progress, phrases_total, phrases_translated, phrases_approved, words_total, words_translated, words_approved FROM directory_progress
+                SELECT directory_id, cached_at, translation_progress, approval_progress, phrases_total, phrases_translated, phrases_approved, words_total, words_translated, words_approved FROM directory_progress
                 WHERE language_id = ? AND directory_id IN ({",".join("?" * len(child_dirs))})
                 """,
                 (language_id, *child_dirs),
-            )
-        } if child_dirs else {}
+            ):
+                cached_dirs[row["directory_id"]] = {
+                    k: row[k] for k in row.keys() if k not in ("directory_id", "cached_at")
+                }
+                if not row["cached_at"] or row["cached_at"] < cutoff:
+                    stale_dirs.add(row["directory_id"])
 
         cached_files = {
             row["file_id"]: {k: row[k] for k in row.keys() if k != "file_id"}
@@ -280,11 +316,13 @@ def get_children_progress(project_id: int, parent_directory_id: int | None, lang
     # this same endpoint, theirs too.
     directories: dict[int, dict] = dict(cached_dirs)
     for did in child_dirs:
-        if did in directories:
+        if did in directories and did not in stale_dirs:
             continue
         try:
             progress = sync_directory_progress(project_id, did, language_id)
         except OFFLINE_ERRORS:
+            # Leaves whatever cached_dirs already put there — a stale
+            # aggregate beats a missing one.
             continue
         if progress is not None:
             directories[did] = progress

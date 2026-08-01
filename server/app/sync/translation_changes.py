@@ -47,6 +47,7 @@ from crowdin_api.sorting import Sorting, SortingOrder, SortingRule
 
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn
+from app.sync.progress_sync import invalidate_progress_for_file
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +265,19 @@ def find_changed_files(project_id: int, language_id: str) -> dict:
 
 def mark_files_for_recache(file_ids: list[int], language_id: str) -> int:
     """Drop the per-language sync marker so the pre-cache treats these as
-    pending again. Deliberately only the marker — the cached strings and
-    translations stay readable offline until fresh ones replace them."""
+    pending again, and expire the progress these files feed.
+
+    Deliberately only the marker for the content itself — the cached strings
+    and translations stay readable offline until fresh ones replace them.
+
+    Progress is different: a percentage nobody can correct is just wrong.
+    These are exactly the files somebody ELSE translated or approved, and
+    a file's cached progress otherwise only ever expires when YOU change
+    something in it, so without this their numbers — and every folder
+    aggregate above them — would keep whatever they were the day they were
+    first fetched. Costs no API calls here; it only marks them to be
+    fetched again the next time those rows are actually displayed.
+    """
     if not file_ids:
         return 0
     placeholders = ",".join("?" * len(file_ids))
@@ -274,4 +286,7 @@ def mark_files_for_recache(file_ids: list[int], language_id: str) -> int:
             f"DELETE FROM file_language_sync WHERE language_id = ? AND file_id IN ({placeholders})",
             (language_id, *file_ids),
         )
-        return cur.rowcount
+        marked = cur.rowcount
+    for file_id in file_ids:
+        invalidate_progress_for_file(file_id, language_id)
+    return marked

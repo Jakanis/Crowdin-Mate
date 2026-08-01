@@ -59,6 +59,11 @@ type Row =
 
 const ROW_HEIGHT = 28;
 
+// Mirrors DIRECTORY_PROGRESS_MAX_AGE_SECONDS in progress_sync.py — the
+// server won't return anything newer inside this window, so re-asking
+// sooner just spends a round trip to be told the same numbers.
+const PROGRESS_REFETCH_MS = 15 * 60 * 1000;
+
 /**
  * Renders the whole project tree without ever mounting more than a
  * viewport's worth of DOM rows — this is the direct fix for the bug we
@@ -78,7 +83,21 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   // so this map only ever grows to cover what's actually been revealed.
   const [dirProgress, setDirProgress] = useState<Map<number, ProgressInfo>>(new Map());
   const [fileProgress, setFileProgress] = useState<Map<number, ProgressInfo>>(new Map());
-  const fetchedParents = useRef<Set<number | "root">>(new Set());
+  // When each parent's children were last asked for, not merely whether
+  // they ever were. The old "fetched once, never again" guard outlived its
+  // purpose: the server caches these itself now and expires a directory
+  // aggregate on its own schedule, so re-asking is a local database read
+  // unless something is genuinely due a refresh. Holding the guard for the
+  // whole session meant a folder expanded at 9am kept showing 9am's
+  // numbers until the app restarted, no matter what anyone translated
+  // in it since. Matches the server's own window (see
+  // DIRECTORY_PROGRESS_MAX_AGE_SECONDS) so a re-ask that would be answered
+  // from cache anyway is skipped before it costs a request.
+  const fetchedParents = useRef<Map<number | "root", number>>(new Map());
+  // Separate from the timestamps above so a slow request can't be issued
+  // twice by a quick collapse/expand — this clears when it settles, the
+  // timestamp only records a success.
+  const inFlightParents = useRef<Set<number | "root">>(new Set());
 
   const mergeProgress = (result: { directories: Record<number, ProgressInfo>; files: Record<number, ProgressInfo> }) => {
     setDirProgress((prev) => {
@@ -94,14 +113,21 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
   };
 
   const fetchProgressFor = (parentId: number | "root") => {
-    if (fetchedParents.current.has(parentId)) return;
-    fetchedParents.current.add(parentId);
+    if (inFlightParents.current.has(parentId)) return;
+    const lastFetched = fetchedParents.current.get(parentId);
+    if (lastFetched != null && Date.now() - lastFetched < PROGRESS_REFETCH_MS) return;
+    inFlightParents.current.add(parentId);
     api
       .getTreeProgress(projectId, languageId, parentId === "root" ? undefined : parentId)
-      .then(mergeProgress)
-      .catch(() => {
-        fetchedParents.current.delete(parentId); // allow retry on next expand
-      });
+      .then((result) => {
+        // Only a success starts the clock — a failed fetch leaves no
+        // timestamp, so the next expand retries immediately rather than
+        // waiting out a window it never actually filled.
+        fetchedParents.current.set(parentId, Date.now());
+        mergeProgress(result);
+      })
+      .catch(() => {})
+      .finally(() => inFlightParents.current.delete(parentId));
   };
 
   useEffect(() => {
@@ -114,7 +140,7 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
     // (or, switching language only, stale percentages from the old
     // language mislabeled as the new one). Clear all three before
     // fetching fresh.
-    fetchedParents.current = new Set();
+    fetchedParents.current = new Map();
     setDirProgress(new Map());
     setFileProgress(new Map());
     fetchProgressFor("root");
