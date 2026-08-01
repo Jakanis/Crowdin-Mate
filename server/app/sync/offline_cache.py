@@ -34,6 +34,14 @@ from app.sync.file_content_sync import sync_file_content
 
 logger = logging.getLogger(__name__)
 
+# Stop a run that clearly can't get anywhere. Without this, starting a build
+# with no connection (or losing one mid-run) marches through every remaining
+# file failing on each — 19,000 pointless attempts, an errors counter racing
+# upward, and no signal that the cause is the network rather than the data.
+# Consecutive rather than total, so a handful of individually broken files
+# scattered through a long run doesn't abort an otherwise fine build.
+MAX_CONSECUTIVE_ERRORS = 15
+
 _lock = threading.Lock()
 _states: dict[tuple[int, str], dict] = {}
 
@@ -132,6 +140,7 @@ def _run(project_id: int, language_id: str) -> None:
         except Exception:
             logger.exception("offline cache build: bulk source sync failed for project %s", project_id)
 
+        consecutive_errors = 0
         for f in pending:
             with _lock:
                 state = _state_for(project_id, language_id)
@@ -151,6 +160,7 @@ def _run(project_id: int, language_id: str) -> None:
                 # this file. Failure is non-fatal; it just means this file
                 # keeps id ordering and stays out of the offline index.
                 sync_file_target_text_fast(project_id, f["id"], language_id)
+                consecutive_errors = 0
             except Exception:
                 # One unreadable file must not abandon the other 19,000.
                 logger.exception(
@@ -158,6 +168,14 @@ def _run(project_id: int, language_id: str) -> None:
                 )
                 with _lock:
                     _state_for(project_id, language_id)["errors"] += 1
+                consecutive_errors += 1
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    logger.warning(
+                        "offline cache build: stopping after %d consecutive failures — "
+                        "almost certainly no connection rather than bad files",
+                        consecutive_errors,
+                    )
+                    break
     except Exception:
         logger.exception("offline cache build: crashed for project %s/%s", project_id, language_id)
     finally:

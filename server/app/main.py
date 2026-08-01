@@ -493,6 +493,14 @@ async def trigger_tree_sync(project_id: int):
         result = await run_in_threadpool(sync_project_tree, project_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # Fetching from Crowdin is the entire operation — there's no cached
+        # answer to fall back on, unlike the read endpoints. Say so plainly
+        # instead of surfacing a raw ConnectionError as a 500.
+        raise HTTPException(
+            status_code=503,
+            detail="Syncing the file tree needs a connection to Crowdin.",
+        )
     return result
 
 
@@ -660,6 +668,14 @@ async def resync_file_content(project_id: int, file_id: int, language_id: str):
         result = await run_in_threadpool(sync_file_content, project_id, file_id, language_id)
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        # Fetching from Crowdin is the entire operation — there's no cached
+        # answer to fall back on, unlike the read endpoints. Say so plainly
+        # instead of surfacing a raw ConnectionError as a 500.
+        raise HTTPException(
+            status_code=503,
+            detail="Re-checking a file against Crowdin needs a connection to Crowdin.",
+        )
 
     # Whatever just landed can easily change this file's translated/
     # approved counts (that's the whole point of an explicit re-check) —
@@ -1899,6 +1915,11 @@ async def sync_glossary_endpoint(project_id: int):
     string-content index would, so a plain blocking request is fine."""
     try:
         count = await run_in_threadpool(sync_project_glossary, project_id)
+    except OFFLINE_ERRORS:
+        raise HTTPException(
+            status_code=503,
+            detail="Syncing the glossary needs a connection to Crowdin.",
+        )
     except APIException as exc:
         raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
     return {"terms": count}
