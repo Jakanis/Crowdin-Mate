@@ -18,6 +18,11 @@ interface FileTreeProps {
   directories: TreeDirectory[];
   files: TreeFile[];
   onSelectFile?: (file: TreeFile) => void;
+  /** Ask the tree to reveal a file: expand every folder above it and
+   * scroll it into view. Carries an incrementing counter rather than a
+   * bare id so asking twice for the SAME file still fires — otherwise
+   * the second click on the button would do nothing. */
+  revealRequest?: { fileId: number; n: number } | null;
   sync: SyncState;
   lastFullSyncAt: string | null;
 }
@@ -56,7 +61,7 @@ const ROW_HEIGHT = 28;
  * Collapsed folders contribute exactly one row here, regardless of how
  * many thousands of descendants they hold.
  */
-export function FileTree({ projectId, languageId, directories, files, onSelectFile, sync, lastFullSyncAt }: FileTreeProps) {
+export function FileTree({ projectId, languageId, directories, files, onSelectFile, sync, lastFullSyncAt, revealRequest }: FileTreeProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState("");
   const parentRef = useRef<HTMLDivElement>(null);
@@ -272,6 +277,47 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
     return out;
   }, [childDirsByParent, childFilesByDir, expanded]);
 
+
+  // Expand the chain of folders above a file, then scroll to it. Runs after
+  // the expansion has been applied — the row doesn't exist in the virtual
+  // list until its ancestors are open, so scrolling in the same tick would
+  // find nothing to scroll to.
+  const pendingRevealRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!revealRequest) return;
+    const file = files.find((f) => f.id === revealRequest.fileId);
+    if (!file) return;
+    const dirById = new Map(directories.map((d) => [d.id, d]));
+    const chain: number[] = [];
+    let dirId: number | null | undefined = file.directory_id;
+    while (dirId != null) {
+      chain.push(dirId);
+      dirId = dirById.get(dirId)?.parent_id ?? null;
+    }
+    setExpanded((prev) => new Set([...prev, ...chain]));
+    pendingRevealRef.current = revealRequest.fileId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealRequest?.n]);
+
+  useEffect(() => {
+    const target = pendingRevealRef.current;
+    if (target == null) return;
+    const index = treeRows.findIndex((r) => r.kind === "file" && r.id === target);
+    if (index < 0) return;
+    pendingRevealRef.current = null;
+    virtualizer.scrollToIndex(index, { align: "center" });
+    setRevealedFileId(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treeRows]);
+
+  // Brief highlight so the eye lands on the right row after the scroll.
+  const [revealedFileId, setRevealedFileId] = useState<number | null>(null);
+  useEffect(() => {
+    if (revealedFileId == null) return;
+    const t = window.setTimeout(() => setRevealedFileId(null), 1800);
+    return () => window.clearTimeout(t);
+  }, [revealedFileId]);
+
   const rows = searchResult ? searchResult.rows : treeRows;
 
   const virtualizer = useVirtualizer({
@@ -347,7 +393,7 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
             return (
               <div
                 key={`${row.kind}-${row.id}`}
-                className={`tree-row tree-row--${row.kind}`}
+                className={`tree-row tree-row--${row.kind}${row.kind === 'file' && row.id === revealedFileId ? ' tree-row--revealed' : ''}`}
                 style={{
                   position: "absolute",
                   top: 0,

@@ -81,6 +81,9 @@ export function App() {
   // collapsed/active-tab state needs to live one level up to actually
   // stay in sync across them. See rightSidebarState.ts.
   const rightSidebar = useRightSidebarState();
+  // Bumped rather than just set, so revealing the same file twice still
+  // re-triggers the scroll — the second click has to do something.
+  const [revealRequest, setRevealRequest] = useState<{ fileId: number; n: number } | null>(null);
 
   // Left sidebar sits to the left of its drag handle (dragging right
   // grows it, sign 1); the right TM/comments sidebar sits to the right
@@ -415,6 +418,7 @@ export function App() {
             focusedStringId={activeFileId != null ? focusedStringIdByFile[activeFileId] ?? null : null}
             onFocusString={(stringId) => activeFileId != null && setFocusedStringIdFor(activeFileId, stringId)}
             onJumpToSearchResult={handleJumpToSearchResult}
+            revealRequest={revealRequest}
             width={leftPanel.width}
             onResizeStart={(e) => leftPanel.startResize(e, 1)}
             openFilesSection={
@@ -470,6 +474,9 @@ export function App() {
                 onJumpToTmMatch={handleJumpToSearchResult}
                 isActive={file.id === activeFileId}
                 isStale={staleFileIds.has(file.id)}
+                onRevealInTree={() =>
+                  setRevealRequest((prev) => ({ fileId: file.id, n: (prev?.n ?? 0) + 1 }))
+                }
                 onStaleHandled={() => clearStale(file.id)}
               />
             </div>

@@ -13,7 +13,7 @@ how the UI itself only reveals those rows at that moment.
 import logging
 from datetime import datetime, timezone
 
-from app.crowdin_client import call_with_limits, get_client
+from app.crowdin_client import OFFLINE_ERRORS, call_with_limits, get_client
 from app.db import get_conn
 
 logger = logging.getLogger(__name__)
@@ -190,6 +190,46 @@ def invalidate_progress_for_file(file_id: int, language_id: str) -> None:
             dir_id = parent_row["parent_id"] if parent_row else None
 
 
+def _local_file_progress(file_id: int, language_id: str) -> dict | None:
+    """Progress computed from the local cache, for when Crowdin is
+    unreachable.
+
+    Only meaningful once a file's content has been synced — with no strings
+    cached there's nothing to count, and reporting 0/0 as "100%" would be a
+    lie, so that case returns None and the bar is simply absent.
+
+    Words are left null: Crowdin counts those server-side and we don't store
+    a per-string word count. The tooltip already handles missing counts.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM source_strings WHERE file_id = ?) total,
+              (SELECT COUNT(DISTINCT t.string_id) FROM translations t
+                JOIN source_strings s ON s.id = t.string_id
+                WHERE s.file_id = ? AND t.language_id = ?) translated,
+              (SELECT COUNT(DISTINCT t.string_id) FROM translations t
+                JOIN source_strings s ON s.id = t.string_id
+                WHERE s.file_id = ? AND t.language_id = ? AND t.is_approved = 1) approved
+            """,
+            (file_id, file_id, language_id, file_id, language_id),
+        ).fetchone()
+    total = row["total"] or 0
+    if total == 0:
+        return None
+    return {
+        "translation_progress": _percent(row["translated"] or 0, total),
+        "approval_progress": _percent(row["approved"] or 0, total),
+        "phrases_total": total,
+        "phrases_translated": row["translated"] or 0,
+        "phrases_approved": row["approved"] or 0,
+        "words_total": None,
+        "words_translated": None,
+        "words_approved": None,
+    }
+
+
 def get_children_progress(project_id: int, parent_directory_id: int | None, language_id: str) -> dict:
     """Progress for every direct child (subdirectory + file) of
     `parent_directory_id` (or the project root, if None) — fetching
@@ -230,18 +270,41 @@ def get_children_progress(project_id: int, parent_directory_id: int | None, lang
             )
         } if child_files else {}
 
+    # Each child is fetched independently and may fail on its own.
+    #
+    # These used to propagate, so ONE uncached child with no connection
+    # turned the whole request into a 500 and every bar in the folder
+    # disappeared — including the ones that were cached and perfectly
+    # displayable. Confirmed live: expanding a folder whose progress had
+    # never been fetched wiped the tree's bars, and since the tab strips use
+    # this same endpoint, theirs too.
     directories: dict[int, dict] = dict(cached_dirs)
     for did in child_dirs:
-        if did not in directories:
+        if did in directories:
+            continue
+        try:
             progress = sync_directory_progress(project_id, did, language_id)
-            if progress is not None:
-                directories[did] = progress
+        except OFFLINE_ERRORS:
+            continue
+        if progress is not None:
+            directories[did] = progress
 
     files: dict[int, dict] = dict(cached_files)
     for fid in child_files:
-        if fid not in files:
+        if fid in files:
+            continue
+        try:
             progress = sync_file_progress(project_id, fid, language_id)
-            if progress is not None:
-                files[fid] = progress
+        except OFFLINE_ERRORS:
+            # Counted from what's already cached instead. A file whose
+            # content we hold locally can have its progress derived without
+            # Crowdin at all — and unlike a cached percentage, this one
+            # moves as you translate offline.
+            local = _local_file_progress(fid, language_id)
+            if local is not None:
+                files[fid] = local
+            continue
+        if progress is not None:
+            files[fid] = progress
 
     return {"directories": directories, "files": files}

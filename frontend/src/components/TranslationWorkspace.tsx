@@ -56,6 +56,10 @@ interface TranslationWorkspaceProps {
    * either one means whatever made this file stale has now been pulled
    * in. Lets App.tsx drop it from staleFileIds. */
   onStaleHandled: () => void;
+  /** Reveal this file in the tree — expands its folders and scrolls to it.
+   * Useful after arriving from search or a queue link, where the tree is
+   * still wherever it was and gives no sense of where you are. */
+  onRevealInTree: () => void;
 }
 
 const MIN_AUTO_REFRESH_INTERVAL_MS = 20_000;
@@ -112,6 +116,7 @@ export function TranslationWorkspace({
   isActive,
   isStale,
   onStaleHandled,
+  onRevealInTree,
 }: TranslationWorkspaceProps) {
   const queryClient = useQueryClient();
   const stringsQuery = useQuery({
@@ -389,6 +394,13 @@ export function TranslationWorkspace({
             </div>
           </div>
         )}
+        <button
+          className="icon-btn workspace-reveal-button"
+          onClick={onRevealInTree}
+          title="Show this file in the file tree"
+        >
+          ⌖
+        </button>
         <button
           className={`icon-btn workspace-refresh-button${isStale ? " workspace-refresh-button--stale" : ""}`}
           onClick={forceRefresh}

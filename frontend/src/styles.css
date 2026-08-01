@@ -2705,3 +2705,11 @@ body {
 .sbs-approved-badge {
   margin-right: 6px;
 }
+
+/* Fades out after the reveal scroll — long enough to catch the eye, short
+   enough not to look like a selection state. */
+.tree-row--revealed {
+  background: var(--accent-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+  transition: background 0.5s ease 1s, box-shadow 0.5s ease 1s;
+}

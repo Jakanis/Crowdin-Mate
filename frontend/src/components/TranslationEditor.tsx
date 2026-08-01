@@ -667,6 +667,27 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         placeholder="Type a translation and Save to submit it to Crowdin"
       />
       <div className="string-row-footer">
+        {/* Crowdin has this in its own editor toolbar, and it's the fastest
+            route for a string that's mostly markup or a proper noun — you
+            want the source in the box to edit down, not to retype. Clears
+            the TM flag like any other change: the source isn't a memory
+            suggestion. */}
+        <button
+          className="link-button"
+          onClick={() => {
+            setText(s.text);
+            setAppliedProvider(null);
+            requestAnimationFrame(() => {
+              const el = textareaRef.current;
+              if (!el) return;
+              el.focus();
+              el.selectionStart = el.selectionEnd = el.value.length;
+            });
+          }}
+          title="Put the source text in the translation box"
+        >
+          Copy source
+        </button>
         <button
           className="btn-primary"
           onClick={() => submit.mutate()}
