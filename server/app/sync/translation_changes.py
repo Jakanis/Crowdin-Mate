@@ -15,17 +15,33 @@ notices that *something* happened, but can't say what — it moves for
 translations, comments and settings alike, so it can't drive a targeted
 refresh either.
 
-What does work: list_language_translations sorted by createdAt descending,
-walked newest-first until we pass the point we last checked. That yields
-exactly the strings translated since, which map to the files needing a
-re-cache. Measured on this project: 169 translations across 3 days came
-back in a single 500-row page in 1.2s, so the cost tracks how much has
-happened rather than how big the project is.
+Two sources are combined, and it has to be both:
+
+1. list_language_translations sorted by createdAt descending, walked
+   newest-first until we pass the point last checked. Cheap (169
+   translations over 3 days came back in one 500-row page in 1.2s), works
+   on any role, and its cost tracks how much has happened rather than how
+   big the project is. Blind to approvals, which create no new translation.
+
+2. The contribution raw-data report — what Crowdin's Activity tab is built
+   on. Has an APPROVALS mode, and each row names its file directly. Costs
+   an async generate/poll/download cycle (~5s) and is manager-only.
+
+Measured over the same four days, the report's file set was a strict SUBSET
+of the scan's: 77 files against 85, with 8 the report never mentioned. So
+"use the report, fall back to the scan" would have quietly lost changes.
+The scan is the floor and the report adds the approvals it alone can see.
 """
 
+import csv
+import io
 import logging
+import time
 from datetime import datetime, timezone
 
+import requests
+
+from crowdin_api.api_resources.reports.enums import ContributionMode, Unit
 from crowdin_api.api_resources.string_translations.enums import ListLanguageTranslationsOrderBy as OrderBy
 from crowdin_api.sorting import Sorting, SortingOrder, SortingRule
 
@@ -40,6 +56,11 @@ _PAGE = 500
 # targeted refresh has stopped being the cheap option — better to say so than
 # to spend dozens of calls reconstructing it.
 _MAX_PAGES = 40
+
+# Report generation is queued server-side; on this project it finishes in a
+# couple of seconds. Bounded so a stuck report can't hang a cache build.
+_REPORT_POLL_ATTEMPTS = 40
+_REPORT_POLL_SECONDS = 1
 
 
 def _checkpoint_key(project_id: int, language_id: str) -> str:
@@ -90,6 +111,63 @@ def set_checkpoint(project_id: int, language_id: str, when: datetime) -> None:
         )
 
 
+def _report_changed_files(project_id: int, language_id: str, since: datetime) -> dict | None:
+    """Changed files from Crowdin's contribution raw-data report — what the
+    Activity tab is built on.
+
+    Better than the translations walk below in two ways. It has an APPROVALS
+    mode, so it sees someone approving an existing translation, which creates
+    no new translation and is therefore invisible to a createdAt scan (281
+    such events in four days on this project). And each row carries File
+    Identifier directly, so no local string-to-file mapping is needed —
+    which also means it still works for a file we've never cached.
+
+    Returns None if the report isn't available, so the caller can fall back.
+    Reports are a manager-level feature: a plain translator's token gets a
+    403 here, and that must not break change detection for them.
+    """
+    client = get_client()
+    now = datetime.now(timezone.utc)
+    file_ids: set[int] = set()
+    events = 0
+
+    for mode, label in ((ContributionMode.TRANSLATIONS, "translations"),
+                        (ContributionMode.APPROVALS, "approvals")):
+        resp = call_with_limits(
+            client.reports.generate_contribution_raw_data_report,
+            projectId=project_id, mode=mode, unit=Unit.STRINGS,
+            languageId=language_id, dateFrom=since, dateTo=now,
+        )
+        report_id = (resp.get("data") or resp)["identifier"]
+
+        status = None
+        for _ in range(_REPORT_POLL_ATTEMPTS):
+            check = call_with_limits(
+                client.reports.check_report_generation_status,
+                reportId=report_id, projectId=project_id,
+            )
+            status = (check.get("data") or check).get("status")
+            if status in ("finished", "failed", "canceled"):
+                break
+            time.sleep(_REPORT_POLL_SECONDS)
+        if status != "finished":
+            logger.info("contribution report (%s) did not finish: %s", label, status)
+            return None
+
+        download = call_with_limits(
+            client.reports.download_report, reportId=report_id, projectId=project_id
+        )
+        url = (download.get("data") or download)["url"]
+        text = requests.get(url, timeout=60).content.decode("utf-8-sig", "replace")
+        for row in csv.DictReader(io.StringIO(text)):
+            raw_id = (row.get("File Identifier") or "").strip()
+            if raw_id.isdigit():
+                file_ids.add(int(raw_id))
+                events += 1
+
+    return {"file_ids": sorted(file_ids), "events": events, "source": "report"}
+
+
 def find_changed_files(project_id: int, language_id: str) -> dict:
     """File ids with translations newer than the checkpoint.
 
@@ -101,7 +179,32 @@ def find_changed_files(project_id: int, language_id: str) -> dict:
     if since is None:
         # Nothing cached yet, so there's nothing to refresh — the ordinary
         # pre-cache path covers a cold start.
-        return {"file_ids": [], "translations": 0, "since": None, "truncated": False}
+        return {"file_ids": [], "translations": 0, "since": None, "truncated": False, "source": "none"}
+
+    # Both sources, unioned — NOT one or the other.
+    #
+    # The obvious design is "use the report, fall back to the scan", since
+    # the report also covers approvals. Comparing them on real data killed
+    # that: over the same four days the report returned 77 files and the
+    # scan 85, with the report's set a strict SUBSET — every report file was
+    # in the scan, and the scan caught 8 the report missed. Preferring the
+    # report would therefore have silently dropped changes.
+    #
+    # So the scan is the floor (cheap, works on any role) and the report adds
+    # what only it can see. A report failure — most likely a 403, since
+    # reports are manager-level — just means the approvals half is missing,
+    # not that change detection breaks.
+    report_file_ids: set[int] = set()
+    report_events = 0
+    used_report = False
+    try:
+        via_report = _report_changed_files(project_id, language_id, since)
+        if via_report is not None:
+            report_file_ids = set(via_report["file_ids"])
+            report_events = via_report["events"]
+            used_report = True
+    except Exception:
+        logger.info("contribution report unavailable; scan only", exc_info=True)
 
     client = get_client()
     order = Sorting([SortingRule(OrderBy.CREATED_AT, SortingOrder.DESC)])
@@ -132,25 +235,30 @@ def find_changed_files(project_id: int, language_id: str) -> dict:
     else:
         truncated = True
 
-    if not string_ids:
-        return {"file_ids": [], "translations": 0, "since": since.isoformat(), "truncated": truncated}
+    scan_file_ids: set[int] = set()
+    if string_ids:
+        placeholders = ",".join("?" * len(string_ids))
+        with get_conn() as conn:
+            rows = conn.execute(
+                f"SELECT DISTINCT file_id FROM source_strings WHERE id IN ({placeholders})",
+                tuple(string_ids),
+            ).fetchall()
+        scan_file_ids = {r["file_id"] for r in rows}
 
-    placeholders = ",".join("?" * len(string_ids))
-    with get_conn() as conn:
-        rows = conn.execute(
-            f"SELECT DISTINCT file_id FROM source_strings WHERE id IN ({placeholders})",
-            tuple(string_ids),
-        ).fetchall()
-    file_ids = [r["file_id"] for r in rows]
+    file_ids = sorted(scan_file_ids | report_file_ids)
+    source = "scan+report" if used_report else "scan"
     logger.info(
-        "translation changes: %d translation(s) across %d file(s) since %s for %s/%s",
-        counted, len(file_ids), since.isoformat(), project_id, language_id,
+        "translation changes (%s): %d scanned + %d reported event(s) across %d file(s) "
+        "(scan %d, report %d) since %s for %s/%s",
+        source, counted, report_events, len(file_ids),
+        len(scan_file_ids), len(report_file_ids), since.isoformat(), project_id, language_id,
     )
     return {
         "file_ids": file_ids,
-        "translations": counted,
+        "translations": counted + report_events,
         "since": since.isoformat(),
         "truncated": truncated,
+        "source": source,
     }
 
 
