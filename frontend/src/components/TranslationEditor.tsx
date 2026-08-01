@@ -138,6 +138,20 @@ function TrashIcon() {
   );
 }
 
+function CopyIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="5.5" y="2.5" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M10.5 13.5H4C3.2 13.5 2.5 12.8 2.5 12V5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function JumpIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -667,27 +681,6 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         placeholder="Type a translation and Save to submit it to Crowdin"
       />
       <div className="string-row-footer">
-        {/* Crowdin has this in its own editor toolbar, and it's the fastest
-            route for a string that's mostly markup or a proper noun — you
-            want the source in the box to edit down, not to retype. Clears
-            the TM flag like any other change: the source isn't a memory
-            suggestion. */}
-        <button
-          className="link-button"
-          onClick={() => {
-            setText(s.text);
-            setAppliedProvider(null);
-            requestAnimationFrame(() => {
-              const el = textareaRef.current;
-              if (!el) return;
-              el.focus();
-              el.selectionStart = el.selectionEnd = el.value.length;
-            });
-          }}
-          title="Put the source text in the translation box"
-        >
-          Copy source
-        </button>
         <button
           className="btn-primary"
           onClick={() => submit.mutate()}
@@ -698,6 +691,30 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
         </button>
         <StatusBadge status={status} />
         {errorMessage && <span className="error">{errorMessage}</span>}
+        {/* Right-aligned and after Save in source order, so it can't push
+            Save sideways as its label or the status badge changes width.
+            Crowdin keeps the same action in its editor toolbar — the fast
+            path for a string that's mostly markup or a proper noun, where
+            you want the source in the box to edit down rather than retype.
+            Clears the TM flag like any other edit: the source isn't a
+            memory suggestion. */}
+        <button
+          className="icon-btn copy-source-button"
+          onClick={() => {
+            setText(s.text);
+            setAppliedProvider(null);
+            requestAnimationFrame(() => {
+              const el = textareaRef.current;
+              if (!el) return;
+              el.focus();
+              el.selectionStart = el.selectionEnd = el.value.length;
+            });
+          }}
+          title="Copy the source text into the translation box"
+        >
+          <CopyIcon />
+          Copy source
+        </button>
       </div>
 
       {displayTranslations.length > 0 && (

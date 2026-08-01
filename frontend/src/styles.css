@@ -2713,3 +2713,28 @@ body {
   box-shadow: inset 2px 0 0 var(--accent);
   transition: background 0.5s ease 1s, box-shadow 0.5s ease 1s;
 }
+
+/* Pushed to the far right of the Save row. margin-left:auto rather than a
+   spacer element, so Save keeps its position no matter how wide the status
+   badge or an error message beside it gets. */
+.copy-source-button {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 5px;
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--fg-muted);
+}
+
+.copy-source-button:hover {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+/* Sits before the path, so it needs no left padding of its own. */
+.workspace-reveal-button {
+  flex-shrink: 0;
+}

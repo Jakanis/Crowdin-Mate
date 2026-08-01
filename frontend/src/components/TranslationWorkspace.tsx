@@ -358,6 +358,13 @@ export function TranslationWorkspace({
           automatic half of this, the refresh button is the explicit "no
           really, check Crowdin right now" escape hatch. */}
       <div className="workspace-toolbar">
+        <button
+          className="icon-btn workspace-reveal-button"
+          onClick={onRevealInTree}
+          title="Show this file in the file tree"
+        >
+          ⌖
+        </button>
         <span className="workspace-file-path" title={filePath}>
           {filePath}
         </span>
@@ -394,13 +401,6 @@ export function TranslationWorkspace({
             </div>
           </div>
         )}
-        <button
-          className="icon-btn workspace-reveal-button"
-          onClick={onRevealInTree}
-          title="Show this file in the file tree"
-        >
-          ⌖
-        </button>
         <button
           className={`icon-btn workspace-refresh-button${isStale ? " workspace-refresh-button--stale" : ""}`}
           onClick={forceRefresh}
