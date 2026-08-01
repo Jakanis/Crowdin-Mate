@@ -27,7 +27,7 @@ from app.sync.file_content_sync import sync_file_content, sync_string_comments
 from app.sync.glossary_sync import get_glossary_status, search_glossary, sync_project_glossary
 from app.sync.live_search import search_project_live
 from app.sync.progress_sync import get_children_progress, invalidate_progress_for_file
-from app.sync import offline_cache, search_index
+from app.sync import offline_cache, search_index, translation_changes
 from app.sync.suggestions_sync import (
     has_looked_up,
     invalidate_tm_lookups,
@@ -222,6 +222,26 @@ async def build_offline_cache(project_id: int, language_id: str):
 @app.get("/projects/{project_id}/offline-cache/status")
 async def offline_cache_status(project_id: int, language_id: str):
     return offline_cache.get_status(project_id, language_id)
+
+
+@app.get("/projects/{project_id}/offline-cache/changes")
+async def offline_cache_changes(project_id: int, language_id: str):
+    """Files other people have translated in since we last cached them.
+
+    Separate from cache-status because it costs live API calls, where that
+    one is pure SQL — this is only worth asking when you're about to act on
+    the answer. Reports without changing anything; the build is what marks
+    the files and moves the checkpoint.
+    """
+    try:
+        return await run_in_threadpool(translation_changes.find_changed_files, project_id, language_id)
+    except APIException as exc:
+        raise HTTPException(status_code=exc.http_status or 500, detail=exc.message)
+    except OFFLINE_ERRORS:
+        raise HTTPException(
+            status_code=503,
+            detail="Checking for new translations needs a connection to Crowdin.",
+        )
 
 
 @app.post("/projects/{project_id}/offline-cache/stop")

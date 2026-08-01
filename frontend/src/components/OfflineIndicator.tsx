@@ -328,19 +328,25 @@ export function OfflineIndicator({ projectId, languageId, onJumpToItem }: Offlin
                   ) : (
                     <button
                       onClick={() => startPrecache.mutate()}
-                      disabled={startPrecache.isPending || precache.pending === 0}
+                      disabled={startPrecache.isPending}
                       title={
                         precache.pending === 0
-                          ? "Every file is cached and up to date for this language."
-                          : `Caches all ${precache.pending.toLocaleString()} remaining files so the ` +
-                            "whole project works with no connection. One request per file with no " +
-                            "bulk equivalent, so expect hours rather than minutes — start it before " +
-                            "you need it. Safe to stop and resume; progress is kept."
+                          ? "Every file is cached. This also checks Crowdin for strings other " +
+                            "people have translated since — a file's own timestamp doesn't move " +
+                            "when someone translates in it, so those can't be spotted locally."
+                          : `Caches the ${precache.pending.toLocaleString()} files not yet cached ` +
+                            "or changed since, so the project works with no connection. One " +
+                            "request per file with no bulk equivalent, so a first full run takes " +
+                            "a while — start it before you need it. Safe to stop and resume."
                       }
                     >
+                      {/* Never disabled at zero: pending only counts what's
+                          knowable from the local cache, and translations by
+                          other people aren't. Starting a run is how you find
+                          out, so the button has to stay clickable. */}
                       {precache.pending === 0
-                        ? "Fully cached"
-                        : `Cache all files for offline (${precache.pending.toLocaleString()})`}
+                        ? "Check for updates"
+                        : `Cache files for offline (${precache.pending.toLocaleString()})`}
                     </button>
                   )}
                 </div>

@@ -31,6 +31,11 @@ import threading
 from app.db import get_conn
 from app.sync.bulk_search_sync import bulk_sync_source_strings, sync_file_target_text_fast
 from app.sync.file_content_sync import sync_file_content
+from app.sync.translation_changes import (
+    find_changed_files,
+    mark_files_for_recache,
+    set_checkpoint,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +46,11 @@ logger = logging.getLogger(__name__)
 # Consecutive rather than total, so a handful of individually broken files
 # scattered through a long run doesn't abort an otherwise fine build.
 MAX_CONSECUTIVE_ERRORS = 15
+
+# Above this many pending files, one project-wide source-string fetch beats
+# letting the per-file loop pull them one file at a time. Below it, that
+# up-front cost dwarfs the work itself.
+BULK_SOURCE_SYNC_THRESHOLD = 500
 
 _lock = threading.Lock()
 _states: dict[tuple[int, str], dict] = {}
@@ -110,7 +120,28 @@ def _run(project_id: int, language_id: str) -> None:
     # Wrapped so running is GUARANTEED to reset however this exits —
     # including a failure in the pending query itself, before the loop.
     # search_index.py has the scar tissue explaining why that matters.
+    from datetime import datetime, timezone
+
+    started_at = datetime.now(timezone.utc)
     try:
+        # Files other people have translated in since the last pass. Without
+        # this they'd never be revisited: a file's updated_at only moves when
+        # its SOURCE changes, so a fully cached project quietly goes stale as
+        # translations accumulate (see translation_changes.py).
+        with _lock:
+            _state_for(project_id, language_id)["current_file_path"] = "Checking for new translations…"
+        try:
+            changed = find_changed_files(project_id, language_id)
+            marked = mark_files_for_recache(changed["file_ids"], language_id)
+            if marked:
+                logger.info(
+                    "offline cache build: %d file(s) queued for refresh from %d new translation(s)",
+                    marked, changed["translations"],
+                )
+        except Exception:
+            # Never block the ordinary fill-the-gaps work on this.
+            logger.exception("offline cache build: translation-change check failed")
+
         with get_conn() as conn:
             pending = [
                 dict(row) for row in conn.execute(
@@ -131,14 +162,21 @@ def _run(project_id: int, language_id: str) -> None:
 
         # Every source string project-wide in a handful of paginated calls,
         # rather than waiting for the per-file loop to reach each file. Same
-        # call search_index.py already leads with; running it here means a
-        # freshly-cached file usually needs only its translations fetched.
-        with _lock:
-            _state_for(project_id, language_id)["current_file_path"] = "Fetching all source strings…"
-        try:
-            bulk_sync_source_strings(project_id)
-        except Exception:
-            logger.exception("offline cache build: bulk source sync failed for project %s", project_id)
+        # call search_index.py already leads with.
+        #
+        # Only worth it when filling a large gap. It pulls all ~84,000
+        # strings and takes minutes, which is a fine trade against caching
+        # 19,000 files and absurd against refreshing the handful whose
+        # translations changed — where sync_file_content fetches each file's
+        # strings anyway. Measured: an 85-file refresh sat on this for over a
+        # minute before touching a single file.
+        if len(pending) >= BULK_SOURCE_SYNC_THRESHOLD:
+            with _lock:
+                _state_for(project_id, language_id)["current_file_path"] = "Fetching all source strings…"
+            try:
+                bulk_sync_source_strings(project_id)
+            except Exception:
+                logger.exception("offline cache build: bulk source sync failed for project %s", project_id)
 
         consecutive_errors = 0
         for f in pending:
@@ -179,6 +217,14 @@ def _run(project_id: int, language_id: str) -> None:
     except Exception:
         logger.exception("offline cache build: crashed for project %s/%s", project_id, language_id)
     finally:
+        with _lock:
+            state = _state_for(project_id, language_id)
+            stopped = state["stop_requested"]
+        # Only when the run actually finished everything it set out to do.
+        # Advancing after a stop, or after failures, would skip past
+        # translations that were never fetched.
+        if not stopped and state.get("errors", 0) == 0:
+            set_checkpoint(project_id, language_id, started_at)
         with _lock:
             state = _state_for(project_id, language_id)
             state["running"] = False
