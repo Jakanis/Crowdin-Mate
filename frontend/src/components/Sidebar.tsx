@@ -21,8 +21,10 @@ interface SidebarProps {
   directories: TreeDirectory[];
   files: TreeFile[];
   onSelectFile: (file: TreeFile) => void;
-  /** Passed straight through to FileTree — see its own prop doc. */
+  /** Passed straight through to FileTree — see its own prop docs. */
   revealRequest?: { fileId: number; n: number } | null;
+  openFileIds?: number[];
+  activeFileId?: number | null;
   selectedFile: TreeFile | null;
   strings: SourceString[];
   focusedStringId: number | null;
@@ -58,6 +60,8 @@ export function Sidebar({
   files,
   onSelectFile,
   revealRequest,
+  openFileIds,
+  activeFileId,
   selectedFile,
   strings,
   focusedStringId,
@@ -160,6 +164,8 @@ export function Sidebar({
           files={files}
           onSelectFile={onSelectFile}
           revealRequest={revealRequest}
+          openFileIds={openFileIds}
+          activeFileId={activeFileId}
           sync={sync}
           lastFullSyncAt={lastFullSyncAt}
         />

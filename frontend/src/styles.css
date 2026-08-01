@@ -2795,3 +2795,22 @@ body {
   font-weight: 650;
   margin: 0;
 }
+
+/* Files with an open tab — deliberately faint. This marks a whole set of
+   rows at once, so anything stronger would compete with the tree's own
+   progress bars for attention. */
+.tree-row--open {
+  background: rgba(128, 128, 128, 0.09);
+}
+
+/* The file currently showing. One row at a time, so it can afford the
+   accent — this is the "you are here" marker. The left rail reads as an
+   arrow into the editor beside it. */
+.tree-row--active {
+  background: var(--accent-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tree-row--active .tree-name {
+  font-weight: 600;
+}

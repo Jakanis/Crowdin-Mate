@@ -419,6 +419,8 @@ export function App() {
             onFocusString={(stringId) => activeFileId != null && setFocusedStringIdFor(activeFileId, stringId)}
             onJumpToSearchResult={handleJumpToSearchResult}
             revealRequest={revealRequest}
+            openFileIds={openFiles.map((f) => f.id)}
+            activeFileId={activeFileId}
             width={leftPanel.width}
             onResizeStart={(e) => leftPanel.startResize(e, 1)}
             openFilesSection={

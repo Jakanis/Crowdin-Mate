@@ -23,6 +23,12 @@ interface FileTreeProps {
    * bare id so asking twice for the SAME file still fires — otherwise
    * the second click on the button would do nothing. */
   revealRequest?: { fileId: number; n: number } | null;
+  /** Files with an open tab, and which of them is showing. Drawn as two
+   * different weights: every open file gets a faint marker so the tree
+   * shows where you've been working, and the active one gets a stronger
+   * treatment so "where am I" is answerable at a glance. */
+  openFileIds?: number[];
+  activeFileId?: number | null;
   sync: SyncState;
   lastFullSyncAt: string | null;
 }
@@ -61,7 +67,7 @@ const ROW_HEIGHT = 28;
  * Collapsed folders contribute exactly one row here, regardless of how
  * many thousands of descendants they hold.
  */
-export function FileTree({ projectId, languageId, directories, files, onSelectFile, sync, lastFullSyncAt, revealRequest }: FileTreeProps) {
+export function FileTree({ projectId, languageId, directories, files, onSelectFile, sync, lastFullSyncAt, revealRequest, openFileIds, activeFileId }: FileTreeProps) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState("");
   const parentRef = useRef<HTMLDivElement>(null);
@@ -318,6 +324,10 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
     return () => window.clearTimeout(t);
   }, [revealedFileId]);
 
+  // Set rather than array.includes on every row — the tree renders
+  // thousands of rows and this runs per row per render.
+  const openFileIdSet = useMemo(() => new Set(openFileIds ?? []), [openFileIds]);
+
   const rows = searchResult ? searchResult.rows : treeRows;
 
   const virtualizer = useVirtualizer({
@@ -393,7 +403,7 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
             return (
               <div
                 key={`${row.kind}-${row.id}`}
-                className={`tree-row tree-row--${row.kind}${row.kind === 'file' && row.id === revealedFileId ? ' tree-row--revealed' : ''}`}
+                className={`tree-row tree-row--${row.kind}${row.kind === 'file' && openFileIdSet.has(row.id) ? ' tree-row--open' : ''}${row.kind === 'file' && row.id === activeFileId ? ' tree-row--active' : ''}${row.kind === 'file' && row.id === revealedFileId ? ' tree-row--revealed' : ''}`}
                 style={{
                   position: "absolute",
                   top: 0,
