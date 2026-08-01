@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api } from "../api/client";
+import { rightSidebarDraftKey } from "../panelDrafts";
 import { PinIcon } from "./PinIcon";
 import { CommentsPanel } from "./CommentsPanel";
 import { GlossaryPanel } from "./GlossaryPanel";
@@ -8,6 +9,10 @@ import { TmPanel } from "./TmPanel";
 
 interface RightSidebarProps {
   projectId: number;
+  /** Which file this instance belongs to — one RightSidebar exists per open
+   * tab. Only used to scope the panels' scratch state while unpinned; see
+   * rightSidebarDraftKey. */
+  fileId: number;
   stringId: number | null;
   languageId: string;
   sourceLanguageId: string;
@@ -46,6 +51,7 @@ type TabKey = (typeof TABS)[number]["key"];
  * once, so local state here wouldn't stay in sync across them. */
 export function RightSidebar({
   projectId,
+  fileId,
   stringId,
   languageId,
   sourceLanguageId,
@@ -103,6 +109,12 @@ export function RightSidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapsed, pinned]);
 
+  // Pinned means one panel you keep parked open while moving between tabs,
+  // so its search box follows you; unpinned means a per-tab scratch pad, so
+  // each file keeps its own. Comment drafts don't use this — they're keyed
+  // by string in both modes (see CommentsPanel).
+  const draftKey = rightSidebarDraftKey(pinned, fileId);
+
   const selectTab = (key: TabKey) => {
     if (!collapsed && key === activeTab) {
       onCollapsedChange(true);
@@ -144,6 +156,7 @@ export function RightSidebar({
               sourceLanguageId={sourceLanguageId}
               sourceText={sourceText}
               onJumpToMatch={onJumpToTmMatch}
+              draftKey={draftKey}
             />
           )}
           {activeTab === "glossary" && (
@@ -152,6 +165,7 @@ export function RightSidebar({
               stringId={stringId}
               languageId={languageId}
               sourceLanguageId={sourceLanguageId}
+              draftKey={draftKey}
             />
           )}
           </aside>

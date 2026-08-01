@@ -475,6 +475,7 @@ export function TranslationWorkspace({
 
         <RightSidebar
           projectId={projectId}
+          fileId={fileId}
           stringId={focusedStringId}
           languageId={languageId}
           sourceLanguageId={sourceLanguageId}

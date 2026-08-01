@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, type TmMatch } from "../api/client";
+import { usePanelDraft } from "../panelDrafts";
 import { fullDateTime, timeAgo } from "../timeAgo";
 import { TmSourceDiff } from "./TmSourceDiff";
 
@@ -14,6 +15,9 @@ interface TmPanelProps {
    * used while searching (see TmPanel's own doc comment). */
   sourceText: string | null;
   onJumpToMatch?: (fileId: number, stringId: number) => void;
+  /** Bucket this panel's typed-in query survives in while the sidebar is
+   * collapsed — see panelDrafts.ts. */
+  draftKey: string;
 }
 
 const DEBOUNCE_MS = 300;
@@ -86,9 +90,13 @@ function TmMatchItem({
  * _augment_tm_matches_with_source in main.py). Falls back to the TM
  * segment's own updated_at when no local match is found (bulk-imported
  * entry, or the originating string isn't cached locally yet). */
-export function TmPanel({ projectId, stringId, languageId, sourceLanguageId, sourceText, onJumpToMatch }: TmPanelProps) {
-  const [search, setSearch] = useState("");
-  const [debounced, setDebounced] = useState("");
+export function TmPanel({ projectId, stringId, languageId, sourceLanguageId, sourceText, onJumpToMatch, draftKey }: TmPanelProps) {
+  const [search, setSearch] = usePanelDraft(`${draftKey}:tm-search`, "");
+  // Seeded from the restored query rather than "" so reopening a panel that
+  // had a search in it shows those results straight away. Starting empty
+  // would render the focused string's own TM matches for one debounce
+  // interval first, then swap — a flash of the wrong list.
+  const [debounced, setDebounced] = useState(search);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(search), DEBOUNCE_MS);

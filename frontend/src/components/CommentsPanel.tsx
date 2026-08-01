@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { api, type IssueType } from "../api/client";
+import { clearPanelDraft, usePanelDraft } from "../panelDrafts";
 
 interface CommentsPanelProps {
   projectId: number;
@@ -24,9 +24,20 @@ const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
  */
 export function CommentsPanel({ projectId, stringId, languageId }: CommentsPanelProps) {
   const queryClient = useQueryClient();
-  const [text, setText] = useState("");
-  const [isIssue, setIsIssue] = useState(false);
-  const [issueType, setIssueType] = useState<IssueType>("translation_mistake");
+  // Keyed by the STRING, not by the tab or the panel: an unfinished comment
+  // belongs to the thing it's about. Collapsing the sidebar unmounts this
+  // panel (see panelDrafts.ts), which used to discard whatever was typed;
+  // now it comes back, and it comes back on the string it was written for
+  // — paging to the next string shows that string's own draft, not one
+  // written about the previous one, which would otherwise post against the
+  // wrong string.
+  const draftKey = `comment:${projectId}:${stringId}`;
+  const [text, setText] = usePanelDraft(`${draftKey}:text`, "");
+  const [isIssue, setIsIssue] = usePanelDraft(`${draftKey}:is-issue`, false);
+  const [issueType, setIssueType] = usePanelDraft<IssueType>(
+    `${draftKey}:issue-type`,
+    "translation_mistake",
+  );
 
   const query = useQuery({
     queryKey: ["comments", projectId, stringId],
@@ -40,8 +51,11 @@ export function CommentsPanel({ projectId, stringId, languageId }: CommentsPanel
     mutationFn: () =>
       api.addComment(projectId, stringId as number, languageId, text, isIssue ? issueType : undefined),
     onSuccess: () => {
-      setText("");
-      setIsIssue(false);
+      // Dropped rather than set to empty — a posted comment shouldn't leave
+      // its string's keys sitting in the store for the rest of the session.
+      clearPanelDraft(`${draftKey}:text`);
+      clearPanelDraft(`${draftKey}:is-issue`);
+      clearPanelDraft(`${draftKey}:issue-type`);
       invalidate();
     },
   });

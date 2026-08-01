@@ -1,12 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { usePanelDraft } from "../panelDrafts";
 
 interface GlossaryPanelProps {
   projectId: number;
   stringId: number | null;
   languageId: string;
   sourceLanguageId: string;
+  /** Bucket this panel's typed-in query survives in while the sidebar is
+   * collapsed — see panelDrafts.ts. */
+  draftKey: string;
 }
 
 const DEBOUNCE_MS = 300;
@@ -21,10 +25,11 @@ const DEBOUNCE_MS = 300;
  * seconds for a project this size), after which it runs entirely
  * offline against the local cache, unlike the per-string lookup above
  * which always hits Crowdin live. */
-export function GlossaryPanel({ projectId, stringId, languageId, sourceLanguageId }: GlossaryPanelProps) {
+export function GlossaryPanel({ projectId, stringId, languageId, sourceLanguageId, draftKey }: GlossaryPanelProps) {
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [debounced, setDebounced] = useState("");
+  const [search, setSearch] = usePanelDraft(`${draftKey}:glossary-search`, "");
+  // Seeded from the restored query — same reasoning as TmPanel's.
+  const [debounced, setDebounced] = useState(search);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(search), DEBOUNCE_MS);
