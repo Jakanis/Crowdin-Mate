@@ -579,7 +579,13 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.progress-card-label {
+/* Qualified with td so it actually outranks `.progress-card-table td`
+   above, which sets text-align: right for the number columns. Unqualified,
+   this rule tied on specificity and lost on source order, so the label
+   column was right-aligned too: "Approved" being shorter than "Translated"
+   pushed its start — and with it the colour swatch that has to line up
+   with the row above — a few pixels to the right. */
+.progress-card-table td.progress-card-label {
   text-align: left;
   padding-right: 14px;
   font-weight: 600;
@@ -609,8 +615,13 @@ body {
   background: var(--progress-approved);
 }
 
+/* Right, matching the Done column it sits under — which is what this has
+   always rendered as: it declared left, but lost the same specificity
+   fight the label rule above did, so it inherited the td rule's right.
+   Spelling out what it actually does rather than "fixing" it and moving a
+   number that reads fine where it is. */
 .progress-card-total {
-  text-align: left;
+  text-align: right;
   padding-top: 3px;
   color: var(--fg-muted);
 }
