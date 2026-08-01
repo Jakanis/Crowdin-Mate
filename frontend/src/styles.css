@@ -2765,13 +2765,17 @@ body {
   border-right: 1px solid rgba(128, 128, 128, 0.25);
 }
 
+/* 8px horizontal to line the title up with the search input directly
+   below it, which sits inside a wrapper with that same padding. Without
+   it the title started hard against the panel edge while everything under
+   it was indented. */
 .sidebar-header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 0 4px;
+  padding: 6px 8px 4px;
 }
 
 .sidebar-title {
