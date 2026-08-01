@@ -711,9 +711,9 @@ export const TranslationEditor = forwardRef<TranslationEditorHandle, Translation
             });
           }}
           title="Copy the source text into the translation box"
+          aria-label="Copy source"
         >
           <CopyIcon />
-          Copy source
         </button>
       </div>
 

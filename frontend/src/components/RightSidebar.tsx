@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { api } from "../api/client";
 import { CommentsPanel } from "./CommentsPanel";
 import { GlossaryPanel } from "./GlossaryPanel";
@@ -19,8 +19,8 @@ interface RightSidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
   activeTab: string;
   onActiveTabChange: (tab: string) => void;
-  /** Whether the panel stays open when you move to a different string —
-   * see useRightSidebarState's own doc comment. */
+  /** Whether the panel stays open once you click away from it — see
+   * useRightSidebarState's own doc comment. */
   pinned: boolean;
   onPinnedChange: (pinned: boolean) => void;
   onJumpToTmMatch: (fileId: number, stringId: number) => void;
@@ -76,21 +76,31 @@ export function RightSidebar({
   });
   const commentCount = commentsQuery.data?.comments.length;
 
-  // Unpinned means "just needed this once" — moving on to a different
-  // string auto-collapses the panel instead of leaving it parked open.
-  // Skips the very first run so simply opening a tab (which mounts this
-  // component with whatever string was already focused) doesn't
-  // immediately collapse a sidebar you just explicitly opened; only a
-  // real navigation to a NEW string after that counts as "done with it".
-  const hasMountedRef = useRef(false);
+  // Unpinned means "get out of the way once I'm done with it", and what
+  // marks being done is looking somewhere else — clicking back into the
+  // translation pane, the tree, anywhere outside. Pinned stays put.
+  //
+  // This replaces collapsing whenever the focused STRING changed, which
+  // fired at the wrong moments in both directions: paging to the next
+  // string closed a panel you were reading, while clicking away from it and
+  // staying on the same string left it open.
+  //
+  // Matched by selector rather than a ref to this instance: one
+  // RightSidebar is mounted per open tab and they share collapsed state, so
+  // a hidden instance's own ref wouldn't contain a click inside the VISIBLE
+  // panel and would collapse it out from under you.
   useEffect(() => {
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      return;
-    }
-    if (!pinned) onCollapsedChange(true);
+    if (collapsed || pinned) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const el = e.target as Element | null;
+      if (el?.closest?.(".right-sidebar")) return;
+      onCollapsedChange(true);
+    };
+    // Capture, so it still runs for handlers that stop propagation.
+    document.addEventListener("mousedown", onPointerDown, true);
+    return () => document.removeEventListener("mousedown", onPointerDown, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stringId]);
+  }, [collapsed, pinned]);
 
   const selectTab = (key: TabKey) => {
     if (!collapsed && key === activeTab) {
@@ -128,11 +138,7 @@ export function RightSidebar({
             <button
               className={`right-sidebar-pin${pinned ? " right-sidebar-pin--active" : ""}`}
               onClick={() => onPinnedChange(!pinned)}
-              title={
-                pinned
-                  ? "Pinned — stays open when you move to a different string. Click to unpin."
-                  : "Unpinned — closes automatically when you move to a different string. Click to pin."
-              }
+              title={pinned ? "Unpin — hides when you click away" : "Pin — keeps this panel open"}
             >
               📌
             </button>

@@ -18,8 +18,8 @@ const PINNED_KEY = "crowdin-mate-right-sidebar-pinned";
  * down as props, means every open tab's RightSidebar reflects the same
  * live state, and persists across restarts. Defaults to collapsed.
  *
- * pinned governs whether the sidebar stays open once you've moved on to
- * a different string, or auto-collapses (see RightSidebar's own effect)
+ * pinned governs whether the sidebar stays open once you click away from
+ * it, or auto-collapses (see RightSidebar's own effect)
  * — for a quick "check this one thing and get out of the way" lookup
  * rather than a panel you want parked open the whole session. Defaults
  * to true (today's only behavior, before pinning existed) so upgrading

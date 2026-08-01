@@ -89,6 +89,17 @@ export function SettingsMenu({
                   </button>
                 ))}
               </div>
+              {/* Sits inside the Theme section rather than as a section of
+                  its own: it doesn't pick a theme, it restyles whichever
+                  theme is selected, so it belongs under that control. */}
+              <label className="settings-checkbox settings-checkbox--sub">
+                <input
+                  type="checkbox"
+                  checked={crowdinPalette.enabled}
+                  onChange={(e) => crowdinPalette.setEnabled(e.target.checked)}
+                />
+                Crowdin-like
+              </label>
             </div>
             <div className="settings-section">
               <div className="settings-label">Layout</div>
@@ -146,16 +157,6 @@ export function SettingsMenu({
                   onChange={(e) => onAutoAdvanceChange(e.target.checked)}
                 />
                 Automatically move to next string
-              </label>
-            </div>
-            <div className="settings-section">
-              <label className="settings-checkbox">
-                <input
-                  type="checkbox"
-                  checked={crowdinPalette.enabled}
-                  onChange={(e) => crowdinPalette.setEnabled(e.target.checked)}
-                />
-                Use Crowdin colors
               </label>
             </div>
           </div>
