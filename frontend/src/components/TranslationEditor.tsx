@@ -140,7 +140,10 @@ function TrashIcon() {
 
 function CopyIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    // Sized in em rather than px: this one sits alone in an icon-only
+    // button, so it IS the button's content and has to follow the UI
+    // scale setting like every other control in that row.
+    <svg width="1em" height="1em" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="5.5" y="2.5" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
       <path
         d="M10.5 13.5H4C3.2 13.5 2.5 12.8 2.5 12V5"

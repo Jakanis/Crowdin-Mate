@@ -114,22 +114,11 @@ export function RightSidebar({
 
   return (
     <div className="right-sidebar">
-      <div className="right-sidebar-rail">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`rail-icon${!collapsed && activeTab === t.key ? " active" : ""}`}
-            onClick={() => selectTab(t.key)}
-            title={t.label}
-          >
-            {t.icon}
-            {t.key === "comments" && !!commentCount && (
-              <span className="rail-icon-badge">{commentCount}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
+      {/* Panel first, rail last — so the rail sits against the window edge
+          and stays there whether the panel is open or shut, mirroring the
+          left sidebar. Source order is what places it: with the rail first
+          it got pushed inward by the opening panel and ended up floating
+          between the editor and the panel's content. */}
       {!collapsed && (
         <>
           <div className="resize-handle" onMouseDown={onResizeStart} />
@@ -168,6 +157,22 @@ export function RightSidebar({
           </aside>
         </>
       )}
+
+      <div className="right-sidebar-rail">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`rail-icon${!collapsed && activeTab === t.key ? " active" : ""}`}
+            onClick={() => selectTab(t.key)}
+            title={t.label}
+          >
+            {t.icon}
+            {t.key === "comments" && !!commentCount && (
+              <span className="rail-icon-badge">{commentCount}</span>
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

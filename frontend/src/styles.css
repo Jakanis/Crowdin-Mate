@@ -2067,9 +2067,13 @@ body {
   text-align: center;
 }
 
+/* Padded on both sides now that the rail sits to its right rather than its
+   left: 12px off the resize handle, 8px so the content doesn't butt against
+   the rail's divider. */
 .right-sidebar-panel {
   flex-shrink: 0;
   padding-left: 12px;
+  padding-right: 8px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -2729,15 +2733,15 @@ body {
 /* Pushed to the far right of the Save row. margin-left:auto rather than a
    spacer element, so Save keeps its position no matter how wide the status
    badge or an error message beside it gets. */
+/* Icon-only, so font-size here sets the glyph size (the svg is 1em) rather
+   than any label. The padding/gap this rule used to carry were left over
+   from when it had a "Copy source" label beside the icon, and they fought
+   .icon-btn's fixed 22px box — squeezing the content area down to a few
+   pixels and leaving the icon looking undersized inside an ordinary-sized
+   button. */
 .copy-source-button {
   margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border: 1px solid rgba(128, 128, 128, 0.35);
-  border-radius: 5px;
-  font-size: calc(12px * var(--ui-scale));
+  font-size: calc(15px * var(--ui-scale));
   color: var(--fg-muted);
 }
 
