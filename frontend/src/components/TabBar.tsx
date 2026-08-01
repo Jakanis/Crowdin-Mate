@@ -83,6 +83,27 @@ function TabProgressStrip({ progress }: { progress: ProgressInfo }) {
   );
 }
 
+// A file with nothing left to do gets a line along the tab's whole top
+// edge, colour-matched to the progress strip's own fill: green once
+// everything's approved, blue while it's fully translated but not yet
+// fully approved (approved is a subset of translated, so those two cases
+// are exhaustive and can't overlap).
+//
+// The left strip already encodes this — it goes solid at 100% — but a 6px
+// sliver at the edge of a tight horizontal strip is easy to miss when
+// scanning across a row of tabs, whereas a line running the tab's full
+// width isn't. Deliberately horizontal-only (scoped in styles.css): a
+// vertical tab is a full-width row whose strip runs its entire height, so
+// "done" is already unmissable there, and a line along the top of a
+// stacked row would read as a divider between rows rather than as that
+// row's own status.
+function doneClass(progress: ProgressInfo | undefined): string {
+  if (!progress) return "";
+  if (progress.approval_progress === 100) return " tab--done-approved";
+  if (progress.translation_progress === 100) return " tab--done-translated";
+  return "";
+}
+
 function dirSegments(file: TreeFile): string[] {
   return file.path.split("/").filter(Boolean).slice(0, -1);
 }
@@ -297,7 +318,7 @@ export function TabBar({
         if (el) tabRefs.current.set(f.id, el);
         else tabRefs.current.delete(f.id);
       }}
-      className={`tab${f.id === activeFileId ? " tab--active" : ""}`}
+      className={`tab${f.id === activeFileId ? " tab--active" : ""}${doneClass(progress)}`}
       draggable
       onDragStart={(e) => {
         setDraggedId(f.id);
