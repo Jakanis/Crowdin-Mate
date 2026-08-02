@@ -15,15 +15,16 @@ permissions:
 
 jobs:
   build:
+    # Archives, not bare executables: the build is one-folder now (see
+    # desktop.spec on why), so each platform ships its folder packed in
+    # whatever that platform extracts without extra tools.
     strategy:
       matrix:
         include:
           - os: windows-latest
-            asset_name: Crowdin-Mate-Windows.exe
-            built_path: server/dist/Crowdin Mate.exe
+            asset_name: Crowdin-Mate-Windows.zip
           - os: ubuntu-latest
-            asset_name: Crowdin-Mate-Linux
-            built_path: server/dist/Crowdin Mate
+            asset_name: Crowdin-Mate-Linux.tar.gz
 
     runs-on: ${{ matrix.os }}
 
@@ -74,16 +75,25 @@ jobs:
         working-directory: server
         run: pyinstaller desktop.spec --noconfirm
 
-      - name: Rename asset
-        shell: bash
-        run: cp "${{ matrix.built_path }}" "${{ matrix.asset_name }}"
+      # Both archive the "Crowdin Mate" folder ITSELF, not its contents, so
+      # extracting can't scatter ~700 files into whatever directory someone
+      # happened to be in.
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: Compress-Archive -Path "server/dist/Crowdin Mate" -DestinationPath "${{ matrix.asset_name }}"
 
-      # Published alongside each binary so anyone can check that what they
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: tar -czf "${{ matrix.asset_name }}" -C server/dist "Crowdin Mate"
+
+      # Published alongside each archive so anyone can check that what they
       # downloaded is byte-for-byte what this workflow produced from the
-      # tagged source. That matters most on Windows, where the unsigned
-      # single-file exe gets flagged by Defender's ML heuristics (see
-      # README) — "is this file actually the release?" should be answerable
-      # without taking anyone's word for it.
+      # tagged source. That matters most on Windows, where an unsigned build
+      # draws warnings from SmartScreen and can draw a heuristic malware
+      # verdict from Defender (see README) — "is this file actually the
+      # release?" should be answerable without taking anyone's word for it.
       - name: Checksum
         shell: bash
         run: sha256sum "${{ matrix.asset_name }}" > "${{ matrix.asset_name }}.sha256"

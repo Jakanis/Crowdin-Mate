@@ -79,11 +79,15 @@ No Python, no Node, nothing to install or run from a terminal — grab the
 latest build from the [Releases page](../../releases) for your OS and
 double-click it:
 
-- **Windows** — `Crowdin-Mate-Windows.exe`. Uses Windows' own WebView2, which
-  ships with Windows 10 21H2+/11 already, so there's genuinely nothing else
-  to install.
-- **Linux** — `Crowdin-Mate-Linux`. Mark it executable first
-  (`chmod +x Crowdin-Mate-Linux`), then run it. Uses pywebview's Qt backend
+- **Windows** — `Crowdin-Mate-Windows.zip`. Right-click → **Extract All**,
+  then run `Crowdin Mate.exe` from inside the extracted folder. Keep the
+  folder together — the exe needs the files beside it. Uses Windows' own
+  WebView2, which ships with Windows 10 21H2+/11 already, so there's
+  genuinely nothing else to install.
+- **Linux** — `Crowdin-Mate-Linux.tar.gz`. Extract it
+  (`tar -xzf Crowdin-Mate-Linux.tar.gz`), then run `"Crowdin Mate/Crowdin Mate"`
+  from inside — `chmod +x` it first if your extractor dropped the
+  permission. Uses pywebview's Qt backend
   bundled with its own copy of Qt (not your system's GTK or Qt), so it works
   the same on GNOME, KDE, or anything else — it does still expect a handful
   of low-level system libraries (OpenGL, fontconfig, X11/XCB, NSS, ALSA — see
@@ -127,11 +131,17 @@ malware verdict, so it deserves a real explanation rather than a shrug:
 - **It is a heuristic, not a match against known malware.** The `!ml`
   suffix marks a machine-learning verdict. `Wacatac.B!ml` is a broad bucket
   that PyInstaller-built applications land in routinely, because the shape
-  of the file is genuinely the shape antivirus heuristics are built to
+  of the file was genuinely the shape antivirus heuristics are built to
   distrust: a single unsigned executable that unpacks a compressed payload
   into a temp directory at startup and runs a Python interpreter out of it.
-  A legitimate app packaged this way and an actual dropper look similar from
+  A legitimate app packaged that way and an actual dropper look similar from
   the outside.
+- **Releases are no longer built that way.** Since this was reported, the
+  build ships as an ordinary folder of files rather than a self-extracting
+  single executable — which is why the download is now a `.zip`. That
+  removes the specific behaviour the heuristic keys on. It is a real
+  improvement rather than a guaranteed fix: an unsigned executable can still
+  be flagged, and different machines run different model versions.
 - **We are not asking you to take that on faith.** Every release is built by
   [GitHub Actions](.github/workflows/release.yml) from the tagged source in
   this repository — you can read the workflow, read the source, and see the
@@ -140,11 +150,11 @@ malware verdict, so it deserves a real explanation rather than a shrug:
   byte-for-byte what that run produced:
 
   ```powershell
-  Get-FileHash .\Crowdin-Mate-Windows.exe -Algorithm SHA256
+  Get-FileHash .\Crowdin-Mate-Windows.zip -Algorithm SHA256
   ```
 
-  and compare it against `Crowdin-Mate-Windows.exe.sha256` from the same
-  release.
+  and compare it against `Crowdin-Mate-Windows.zip.sha256` from the same
+  release. Hash the downloaded archive, not the extracted files.
 - **What we cannot do yet:** the binary is unsigned. Code signing is what
   resolves the SmartScreen half outright and, as the signed publisher builds
   reputation, the Defender half too. Until then both warnings are expected
@@ -224,7 +234,7 @@ python desktop.py
 Prefer a regular browser tab over the native window — your own extensions,
 devtools, multiple windows? Pass `--browser` (works the same way whether
 you're running from source or a downloaded release binary, e.g.
-`Crowdin-Mate-Windows.exe --browser` from a terminal or a shortcut with that
+`"Crowdin Mate.exe" --browser` from a terminal or a shortcut with that
 argument):
 
 ```bash
@@ -266,7 +276,8 @@ npm run build
 pip install -r requirements.txt
 pip install pyinstaller
 
-# 3. Build (from server/) — produces server/dist/Crowdin Mate(.exe)
+# 3. Build (from server/) — produces the folder server/dist/Crowdin Mate/,
+#    with "Crowdin Mate(.exe)" inside it alongside everything it needs
 pyinstaller desktop.spec --noconfirm
 ```
 

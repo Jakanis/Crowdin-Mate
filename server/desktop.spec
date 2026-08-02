@@ -7,9 +7,11 @@ it does not build it):
 
     pyinstaller desktop.spec
 
-Produces a single-file executable named "Crowdin Mate" (.exe on
-Windows) under server/dist/. See README's "Building a release"
-section for the full release process (both platforms, GitHub Actions).
+Produces the folder server/dist/Crowdin Mate/, holding an executable of
+the same name (.exe on Windows) alongside everything it needs. One
+FOLDER rather than one file — see the note above COLLECT at the bottom
+for why that matters here. See README's "Building a release" section for
+the full release process (both platforms, GitHub Actions).
 
 Windows uses pywebview's native WebView2 backend (bundled with Windows
 10 21H2+/11) — nothing Qt-related gets pulled in there. Linux uses the
@@ -44,10 +46,10 @@ def _write_windows_version_resource() -> str:
     Without one, the built exe has no CompanyName, ProductName, version or
     description at all — the properties dialog is blank. That is worth
     fixing on its own, and it also matters for how the binary is received:
-    a brand-new unsigned single-file executable with no metadata whatsoever
-    is close to the profile Defender's ML heuristics are built to be
-    suspicious of, which is how a release ends up flagged as
-    Trojan:Win32/Wacatac.B!ml (an ML bucket, not a signature match).
+    a brand-new unsigned executable with no metadata whatsoever is part of
+    the profile Defender's ML heuristics are built to be suspicious of,
+    which is how a release ends up flagged as Trojan:Win32/Wacatac.B!ml
+    (an ML bucket, not a signature match).
 
     Metadata alone will not clear that — see README's own section — but it
     removes one of the few signals we can actually control for free.
@@ -143,20 +145,39 @@ a = Analysis(  # noqa: F821
 
 pyz = PYZ(a.pure)  # noqa: F821
 
+# One-FOLDER, not one-file. a.binaries/a.datas go to COLLECT below instead
+# of being appended to the exe.
+#
+# The one-file build appends a compressed archive to a self-extracting stub,
+# which unpacks ~20MB into a temp directory and runs a Python interpreter
+# out of it on every launch. That is close to the textbook description of a
+# dropper, and it is why PyInstaller one-file builds are so routinely caught
+# by heuristic scanners — a real report of Trojan:Win32/Wacatac.B!ml against
+# a release is what prompted this.
+#
+# It also costs a measurable amount of startup time on every single run,
+# since the unpacking is not cached between launches.
 exe = EXE(  # noqa: F821
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="Crowdin Mate",
     debug=False,
     strip=False,
-    # Left off deliberately. UPX-packing an already self-extracting binary
-    # is one of the strongest single triggers for heuristic malware
-    # detection, and it buys nothing here — the archive is compressed
-    # already.
+    # Left off deliberately. UPX-packing is one of the strongest single
+    # triggers for heuristic malware detection, and it buys nothing here —
+    # the archive is compressed already.
     upx=False,
     console=False,
     version=VERSION_RESOURCE,
+)
+
+coll = COLLECT(  # noqa: F821
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="Crowdin Mate",
 )
