@@ -8,10 +8,11 @@ it does not build it):
     pyinstaller desktop.spec
 
 Produces the folder server/dist/Crowdin Mate/, holding an executable of
-the same name (.exe on Windows) alongside everything it needs. One
-FOLDER rather than one file — see the note above COLLECT at the bottom
-for why that matters here. See README's "Building a release" section for
-the full release process (both platforms, GitHub Actions).
+the same name (.exe on Windows) alongside everything it needs. Read the
+note above EXE at the bottom before collapsing that into a single file —
+Defender blocks the one-file build outright once it has been downloaded.
+See README's "Building a release" section for the full release process
+(both platforms, GitHub Actions).
 
 Windows uses pywebview's native WebView2 backend (bundled with Windows
 10 21H2+/11) — nothing Qt-related gets pulled in there. Linux uses the
@@ -145,18 +146,26 @@ a = Analysis(  # noqa: F821
 
 pyz = PYZ(a.pure)  # noqa: F821
 
-# One-FOLDER, not one-file. a.binaries/a.datas go to COLLECT below instead
-# of being appended to the exe.
+# One FOLDER, not one file — and this is load-bearing, not a preference.
 #
-# The one-file build appends a compressed archive to a self-extracting stub,
-# which unpacks ~20MB into a temp directory and runs a Python interpreter
-# out of it on every launch. That is close to the textbook description of a
-# dropper, and it is why PyInstaller one-file builds are so routinely caught
-# by heuristic scanners — a real report of Trojan:Win32/Wacatac.B!ml against
-# a release is what prompted this.
+# A one-file build appends the payload to a self-extracting stub that
+# unpacks ~20MB to a temp directory and runs a Python interpreter out of it
+# on every launch. That is close to the textbook description of a dropper.
+# Measured, not assumed: a one-file exe carrying Mark of the Web (i.e. any
+# copy someone downloaded) is DETECTED AND BLOCKED OUTRIGHT by Defender as
+# Trojan:Win32/Wacatac.B!ml — Windows refuses to start it at all. The same
+# exe without the mark scans clean, which is why this is so easy to miss
+# when testing a build you made yourself.
 #
-# It also costs a measurable amount of startup time on every single run,
-# since the unpacking is not cached between launches.
+# The same test on a one-folder build: runs, no detection.
+#
+# One-folder has its own downloaded-only failure — .NET refuses to load the
+# Mark-of-the-Web-tagged pythonnet assembly — but that one we can fix, and
+# do, in desktop.py's _unblock_bundled_dotnet_assemblies. A Defender block
+# we cannot.
+#
+# One-folder also starts about a second faster (2.3s vs 3.4s median), since
+# nothing is unpacked per launch.
 exe = EXE(  # noqa: F821
     pyz,
     a.scripts,
@@ -167,7 +176,7 @@ exe = EXE(  # noqa: F821
     strip=False,
     # Left off deliberately. UPX-packing is one of the strongest single
     # triggers for heuristic malware detection, and it buys nothing here —
-    # the archive is compressed already.
+    # the payload is compressed already.
     upx=False,
     console=False,
     version=VERSION_RESOURCE,

@@ -13,18 +13,75 @@ fixed port, differs in one more way: see _pick_port below.
 """
 
 import logging
+import os
 import socket
 import sys
 import threading
 import time
 import urllib.request
 import webbrowser
+from pathlib import Path
 
 import uvicorn
-import webview
 
-from app.config import DATA_DIR
-from app.main import app
+
+def _unblock_bundled_dotnet_assemblies() -> None:
+    """Strip Mark of the Web from our own bundled .NET assemblies.
+
+    Windows tags downloaded files with a Zone.Identifier stream, and
+    extracting a zip in Explorer copies that tag onto every extracted file.
+    The .NET Framework then refuses to load a tagged assembly — so
+    pywebview's WinForms backend dies on `import clr` with:
+
+        RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize
+        from ...\\_internal\\pythonnet\\runtime\\Python.Runtime.dll
+
+    Reported by a user on v0.4.1 and reproduced here by tagging a local
+    build's files with ZoneId=3. It doesn't happen when running from source
+    or from a build you made yourself, which is exactly why it shipped.
+
+    Scope is our own bundle directory, only on Windows, only when frozen.
+    Every .dll in it, not a hand-picked list: a first attempt limited to
+    pythonnet/runtime got past the error above and straight into the same
+    failure on webview/lib/Microsoft.Web.WebView2.Core.dll. Whichever
+    assemblies pywebview reaches for is its business, not something worth
+    tracking here, so the whole bundle is cleared in one pass.
+
+    Only .dll files. Ordinary Python extension modules load through
+    LoadLibrary, which ignores this tag entirely — .NET assembly loading is
+    the only thing that consults it — and leaving the executable's own mark
+    alone matters: that one is SmartScreen's business, not ours.
+
+    This isn't defeating a security control: nothing runs that the user
+    hasn't already chosen to run — they had to get past SmartScreen to
+    launch this executable at all — and it only ever touches files that
+    shipped inside this application's own directory. An installer would
+    have the same effect by writing files that were never tagged.
+
+    Best-effort throughout. A read-only install directory, or a build with
+    no .NET in it, just means there's nothing to do here.
+    """
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    bundle_dir = Path(getattr(sys, "_MEIPASS", "") or Path(sys.executable).parent)
+    if not bundle_dir.is_dir():
+        return
+    for dll in bundle_dir.rglob("*.dll"):
+        try:
+            os.remove(f"{dll}:Zone.Identifier")
+        except OSError:
+            # Not tagged (the normal case), or not ours to change.
+            pass
+
+
+# Has to run before pywebview is imported: importing it pulls in clr, which
+# is what actually fails on a tagged assembly.
+_unblock_bundled_dotnet_assemblies()
+
+import webview  # noqa: E402
+
+from app.config import DATA_DIR  # noqa: E402
+from app.main import app  # noqa: E402
 
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8000

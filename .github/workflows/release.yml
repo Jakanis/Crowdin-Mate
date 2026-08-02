@@ -15,9 +15,11 @@ permissions:
 
 jobs:
   build:
-    # Archives, not bare executables: the build is one-folder now (see
-    # desktop.spec on why), so each platform ships its folder packed in
-    # whatever that platform extracts without extra tools.
+    # Archives, not bare executables: the build is one-folder (see
+    # desktop.spec on why that's required, not cosmetic), so each platform
+    # ships its folder packed in whatever that platform extracts without
+    # extra tools. It also avoids Edge blocking a bare .exe download with
+    # "isn't commonly downloaded".
     strategy:
       matrix:
         include:
@@ -76,13 +78,15 @@ jobs:
         run: pyinstaller desktop.spec --noconfirm
 
       # Both archive the "Crowdin Mate" folder ITSELF, not its contents, so
-      # extracting can't scatter ~700 files into whatever directory someone
+      # extracting can't scatter files into whatever directory someone
       # happened to be in.
       - name: Package (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: Compress-Archive -Path "server/dist/Crowdin Mate" -DestinationPath "${{ matrix.asset_name }}"
 
+      # tar rather than zip on Linux specifically to carry the executable
+      # bit — a zip would drop it and leave people running chmod first.
       - name: Package (Linux)
         if: matrix.os == 'ubuntu-latest'
         shell: bash
