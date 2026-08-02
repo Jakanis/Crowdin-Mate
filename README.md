@@ -98,11 +98,33 @@ hardcoded: pick any project your account has access to from the header.
 
 ### Windows may warn you about the download
 
-Windows Defender flags the Windows build as `Trojan:Win32/Wacatac.B!ml`, and
-SmartScreen may separately say the publisher is unknown. Here is what that
-means, honestly:
+You will most likely see **two different warnings**, from two separate
+systems. Neither means malware was found in the file.
 
-- **This is a heuristic, not a match against known malware.** The `!ml`
+**1. "This file isn't commonly downloaded" / "Publisher: Unknown."** This is
+SmartScreen, and it is a *popularity and identity* check, not a scan. Every
+new release is a brand-new file that nobody has downloaded yet, and the
+binary carries no code-signing certificate naming a publisher — so
+SmartScreen has nothing to go on and says so. A brand-new file from a
+well-known publisher would pass; ours fails on both counts. To open it
+anyway:
+
+- In Edge, the download will be held with a warning. Open the downloads
+  list, click the **⋯** next to the file, choose **Keep**, then **Keep
+  anyway** on the confirmation.
+- On launching it, the blue "Windows protected your PC" dialog appears.
+  Click **More info**, then **Run anyway**.
+- If Windows keeps blocking it afterwards, right-click the file →
+  **Properties** → tick **Unblock** at the bottom → **OK**.
+
+This warning will keep appearing on every new release until the binary is
+signed, and to a lesser extent until enough people have downloaded that
+specific file.
+
+**2. `Trojan:Win32/Wacatac.B!ml` from Windows Defender.** This one is a
+malware verdict, so it deserves a real explanation rather than a shrug:
+
+- **It is a heuristic, not a match against known malware.** The `!ml`
   suffix marks a machine-learning verdict. `Wacatac.B!ml` is a broad bucket
   that PyInstaller-built applications land in routinely, because the shape
   of the file is genuinely the shape antivirus heuristics are built to
@@ -123,13 +145,13 @@ means, honestly:
 
   and compare it against `Crowdin-Mate-Windows.exe.sha256` from the same
   release.
-- **What we cannot do yet:** the binary is unsigned. A code-signing
-  certificate is what actually resolves both the Defender heuristic and the
-  SmartScreen warning, and it costs money annually. Until then this warning
-  is expected on every release.
+- **What we cannot do yet:** the binary is unsigned. Code signing is what
+  resolves the SmartScreen half outright and, as the signed publisher builds
+  reputation, the Defender half too. Until then both warnings are expected
+  on every release.
 - **If you would rather not run an unsigned binary at all,** run from source
   instead — see "Running from source" below. It is the same code, with
-  nothing packed.
+  nothing packed, and neither warning applies.
 
 If you have already downloaded it and want the detection reviewed, the file
 can be submitted to Microsoft at
