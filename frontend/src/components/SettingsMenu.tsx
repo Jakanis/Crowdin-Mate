@@ -1,4 +1,6 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { api } from "../api/client";
 import {
   UI_SCALE_STEPS,
   useCrowdinPalette,
@@ -32,6 +34,71 @@ const SCALE_LABELS: Record<number, string> = {
   1.25: "Large",
   1.4: "X-Large",
 };
+
+const LAUNCH_MODE_OPTIONS: { value: "window" | "browser"; label: string }[] = [
+  { value: "window", label: "App window" },
+  { value: "browser", label: "Browser" },
+];
+
+/** Where the app opens itself — its own window, or a tab in your normal
+ * browser (for extensions, devtools, multiple windows).
+ *
+ * Server-side rather than localStorage, unlike every other setting here:
+ * the launcher has to read it before there's any window or frontend to ask,
+ * and in browser mode there's never a webview whose storage could hold it.
+ *
+ * Deliberately does NOT restart the app for you. Restarting on a settings
+ * click means taking away whatever you were in the middle of, and the app
+ * you'd be restarting is the one showing this menu — so it says what it
+ * needs instead, right where the change was made. The Quit button in the
+ * header is one click away if you want it now.
+ */
+function LaunchModeSection() {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ["launch-mode"], queryFn: api.getLaunchMode });
+  const [changed, setChanged] = useState(false);
+
+  const setMode = useMutation({
+    mutationFn: (mode: "window" | "browser") => api.setLaunchMode(mode),
+    onSuccess: () => {
+      setChanged(true);
+      queryClient.invalidateQueries({ queryKey: ["launch-mode"] });
+    },
+  });
+  const openNow = useMutation({ mutationFn: api.openInBrowser });
+
+  const mode = query.data?.mode;
+  // Null when the backend is running on its own (dev), where there is no
+  // launcher to have chosen a mode and nothing for either control to act on.
+  if (query.data && query.data.current_url == null) return null;
+
+  return (
+    <div className="settings-section">
+      <div className="settings-label">Open in</div>
+      <div className="settings-segmented">
+        {LAUNCH_MODE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            className={mode === opt.value ? "active" : ""}
+            onClick={() => setMode.mutate(opt.value)}
+            disabled={setMode.isPending || query.isLoading}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {changed && <p className="settings-note">Applies the next time you start Crowdin Mate.</p>}
+      <button
+        className="settings-wide-button"
+        onClick={() => openNow.mutate()}
+        disabled={openNow.isPending}
+        title="Opens this running app in your default browser now, without restarting. The app window stays open."
+      >
+        {openNow.isSuccess ? "Opened in browser" : "Open in browser now"}
+      </button>
+    </div>
+  );
+}
 
 interface SettingsMenuProps {
   autoAdvance: boolean;
@@ -129,6 +196,7 @@ export function SettingsMenu({
                 ))}
               </div>
             </div>
+            <LaunchModeSection />
             <div className="settings-section">
               <div className="settings-label">Font size</div>
               <div className="settings-stepper">

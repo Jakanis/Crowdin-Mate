@@ -349,6 +349,17 @@ export const api = {
   /** Stops the app itself, not just this page — see the endpoint's own note
    * on what "stopping" means per launch mode. */
   shutdown: () => request<{ stopping: boolean }>("/shutdown", { method: "POST" }),
+  /** current_url is null when the backend is running on its own rather than
+   * under the desktop launcher, which is also when "Open in browser" has
+   * nothing to open. */
+  getLaunchMode: () =>
+    request<{ mode: "window" | "browser"; current_url: string | null }>("/settings/launch-mode"),
+  setLaunchMode: (mode: "window" | "browser") =>
+    request<{ mode: string }>("/settings/launch-mode", {
+      method: "POST",
+      body: JSON.stringify({ mode }),
+    }),
+  openInBrowser: () => request<{ opened: string }>("/open-in-browser", { method: "POST" }),
   getSimulateOffline: () => request<{ enabled: boolean }>("/debug/simulate-offline"),
   setSimulateOffline: (enabled: boolean) =>
     request<{ enabled: boolean }>("/debug/simulate-offline", {

@@ -456,6 +456,19 @@ body {
   gap: 6px;
 }
 
+/* Sits under the control it explains, in the accent rather than the warning
+   colour — nothing is wrong, there's just one more step. */
+.settings-note {
+  margin: 6px 0 0;
+  font-size: calc(12px * var(--ui-scale));
+  color: var(--accent);
+}
+
+.settings-wide-button {
+  margin-top: 8px;
+  width: 100%;
+}
+
 /* Quiet until you mean it: grey alongside the status badge, and only red
    once armed — a permanently red button beside a badge people click all
    the time would read as an error state rather than an action.

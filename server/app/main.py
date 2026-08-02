@@ -12,6 +12,7 @@ import sqlite3
 import sys
 import threading
 import time
+import webbrowser
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -363,6 +364,82 @@ async def shutdown_app():
 
     threading.Thread(target=stop, daemon=True).start()
     return {"stopping": True}
+
+
+LAUNCH_MODE_KEY = "launch_mode"
+LAUNCH_MODES = ("window", "browser")
+
+
+def get_launch_mode() -> str:
+    """How the app should open itself next time it starts.
+
+    Lives in SQLite rather than localStorage because the process that needs
+    it — desktop.py, deciding whether to build a native window at all — runs
+    before any frontend exists to ask, and in browser mode there is never a
+    webview whose storage could hold it.
+    """
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM app_config WHERE key = ?", (LAUNCH_MODE_KEY,)).fetchone()
+    value = row["value"] if row else None
+    return value if value in LAUNCH_MODES else "window"
+
+
+class LaunchModeIn(BaseModel):
+    mode: str
+
+
+@app.get("/settings/launch-mode")
+async def read_launch_mode():
+    return {"mode": get_launch_mode(), "current_url": _current_url()}
+
+
+@app.post("/settings/launch-mode")
+async def write_launch_mode(body: LaunchModeIn):
+    if body.mode not in LAUNCH_MODES:
+        raise HTTPException(status_code=400, detail=f"mode must be one of {LAUNCH_MODES}")
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO app_config (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (LAUNCH_MODE_KEY, body.mode),
+        )
+    return {"mode": body.mode}
+
+
+_current_url_value: str | None = None
+
+
+def set_current_url(url: str) -> None:
+    """Where this run is actually being served, told to us by the launcher.
+
+    Not derivable here: the port is chosen at startup and falls back to an
+    OS-assigned one when 8000 is taken (see desktop.py's _pick_port), so
+    hardcoding 8000 in a link would sometimes point at whatever else holds
+    that port.
+    """
+    global _current_url_value
+    _current_url_value = url
+
+
+def _current_url() -> str | None:
+    return _current_url_value
+
+
+@app.post("/open-in-browser")
+async def open_in_browser():
+    """Open this running instance in the system browser, right now.
+
+    Separate from the launch-mode setting on purpose: that one only takes
+    effect next start, and "I want this in a real browser tab" is usually a
+    thing you want in the moment — to use an extension, or devtools, or a
+    second window. The native window stays open; both talk to the same
+    backend.
+    """
+    url = _current_url()
+    if url is None:
+        raise HTTPException(status_code=409, detail="Not running under the desktop launcher")
+    await run_in_threadpool(webbrowser.open, url)
+    return {"opened": url}
 
 
 class SimulateOfflineIn(BaseModel):

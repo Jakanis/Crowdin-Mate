@@ -1,6 +1,8 @@
 """Desktop entrypoint: runs the FastAPI backend in a background thread
 and opens it in a native window via pywebview, instead of a browser tab
-— pass --browser to get a plain browser tab instead (see BROWSER_MODE).
+— pass --browser to get a plain browser tab instead, or set it once in
+Settings → Open in, which is the same choice without a command line
+(see _browser_mode).
 
 Requires the frontend to already be built (`npm run build` in
 frontend/, producing frontend/dist) — main.py mounts that directory as
@@ -81,7 +83,8 @@ _unblock_bundled_dotnet_assemblies()
 import webview  # noqa: E402
 
 from app.config import DATA_DIR  # noqa: E402
-from app.main import app, set_shutdown_handler  # noqa: E402
+from app.db import init_db  # noqa: E402
+from app.main import app, get_launch_mode, set_current_url, set_shutdown_handler  # noqa: E402
 
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8000
@@ -95,7 +98,7 @@ STARTUP_TIMEOUT_SECONDS = 15
 # announces itself via the browser tab that opens; stop it the same way
 # you'd stop any other local server (Task Manager, or Ctrl+C / closing
 # the terminal if launched from one).
-BROWSER_MODE = "--browser" in sys.argv
+BROWSER_MODE_FLAG = "--browser" in sys.argv
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +183,31 @@ def _wait_until_ready(port: int, timeout: float) -> bool:
     return False
 
 
+def _browser_mode() -> bool:
+    """--browser still wins, but it is no longer the only way in.
+
+    Requiring a command line to get a browser tab meant the option may as
+    well not exist for anyone who double-clicks the app — which is everyone
+    it was built for. The same choice is a setting now (Settings → Open in),
+    stored server-side and read here at startup, before there's any window
+    or frontend to ask.
+
+    Reading it can't be allowed to stop the app from starting: a cache from
+    a much older version, or a first run with no database yet, should fall
+    back to the window rather than failing.
+    """
+    if BROWSER_MODE_FLAG:
+        return True
+    try:
+        init_db()
+        return get_launch_mode() == "browser"
+    except Exception:
+        logger.warning("Couldn't read the saved launch mode; opening a window.", exc_info=True)
+        return False
+
+
 def main() -> None:
+    browser_mode = _browser_mode()
     port = _pick_port(PREFERRED_PORT)
     if port != PREFERRED_PORT:
         logger.warning(
@@ -200,8 +227,12 @@ def main() -> None:
         logger.error("Backend didn't come up within %ss — opening the window anyway.", STARTUP_TIMEOUT_SECONDS)
 
     url = f"http://{HOST}:{port}"
+    # The UI's "Open in browser" needs the real URL, and the port isn't
+    # knowable from inside the app — see _pick_port on why it may not be
+    # 8000.
+    set_current_url(url)
 
-    if BROWSER_MODE:
+    if browser_mode:
         # No native window at all — open the system default browser at
         # the running backend, then just block until the server stops so
         # the process (and the daemon server thread with it) doesn't exit
