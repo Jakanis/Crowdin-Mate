@@ -78,7 +78,19 @@ jobs:
         shell: bash
         run: cp "${{ matrix.built_path }}" "${{ matrix.asset_name }}"
 
+      # Published alongside each binary so anyone can check that what they
+      # downloaded is byte-for-byte what this workflow produced from the
+      # tagged source. That matters most on Windows, where the unsigned
+      # single-file exe gets flagged by Defender's ML heuristics (see
+      # README) — "is this file actually the release?" should be answerable
+      # without taking anyone's word for it.
+      - name: Checksum
+        shell: bash
+        run: sha256sum "${{ matrix.asset_name }}" > "${{ matrix.asset_name }}.sha256"
+
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.asset_name }}
+          files: |
+            ${{ matrix.asset_name }}
+            ${{ matrix.asset_name }}.sha256

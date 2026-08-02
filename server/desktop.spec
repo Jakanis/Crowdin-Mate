@@ -19,6 +19,7 @@ own copy of Qt), so excluding them on Windows keeps that build smaller
 without losing anything it needed.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -32,8 +33,73 @@ if not FRONTEND_DIST.is_dir():
     )
 
 IS_LINUX = sys.platform.startswith("linux")
+IS_WINDOWS = sys.platform.startswith("win")
 
 block_cipher = None
+
+
+def _write_windows_version_resource() -> str:
+    """Stamp the exe with a Windows version resource, and return its path.
+
+    Without one, the built exe has no CompanyName, ProductName, version or
+    description at all — the properties dialog is blank. That is worth
+    fixing on its own, and it also matters for how the binary is received:
+    a brand-new unsigned single-file executable with no metadata whatsoever
+    is close to the profile Defender's ML heuristics are built to be
+    suspicious of, which is how a release ends up flagged as
+    Trojan:Win32/Wacatac.B!ml (an ML bucket, not a signature match).
+
+    Metadata alone will not clear that — see README's own section — but it
+    removes one of the few signals we can actually control for free.
+
+    Version comes from frontend/package.json so there is one place to bump
+    it, rather than a second copy here to forget about.
+    """
+    raw = json.loads((REPO_ROOT / "frontend" / "package.json").read_text(encoding="utf-8"))["version"]
+    parts = [int(p) for p in raw.split(".")][:3]
+    while len(parts) < 4:
+        parts.append(0)
+    quad = tuple(parts)
+    dotted = ".".join(str(p) for p in quad)
+
+    resource = f"""VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers={quad},
+    prodvers={quad},
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '040904B0',
+        [
+          StringStruct('CompanyName', 'Crowdin Mate contributors'),
+          StringStruct('FileDescription', 'Crowdin Mate - offline-tolerant desktop client for Crowdin'),
+          StringStruct('FileVersion', '{dotted}'),
+          StringStruct('InternalName', 'Crowdin Mate'),
+          StringStruct('LegalCopyright', 'MIT License'),
+          StringStruct('OriginalFilename', 'Crowdin Mate.exe'),
+          StringStruct('ProductName', 'Crowdin Mate'),
+          StringStruct('ProductVersion', '{dotted}'),
+        ],
+      )
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+  ],
+)
+"""
+    path = SPEC_DIR / "build" / "version_info.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(resource, encoding="utf-8")
+    return str(path)
+
+
+VERSION_RESOURCE = _write_windows_version_resource() if IS_WINDOWS else None
 
 a = Analysis(  # noqa: F821
     ["desktop.py"],
@@ -86,6 +152,11 @@ exe = EXE(  # noqa: F821
     name="Crowdin Mate",
     debug=False,
     strip=False,
+    # Left off deliberately. UPX-packing an already self-extracting binary
+    # is one of the strongest single triggers for heuristic malware
+    # detection, and it buys nothing here — the archive is compressed
+    # already.
     upx=False,
     console=False,
+    version=VERSION_RESOURCE,
 )

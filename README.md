@@ -96,6 +96,48 @@ account (OAuth or a Personal Access Token, your choice — see "Prerequisites"
 below) — nothing is pre-configured or shared between users, and no project is
 hardcoded: pick any project your account has access to from the header.
 
+### Windows may warn you about the download
+
+Windows Defender flags the Windows build as `Trojan:Win32/Wacatac.B!ml`, and
+SmartScreen may separately say the publisher is unknown. Here is what that
+means, honestly:
+
+- **This is a heuristic, not a match against known malware.** The `!ml`
+  suffix marks a machine-learning verdict. `Wacatac.B!ml` is a broad bucket
+  that PyInstaller-built applications land in routinely, because the shape
+  of the file is genuinely the shape antivirus heuristics are built to
+  distrust: a single unsigned executable that unpacks a compressed payload
+  into a temp directory at startup and runs a Python interpreter out of it.
+  A legitimate app packaged this way and an actual dropper look similar from
+  the outside.
+- **We are not asking you to take that on faith.** Every release is built by
+  [GitHub Actions](.github/workflows/release.yml) from the tagged source in
+  this repository — you can read the workflow, read the source, and see the
+  build log for the exact run that produced the file. Each binary ships with
+  a `.sha256` file next to it, so you can confirm your download is
+  byte-for-byte what that run produced:
+
+  ```powershell
+  Get-FileHash .\Crowdin-Mate-Windows.exe -Algorithm SHA256
+  ```
+
+  and compare it against `Crowdin-Mate-Windows.exe.sha256` from the same
+  release.
+- **What we cannot do yet:** the binary is unsigned. A code-signing
+  certificate is what actually resolves both the Defender heuristic and the
+  SmartScreen warning, and it costs money annually. Until then this warning
+  is expected on every release.
+- **If you would rather not run an unsigned binary at all,** run from source
+  instead — see "Running from source" below. It is the same code, with
+  nothing packed.
+
+If you have already downloaded it and want the detection reviewed, the file
+can be submitted to Microsoft at
+[microsoft.com/wdsi/filesubmission](https://www.microsoft.com/en-us/wdsi/filesubmission)
+as a suspected false positive; they typically respond within a day or two,
+and a cleared verdict propagates to everyone's Defender rather than just
+yours.
+
 ## Prerequisites
 
 - **Python 3.12+** and **Node.js 20+** (both installed) — only needed to run
