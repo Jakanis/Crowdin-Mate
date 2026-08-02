@@ -2340,9 +2340,20 @@ body {
   border-color: var(--progress-translated);
 }
 
-.progress-pie {
+/* Right-aligned on the wrapper rather than the svg — see ProgressPie.tsx.
+   Same 8px from the edge as .progress-bar and .progress-mark, so a folder's
+   bar, a file's pie and a finished file's checkmark all stack up on one
+   vertical line down the tree instead of each starting wherever its own
+   name happened to end. */
+.progress-pie-wrap {
   margin-left: auto;
-  margin-right: 8px;
+  padding-right: 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.progress-pie {
   flex-shrink: 0;
   width: 20px;
   height: 20px;

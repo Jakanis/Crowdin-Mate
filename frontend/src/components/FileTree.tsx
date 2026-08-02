@@ -485,8 +485,10 @@ export function FileTree({ projectId, languageId, directories, files, onSelectFi
 // to stay distinct from blue on a white background reads as almost
 // invisible on a near-black one, so each theme needs its own pair.
 //
-// ProgressPie (used for files, both here and in TabBar's tabs) lives in
-// ./ProgressPie — ProgressBar stays here since directories are only ever
+// ProgressPie lives in ./ProgressPie alongside the shared hover card. It's
+// used only by this tree's file rows now — tabs moved to their own edge
+// strip (see TabProgressStrip), and only ProgressHover is still shared with
+// them. ProgressBar stays here since directories are only ever
 // rendered by this tree.
 const TRANSLATED_COLOR = "var(--progress-translated)";
 const APPROVED_COLOR = "var(--progress-approved)";

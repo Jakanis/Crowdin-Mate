@@ -187,8 +187,13 @@ export function ProgressPie({ progress }: { progress: ProgressInfo }) {
   const circumference = 2 * Math.PI * r;
   const dash = (pct: number) => `${(circumference * pct) / 100} ${circumference}`;
 
+  // The class goes on the HOVER WRAPPER, not just the svg. ProgressHover
+  // renders a span around its children, so margin-left:auto on the svg only
+  // ever pushed it within a span already shrunk to fit it — leaving the pie
+  // sitting against the filename while folder bars, which do pass their
+  // class through here, sat at the right edge.
   return (
-    <ProgressHover progress={progress}>
+    <ProgressHover progress={progress} className="progress-pie-wrap">
     <svg className="progress-pie" viewBox={`0 0 ${size} ${size}`}>
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TRACK_COLOR} strokeWidth={size / 2} />
       <circle
