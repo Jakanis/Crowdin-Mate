@@ -40,6 +40,24 @@ const LAUNCH_MODE_OPTIONS: { value: "window" | "browser"; label: string }[] = [
   { value: "browser", label: "Browser" },
 ];
 
+/** Whether this page is being shown in the app's own window rather than a
+ * browser tab.
+ *
+ * pywebview injects a `pywebview` global into every page it loads (see
+ * webview/js/api.js in the package), and nothing else does — so its absence
+ * means a real browser. Asking the SERVER which mode it launched in would
+ * answer a different question: "Open in browser now" can itself produce a
+ * browser tab served by a window-mode instance, and that tab shouldn't
+ * offer to open yet another one.
+ *
+ * Checked at render rather than once at module load, so a page that renders
+ * before the injection lands picks it up on the next render instead of
+ * being stuck with the wrong answer for the session.
+ */
+function inNativeWindow(): boolean {
+  return typeof (window as { pywebview?: unknown }).pywebview !== "undefined";
+}
+
 /** Where the app opens itself — its own window, or a tab in your normal
  * browser (for extensions, devtools, multiple windows).
  *
@@ -88,14 +106,16 @@ function LaunchModeSection() {
         ))}
       </div>
       {changed && <p className="settings-note">Applies the next time you start Crowdin Mate.</p>}
-      <button
-        className="settings-wide-button"
-        onClick={() => openNow.mutate()}
-        disabled={openNow.isPending}
-        title="Opens this running app in your default browser now, without restarting. The app window stays open."
-      >
-        {openNow.isSuccess ? "Opened in browser" : "Open in browser now"}
-      </button>
+      {inNativeWindow() && (
+        <button
+          className="settings-wide-button"
+          onClick={() => openNow.mutate()}
+          disabled={openNow.isPending}
+          title="Opens this running app in your default browser now, without restarting. The app window stays open."
+        >
+          {openNow.isSuccess ? "Opened in browser" : "Open in browser now"}
+        </button>
+      )}
     </div>
   );
 }

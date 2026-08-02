@@ -14,6 +14,7 @@ under ~/.crowdin-mate. Only how it's launched differs — and, since a
 fixed port, differs in one more way: see _pick_port below.
 """
 
+import json
 import logging
 import os
 import socket
@@ -84,7 +85,13 @@ import webview  # noqa: E402
 
 from app.config import DATA_DIR  # noqa: E402
 from app.db import init_db  # noqa: E402
-from app.main import app, get_launch_mode, set_current_url, set_shutdown_handler  # noqa: E402
+from app.main import (  # noqa: E402
+    app,
+    get_launch_mode,
+    set_current_url,
+    set_focus_handler,
+    set_shutdown_handler,
+)
 
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8000
@@ -183,6 +190,59 @@ def _wait_until_ready(port: int, timeout: float) -> bool:
     return False
 
 
+INSTANCE_FILE = DATA_DIR / "instance.json"
+
+
+def _read_running_instance() -> str | None:
+    """URL of an instance already running, or None.
+
+    Recorded in a file rather than assumed to be port 8000, because it might
+    not be: _pick_port falls back to an OS-assigned port when 8000 is taken,
+    and a second launch has no way to guess which one that was.
+
+    The file outliving its process is normal — a crash or a kill leaves it
+    behind — so it is treated as a hint to check, never as proof. Anything
+    that doesn't answer as Crowdin Mate is ignored, which also covers the
+    case where some unrelated program has since taken that port.
+    """
+    try:
+        info = json.loads(INSTANCE_FILE.read_text(encoding="utf-8"))
+        url = info["url"]
+    except (OSError, ValueError, KeyError):
+        return None
+    try:
+        with urllib.request.urlopen(f"{url}/app-info", timeout=1.5) as resp:
+            if json.loads(resp.read()).get("app") == "crowdin-mate":
+                return url
+    except Exception:
+        return None
+    return None
+
+
+def _focus_running_instance(url: str) -> None:
+    try:
+        req = urllib.request.Request(f"{url}/focus", method="POST")
+        urllib.request.urlopen(req, timeout=3).close()
+    except Exception:
+        # It answered /app-info a moment ago, so it exists; failing to raise
+        # itself is not a reason to start a second copy on top of it.
+        logger.warning("Running instance at %s didn't respond to focus.", url, exc_info=True)
+
+
+def _write_instance_file(url: str) -> None:
+    try:
+        INSTANCE_FILE.write_text(json.dumps({"pid": os.getpid(), "url": url}), encoding="utf-8")
+    except OSError:
+        logger.warning("Couldn't record the instance file.", exc_info=True)
+
+
+def _clear_instance_file() -> None:
+    try:
+        INSTANCE_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _browser_mode() -> bool:
     """--browser still wins, but it is no longer the only way in.
 
@@ -207,6 +267,18 @@ def _browser_mode() -> bool:
 
 
 def main() -> None:
+    # One app, however many times it's launched. Without this, every launch
+    # started its own server: the second one couldn't have port 8000 so it
+    # took a random one, and in browser mode nothing on screen belonged to
+    # it — close the tab and you had an invisible process holding a port,
+    # findable only in Task Manager. Hand over to whoever's already running
+    # instead, and let them surface themselves.
+    running = _read_running_instance()
+    if running is not None:
+        logger.warning("Crowdin Mate is already running at %s — focusing it.", running)
+        _focus_running_instance(running)
+        return
+
     browser_mode = _browser_mode()
     port = _pick_port(PREFERRED_PORT)
     if port != PREFERRED_PORT:
@@ -231,6 +303,7 @@ def main() -> None:
     # knowable from inside the app — see _pick_port on why it may not be
     # 8000.
     set_current_url(url)
+    _write_instance_file(url)
 
     if browser_mode:
         # No native window at all — open the system default browser at
@@ -244,8 +317,14 @@ def main() -> None:
         # mode that most needs the button — closing the browser tab leaves
         # the server running with nothing on screen to suggest it.
         set_shutdown_handler(lambda: setattr(server, "should_exit", True))
+        # Launching again while this one runs opens another tab at it, which
+        # is the browser-mode equivalent of raising a window.
+        set_focus_handler(lambda: webbrowser.open(url))
         webbrowser.open(url)
-        server_thread.join()
+        try:
+            server_thread.join()
+        finally:
+            _clear_instance_file()
         return
 
     window = webview.create_window(
@@ -260,6 +339,25 @@ def main() -> None:
     # the same path as closing the window by hand, so Quit and the window's
     # own X button converge rather than being two different shutdowns.
     set_shutdown_handler(window.destroy)
+
+    def raise_window() -> None:
+        """Bring the existing window forward when the app is launched again.
+
+        restore() undoes a minimise; show() covers a hidden window. The
+        on_top flip is the part that actually steals focus on Windows, which
+        won't let a background process raise itself otherwise — set and
+        immediately cleared, so the window doesn't stay pinned above
+        everything else afterwards.
+        """
+        try:
+            window.restore()
+            window.show()
+            window.on_top = True
+            window.on_top = False
+        except Exception:
+            logger.warning("Couldn't raise the window.", exc_info=True)
+
+    set_focus_handler(raise_window)
     # Windows/macOS: leave the gui unspecified so pywebview picks its native
     # backend (WebView2 on Windows, already part of Windows 10 21H2+/11 —
     # genuinely zero extra install for almost everyone).
@@ -283,10 +381,13 @@ def main() -> None:
     # (~/.pywebview or %APPDATA%\pywebview) — one place to find or wipe
     # this app's local state, not two.
     storage_path = str(DATA_DIR / "webview")
-    if sys.platform.startswith("linux"):
-        webview.start(gui="qt", private_mode=False, storage_path=storage_path)
-    else:
-        webview.start(private_mode=False, storage_path=storage_path)
+    try:
+        if sys.platform.startswith("linux"):
+            webview.start(gui="qt", private_mode=False, storage_path=storage_path)
+        else:
+            webview.start(private_mode=False, storage_path=storage_path)
+    finally:
+        _clear_instance_file()
 
 
 if __name__ == "__main__":

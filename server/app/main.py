@@ -425,6 +425,36 @@ def _current_url() -> str | None:
     return _current_url_value
 
 
+_focus_handler: "Callable[[], None] | None" = None
+
+
+def set_focus_handler(handler: "Callable[[], None]") -> None:
+    """How this instance should bring itself to your attention.
+
+    Called when a SECOND launch finds this one already running (see
+    desktop.py's _focus_running_instance). What that should do depends on
+    the mode: raise the native window, or open another browser tab.
+    """
+    global _focus_handler
+    _focus_handler = handler
+
+
+@app.get("/app-info")
+async def app_info():
+    """Identifies this server as Crowdin Mate, for a second launch deciding
+    whether the thing already holding the port is us or something else
+    entirely — the answer changes whether it hands over or steps aside."""
+    return {"app": "crowdin-mate", "url": _current_url(), "pid": os.getpid()}
+
+
+@app.post("/focus")
+async def focus():
+    if _focus_handler is None:
+        raise HTTPException(status_code=409, detail="Not running under the desktop launcher")
+    await run_in_threadpool(_focus_handler)
+    return {"focused": True}
+
+
 @app.post("/open-in-browser")
 async def open_in_browser():
     """Open this running instance in the system browser, right now.
