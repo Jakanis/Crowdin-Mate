@@ -7,8 +7,12 @@ the Crowdin PAT and must never be reachable from the network.
 import asyncio
 import json
 import logging
+import os
 import sqlite3
 import sys
+import threading
+import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -306,6 +310,59 @@ async def delete_offline_queue_item(item_id: int):
             (row["string_id"], row["language_id"]),
         )
     return {"ok": True}
+
+
+_shutdown_handler: "Callable[[], None] | None" = None
+
+
+def set_shutdown_handler(handler: "Callable[[], None]") -> None:
+    """Register how this process should stop itself.
+
+    The right way to do that depends entirely on how the app was launched,
+    and only the launcher knows: a native window has to be destroyed before
+    the process can return, while --browser mode has to tell uvicorn to
+    stop, since nothing else is holding the process open. desktop.py
+    registers whichever applies (see its own main()).
+
+    Left unset when the backend is run on its own — `uvicorn app.main:app`
+    in dev — where stopping the server process outright is the only
+    sensible reading of "quit", and is what the endpoint falls back to.
+    """
+    global _shutdown_handler
+    _shutdown_handler = handler
+
+
+@app.post("/shutdown")
+async def shutdown_app():
+    """Quit the whole app from inside the UI.
+
+    A packaged app with no console and no menu bar is otherwise stopped by
+    closing its window — which does nothing at all in --browser mode, where
+    closing the tab leaves the server running invisibly until you go find it
+    in Task Manager.
+
+    Runs on a short delay in a separate thread so this response actually
+    reaches the browser first; without that the socket dies mid-write and
+    the UI can't tell "stopped" from "crashed".
+
+    Nothing is lost by stopping here: drafts, the offline queue and every
+    cached row are already committed to SQLite as they're made, not flushed
+    on exit.
+    """
+    handler = _shutdown_handler
+
+    def stop() -> None:
+        time.sleep(0.4)
+        if handler is not None:
+            handler()
+        else:
+            # Dev/backend-only: no launcher registered anything, so there's
+            # no window or server object to ask nicely. Everything durable
+            # is already committed, so this loses nothing.
+            os._exit(0)
+
+    threading.Thread(target=stop, daemon=True).start()
+    return {"stopping": True}
 
 
 class SimulateOfflineIn(BaseModel):

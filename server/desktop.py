@@ -81,7 +81,7 @@ _unblock_bundled_dotnet_assemblies()
 import webview  # noqa: E402
 
 from app.config import DATA_DIR  # noqa: E402
-from app.main import app  # noqa: E402
+from app.main import app, set_shutdown_handler  # noqa: E402
 
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8000
@@ -143,11 +143,29 @@ def _pick_port(preferred: int) -> int:
         return sock.getsockname()[1]
 
 
-def _run_server(port: int) -> None:
-    # warning, not info — nobody's watching a console for this (never true
-    # even in dev-mode strictly, but doubly so once packaged/windowed);
-    # only real problems are worth surfacing at all.
-    uvicorn.run(app, host=HOST, port=port, log_level="warning")
+def _build_server(port: int) -> uvicorn.Server:
+    """A Server instance we keep a reference to, rather than uvicorn.run().
+
+    uvicorn.run() builds its Server internally and hands nothing back, so
+    there'd be no way to stop it later — which is exactly what the Quit
+    button in the UI needs in --browser mode, where the server thread is
+    the only thing keeping the process alive.
+
+    warning, not info — nobody's watching a console for this (never quite
+    true even in dev mode, but doubly so once packaged and windowed); only
+    real problems are worth surfacing at all.
+    """
+    # timeout_graceful_shutdown bounds how long Quit can take. Without it,
+    # uvicorn waits indefinitely for open connections to close, and a
+    # browser tab left open on the "stopped" screen holds keep-alive
+    # sockets — measured: the port freed immediately but the process itself
+    # lingered well past the point anyone would still call it "quitting".
+    # There is nothing to drain anyway; everything durable is already
+    # committed to SQLite.
+    config = uvicorn.Config(
+        app, host=HOST, port=port, log_level="warning", timeout_graceful_shutdown=3
+    )
+    return uvicorn.Server(config)
 
 
 def _wait_until_ready(port: int, timeout: float) -> bool:
@@ -174,7 +192,8 @@ def main() -> None:
             PREFERRED_PORT, port, PREFERRED_PORT,
         )
 
-    server_thread = threading.Thread(target=_run_server, args=(port,), daemon=True)
+    server = _build_server(port)
+    server_thread = threading.Thread(target=server.run, daemon=True)
     server_thread.start()
 
     if not _wait_until_ready(port, STARTUP_TIMEOUT_SECONDS):
@@ -184,20 +203,32 @@ def main() -> None:
 
     if BROWSER_MODE:
         # No native window at all — open the system default browser at
-        # the running backend, then just block forever so the process
-        # (and the daemon server thread with it) doesn't exit the moment
-        # main() would otherwise return.
+        # the running backend, then just block until the server stops so
+        # the process (and the daemon server thread with it) doesn't exit
+        # the moment main() would otherwise return.
+        #
+        # Quitting here means stopping the server, since it IS what's
+        # holding the process open: should_exit ends server.run(), the
+        # join below returns, and the process exits normally. This is the
+        # mode that most needs the button — closing the browser tab leaves
+        # the server running with nothing on screen to suggest it.
+        set_shutdown_handler(lambda: setattr(server, "should_exit", True))
         webbrowser.open(url)
         server_thread.join()
         return
 
-    webview.create_window(
+    window = webview.create_window(
         "Crowdin Mate",
         url,
         width=1360,
         height=880,
         min_size=(960, 640),
     )
+    # Destroying the window is what ends webview.start() below, after which
+    # main() returns and the daemon server thread goes with the process —
+    # the same path as closing the window by hand, so Quit and the window's
+    # own X button converge rather than being two different shutdowns.
+    set_shutdown_handler(window.destroy)
     # Windows/macOS: leave the gui unspecified so pywebview picks its native
     # backend (WebView2 on Windows, already part of Windows 10 21H2+/11 —
     # genuinely zero extra install for almost everyone).

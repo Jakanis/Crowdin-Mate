@@ -42,6 +42,81 @@ interface OfflineIndicatorProps {
   onJumpToItem?: (fileId: number, stringId: number, openComments: boolean) => void;
 }
 
+function PowerIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 2V8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M4.6 4.4a4.6 4.6 0 106.8 0"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Quit, as two clicks rather than one.
+ *
+ * It sits in the header next to a badge people click all the time to check
+ * the queue, and the cost of a slip is the whole app vanishing mid-sentence.
+ * Nothing is actually lost — drafts and the queue are in SQLite the moment
+ * they're made — but having to restart and find your place again is annoying
+ * enough to be worth one deliberate confirmation. Disarms itself after a few
+ * seconds so it can't sit armed indefinitely waiting to catch a later click.
+ */
+function QuitButton() {
+  const [armed, setArmed] = useState(false);
+  const [stopped, setStopped] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    // Long enough to be a confirmation rather than a reflex test — noticing
+    // the button changed, deciding, and clicking again is easily a few
+    // seconds, and having it disarm underneath you turns one deliberate
+    // quit into two confusing clicks that appear to do nothing.
+    const t = window.setTimeout(() => setArmed(false), 6000);
+    return () => window.clearTimeout(t);
+  }, [armed]);
+
+  const quit = useMutation({
+    mutationFn: api.shutdown,
+    // The server stops a moment after answering, so anything still polling
+    // would start throwing connection errors at a UI that can no longer do
+    // anything about them. The overlay replaces the app outright.
+    onSuccess: () => setStopped(true),
+    // A native window destroys itself before this resolves, which surfaces
+    // as a network error rather than a failure — treat it the same.
+    onError: () => setStopped(true),
+  });
+
+  if (stopped) {
+    return (
+      <div className="app-stopped-overlay">
+        <div className="app-stopped-card">
+          <h2>Crowdin Mate has stopped</h2>
+          <p>
+            Everything you'd typed is saved. Close this tab — reopening the app starts it
+            again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className={`icon-btn quit-button${armed ? " quit-button--armed" : ""}`}
+      onClick={() => (armed ? quit.mutate() : setArmed(true))}
+      disabled={quit.isPending}
+      title={armed ? "Click again to quit" : "Quit Crowdin Mate"}
+      aria-label={armed ? "Confirm quit" : "Quit"}
+    >
+      {armed ? "?" : <PowerIcon />}
+    </button>
+  );
+}
+
 function CacheRow({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
     <div className="cache-row" title={title}>
@@ -151,6 +226,7 @@ export function OfflineIndicator({ projectId, languageId, onJumpToItem }: Offlin
         {online ? "Online" : "Offline"}
         {hasQueueItems && <span className="offline-queue-count">{items.length}</span>}
       </button>
+      <QuitButton />
       {open && (
         <>
           <div className="settings-backdrop" onClick={() => setOpen(false)} />

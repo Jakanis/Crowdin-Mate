@@ -346,6 +346,9 @@ export const api = {
     request<{ drained: number }>(`/offline-queue/${itemId}/retry`, { method: "POST" }),
   deleteOfflineQueueItem: (itemId: number) =>
     request<{ ok: boolean }>(`/offline-queue/${itemId}`, { method: "DELETE" }),
+  /** Stops the app itself, not just this page — see the endpoint's own note
+   * on what "stopping" means per launch mode. */
+  shutdown: () => request<{ stopping: boolean }>("/shutdown", { method: "POST" }),
   getSimulateOffline: () => request<{ enabled: boolean }>("/debug/simulate-offline"),
   setSimulateOffline: (enabled: boolean) =>
     request<{ enabled: boolean }>("/debug/simulate-offline", {

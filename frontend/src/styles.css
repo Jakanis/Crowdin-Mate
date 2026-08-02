@@ -451,6 +451,70 @@ body {
 
 .offline-indicator {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Quiet until you mean it: grey alongside the status badge, and only red
+   once armed — a permanently red button beside a badge people click all
+   the time would read as an error state rather than an action.
+
+   Every rule is qualified with .icon-btn, which sets background, border and
+   colour of its own further down this file. Unqualified these tie on
+   specificity and lose on source order, so the armed state rendered with a
+   plain white background — caught by reading the computed style rather than
+   trusting the stylesheet. */
+.icon-btn.quit-button {
+  color: var(--fg-muted);
+  font-size: calc(15px * var(--ui-scale));
+}
+
+.icon-btn.quit-button:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+
+.icon-btn.quit-button--armed,
+.icon-btn.quit-button--armed:hover:not(:disabled) {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+  font-weight: 700;
+}
+
+/* Covers everything: once the server is gone the rest of the UI can't do
+   anything except fail, so leaving it interactive underneath would only
+   invite clicks that silently do nothing. */
+.app-stopped-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.app-stopped-card {
+  max-width: 380px;
+  padding: 22px 26px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  text-align: center;
+}
+
+.app-stopped-card h2 {
+  margin: 0 0 8px;
+  font-size: calc(17px * var(--ui-scale));
+}
+
+.app-stopped-card p {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: calc(13px * var(--ui-scale));
+  line-height: 1.5;
 }
 
 .offline-indicator-badge {
