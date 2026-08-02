@@ -61,8 +61,9 @@ const ROW_HEIGHT = 28;
 
 // Mirrors DIRECTORY_PROGRESS_MAX_AGE_SECONDS in progress_sync.py — the
 // server won't return anything newer inside this window, so re-asking
-// sooner just spends a round trip to be told the same numbers.
-const PROGRESS_REFETCH_MS = 15 * 60 * 1000;
+// sooner just spends a round trip to be told the same numbers. Change
+// both together or this silently becomes a pointless request every time.
+const PROGRESS_REFETCH_MS = 4 * 60 * 60 * 1000;
 
 /**
  * Renders the whole project tree without ever mounting more than a

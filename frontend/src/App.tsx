@@ -178,7 +178,7 @@ export function App() {
     localStorage.setItem(tabsStorageKey(projectId), JSON.stringify(payload));
   }, [projectId, openFiles, activeFileId, focusedStringIdByFile]);
 
-  const sync = useSyncTree(projectId ?? 0);
+  const sync = useSyncTree(projectId ?? 0, tree.data?.last_full_sync_at ?? null);
 
   // Files whose content may be stale versus Crowdin (flagged by sync's
   // changed_file_ids — see tree_sync.py) among the tabs actually open

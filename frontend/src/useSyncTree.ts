@@ -6,6 +6,18 @@ const MAX_HISTORY = 5;
 const FALLBACK_ESTIMATE_MS = 20_000;
 const AUTO_CHECK_INTERVAL_MS = 10 * 60_000;
 
+// How old the cached tree may get before it's re-crawled without being
+// asked. The lastActivity check below is what normally prompts a sync, but
+// it only paints the button — if you never press it, the tree simply never
+// updates, and a file added or renamed a month ago is still missing. This
+// bounds that at a day.
+const AUTO_SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Don't retry the automatic sync more often than this. Without it, a crawl
+// that fails — offline, an expired token — leaves the tree exactly as stale
+// as it was, which re-satisfies the condition and retries on the very next
+// tick, forever.
+const AUTO_SYNC_RETRY_MS = 60 * 60 * 1000;
+
 // Per-project — different projects crawl at very different speeds
 // (file count varies a lot), so one project's history shouldn't skew
 // another's progress estimate.
@@ -56,8 +68,15 @@ function averageDuration(projectId: number): number {
  *   sync button can be painted and its hover hint updated. The user
  *   still decides when to actually pull, via the same manual trigger()
  *   as always.
+ *
+ * - Daily floor: the check above only paints a button, so a tree nobody
+ *   presses sync on never updates at all — a file added or renamed weeks
+ *   ago stays missing. Once the cached tree passes a day old it re-crawls
+ *   on its own. That isn't the timer this hook deliberately removed: this
+ *   fires at most once a day against a real staleness measurement, not
+ *   every ten minutes regardless.
  */
-export function useSyncTree(projectId: number) {
+export function useSyncTree(projectId: number, lastFullSyncAt: string | null) {
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<number | null>(null);
   const [changedFileIds, setChangedFileIds] = useState<number[]>([]);
@@ -121,6 +140,42 @@ export function useSyncTree(projectId: number) {
     }, AUTO_CHECK_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [projectId]);
+
+  // A null lastFullSyncAt means this project has never been crawled, which
+  // App.tsx already handles with its own "No cached tree yet" screen and an
+  // explicit button — deliberately left alone, so a first run still starts
+  // when the user says so rather than on its own.
+  const syncMutateRef = useRef(mutation.mutate);
+  syncMutateRef.current = mutation.mutate;
+  const lastAutoSyncRef = useRef(0);
+  // Only the crawl itself, NOT isPendingRef, which also covers the cheap
+  // lastActivity check. That check fires on mount and is still in flight at
+  // the exact moment the tree query resolves and this first runs — sharing
+  // the ref meant the load-time attempt always bailed and the tree waited
+  // for the ten-minute tick instead. Caught on a real two-day-old cache
+  // that stayed at its old timestamp after a reload.
+  const syncPendingRef = useRef(false);
+  syncPendingRef.current = mutation.isPending;
+
+  useEffect(() => {
+    if (!projectId || lastFullSyncAt == null) return;
+
+    const maybeAutoSync = () => {
+      if (syncPendingRef.current || !projectIdRef.current) return;
+      const age = Date.now() - new Date(lastFullSyncAt).getTime();
+      if (!Number.isFinite(age) || age < AUTO_SYNC_MAX_AGE_MS) return;
+      if (Date.now() - lastAutoSyncRef.current < AUTO_SYNC_RETRY_MS) return;
+      lastAutoSyncRef.current = Date.now();
+      syncMutateRef.current();
+    };
+
+    maybeAutoSync();
+    // Re-checked on the same tick as the lastActivity probe rather than on
+    // its own timer — one is enough, and a session left open for days
+    // should still cross the threshold without a reload.
+    const id = window.setInterval(maybeAutoSync, AUTO_CHECK_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [projectId, lastFullSyncAt]);
 
   return {
     trigger: () => mutation.mutate(),

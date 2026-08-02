@@ -27,6 +27,13 @@ logger = logging.getLogger(__name__)
 # week old, so every folder outside the handful the user had personally
 # edited was reporting numbers from the day it was first opened.
 #
+# Four hours rather than minutes: these are aggregates over a whole folder,
+# so they move slowly, and the point is bounding how long a wrong number can
+# persist rather than tracking every edit. Anything you change yourself
+# still invalidates its own ancestry immediately, and a translation-change
+# scan expires what other people touched — this is only the backstop for
+# what neither of those saw. FileTree.tsx mirrors this value.
+#
 # Directories only. A folder here holds a median of 6 files but up to 391,
 # and get_children_progress costs one API call per uncached child, so
 # expiring file rows would turn each expansion of a big folder into
@@ -35,7 +42,7 @@ logger = logging.getLogger(__name__)
 # widest parent — so refreshing those is a handful of calls. Files instead
 # stay cached until something is known to have changed them: your own edit,
 # or a translation-change scan (see translation_changes.mark_files_for_recache).
-DIRECTORY_PROGRESS_MAX_AGE_SECONDS = 900
+DIRECTORY_PROGRESS_MAX_AGE_SECONDS = 4 * 60 * 60
 
 
 def _now() -> str:
