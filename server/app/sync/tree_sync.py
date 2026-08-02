@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from app.crowdin_client import call_with_limits, get_client
 from app.db import get_conn
+from app.sync import search_fts
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,80 @@ def _iso(value) -> str | None:
     if isinstance(value, str):
         return value
     return value.isoformat()
+
+
+# Every table below hangs off a file that no longer exists, keyed by that
+# file's own strings rather than by the file. Deleting the file row alone
+# would leave all of this behind — most visibly the search index, which
+# would keep returning hits in files you can no longer open.
+_STRING_SCOPED_TABLES = (
+    "translations",
+    "deleted_translations",
+    "comments",
+    "tm_matches",
+    "glossary_matches",
+    "suggestion_lookups",
+    "translation_drafts",
+)
+
+_FILE_SCOPED_TABLES = ("source_strings", "file_progress", "file_language_sync", "file_search_sync")
+
+
+def _prune_missing(conn, project_id: int, live_dir_ids: set[int], live_file_ids: set[int]) -> dict:
+    """Drop cached files and directories Crowdin no longer lists.
+
+    Every write in this module is an upsert, which keeps a re-run safe but
+    can only ever add: a file deleted or moved out of the project on Crowdin
+    stayed in the tree forever, and its strings stayed searchable.
+
+    Safe here specifically because this crawl is `recursion=True` +
+    fetch-all, and every API call has already returned before the caller
+    opens this transaction — so reaching this point means the listing is the
+    complete current state, not a page of it. A failure anywhere earlier
+    raises before any of it, leaving the cache untouched.
+
+    Deliberately NOT touched: offline_queue. A queued write whose file has
+    vanished can't succeed, but silently discarding someone's unsent work on
+    the strength of a tree listing is worse than leaving it to fail visibly
+    and be dealt with.
+    """
+    stale_files = [
+        row["id"]
+        for row in conn.execute("SELECT id FROM files WHERE project_id = ?", (project_id,))
+        if row["id"] not in live_file_ids
+    ]
+    stale_dirs = [
+        row["id"]
+        for row in conn.execute("SELECT id FROM directories WHERE project_id = ?", (project_id,))
+        if row["id"] not in live_dir_ids
+    ]
+    if not stale_files and not stale_dirs:
+        return {"files": 0, "directories": 0, "strings": 0}
+
+    string_ids: list[int] = []
+    if stale_files:
+        marks = ",".join("?" * len(stale_files))
+        string_ids = [
+            row["id"]
+            for row in conn.execute(
+                f"SELECT id FROM source_strings WHERE file_id IN ({marks})", tuple(stale_files)
+            )
+        ]
+        if string_ids:
+            search_fts.delete_strings(conn, string_ids)
+            string_marks = ",".join("?" * len(string_ids))
+            for table in _STRING_SCOPED_TABLES:
+                conn.execute(f"DELETE FROM {table} WHERE string_id IN ({string_marks})", tuple(string_ids))
+        for table in _FILE_SCOPED_TABLES:
+            conn.execute(f"DELETE FROM {table} WHERE file_id IN ({marks})", tuple(stale_files))
+        conn.execute(f"DELETE FROM files WHERE id IN ({marks})", tuple(stale_files))
+
+    if stale_dirs:
+        marks = ",".join("?" * len(stale_dirs))
+        conn.execute(f"DELETE FROM directory_progress WHERE directory_id IN ({marks})", tuple(stale_dirs))
+        conn.execute(f"DELETE FROM directories WHERE id IN ({marks})", tuple(stale_dirs))
+
+    return {"files": len(stale_files), "directories": len(stale_dirs), "strings": len(string_ids)}
 
 
 def sync_project_tree(project_id: int) -> dict:
@@ -163,9 +238,31 @@ def sync_project_tree(project_id: int) -> dict:
                 (label["id"], project_id, label.get("title", ""), now),
             )
 
+        # An empty file listing against a non-empty cache is refused rather
+        # than obeyed. A project really can be emptied, but a listing that
+        # comes back empty for some other reason — a permission change, a
+        # response shape this code didn't anticipate — looks identical here,
+        # and the two outcomes are not comparable: one leaves a few stale
+        # rows, the other throws away the entire local cache, including
+        # every offline-readable string in it. Directories aren't part of
+        # the condition: a flat project legitimately has none.
+        if not files and previous_updated_at:
+            logger.warning(
+                "Project %s returned no files while %d are cached — skipping prune rather than "
+                "emptying the cache on a listing this suspicious",
+                project_id, len(previous_updated_at),
+            )
+            pruned = {"files": 0, "directories": 0, "strings": 0}
+        else:
+            pruned = _prune_missing(
+                conn, project_id, {d["id"] for d in directories}, {f["id"] for f in files}
+            )
+
     logger.info(
-        "Synced project %s tree: %d directories, %d files, %d labels, %d changed since last sync",
+        "Synced project %s tree: %d directories, %d files, %d labels, %d changed since last sync; "
+        "pruned %d file(s), %d director(ies), %d cached string(s)",
         project_id, len(directories), len(files), len(labels), len(changed_file_ids),
+        pruned["files"], pruned["directories"], pruned["strings"],
     )
     return {
         "project_id": project_id,
@@ -173,6 +270,7 @@ def sync_project_tree(project_id: int) -> dict:
         "files": len(files),
         "synced_at": now,
         "changed_file_ids": changed_file_ids,
+        "pruned": pruned,
     }
 
 

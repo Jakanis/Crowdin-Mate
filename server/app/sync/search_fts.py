@@ -68,3 +68,28 @@ def upsert_target_text(
         "INSERT OR REPLACE INTO strings_fts(rowid, identifier, source_text, target_text) VALUES (?, ?, ?, ?)",
         (rowid, identifier, source_text, target_text),
     )
+
+
+def delete_strings(conn: sqlite3.Connection, string_ids: list[int]) -> None:
+    """Drop every language's index row for these strings — used when their
+    file no longer exists on Crowdin (see prune_missing in tree_sync.py).
+
+    Both tables, in this order: strings_fts is keyed by the map's own id, so
+    clearing the map first would leave orphaned FTS rows with no way left to
+    find them, and they'd keep turning up in search results for files that
+    no longer exist.
+    """
+    if not string_ids:
+        return
+    placeholders = ",".join("?" * len(string_ids))
+    rowids = [
+        row["id"]
+        for row in conn.execute(
+            f"SELECT id FROM strings_fts_map WHERE string_id IN ({placeholders})", tuple(string_ids)
+        )
+    ]
+    if rowids:
+        conn.execute(
+            f"DELETE FROM strings_fts WHERE rowid IN ({','.join('?' * len(rowids))})", tuple(rowids)
+        )
+    conn.execute(f"DELETE FROM strings_fts_map WHERE string_id IN ({placeholders})", tuple(string_ids))
