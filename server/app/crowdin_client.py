@@ -21,6 +21,7 @@ import random
 import threading
 import time
 from collections import deque
+from contextlib import contextmanager
 
 import requests
 from crowdin_api import CrowdinClient
@@ -35,20 +36,71 @@ MAX_CONCURRENT = 6
 SUSTAINED_RATE_PER_SEC = 8
 MAX_RETRIES_ON_THROTTLE = 6
 
+# Background jobs — the tree crawl, the offline pre-cache — get a slice of
+# the budget, not all of it. They issue hundreds of calls back to back, and
+# with one shared limiter they starved everything the user was doing:
+# measured during a full tree crawl, comment lookups that normally answer in
+# 0.2s took 1.8s to 9.8s, and a file resync took 7.2s. That is what "opening
+# a file was slow" and "approve ignored my first click" actually were — the
+# request was queued behind a crawl nobody asked for, and the app looked
+# broken rather than busy.
+#
+# Two limits, because they fail differently: the semaphore stops background
+# work occupying every connection slot, and the rate reserve stops it
+# consuming the whole calls-per-second budget with slots to spare.
+MAX_CONCURRENT_BACKGROUND = 2
+INTERACTIVE_RESERVE_PER_SEC = 3
+
 _concurrency_gate = threading.Semaphore(MAX_CONCURRENT)
+_background_gate = threading.Semaphore(MAX_CONCURRENT_BACKGROUND)
 _rate_lock = threading.Lock()
 _recent_call_times: deque[float] = deque()
+_local = threading.local()
 
 
-def _throttle_for_sustained_rate() -> None:
-    """Sliding-window limiter: block until under SUSTAINED_RATE_PER_SEC."""
+@contextmanager
+def background_work():
+    """Marks everything called inside as background, on this thread.
+
+    A context manager rather than a parameter threaded through every
+    call_with_limits call site: the jobs that need it are whole functions
+    deep in a call stack (sync_project_tree, the pre-cache loop), and each
+    already runs on its own thread, so wrapping the job is both a smaller
+    change and harder to get half-right than tagging individual calls.
+    """
+    previous = getattr(_local, "background", False)
+    _local.background = True
+    try:
+        yield
+    finally:
+        _local.background = previous
+
+
+def _is_background() -> bool:
+    return getattr(_local, "background", False)
+
+
+@contextmanager
+def _null_gate():
+    """Stand-in so the `with` below can name one gate or the other without
+    branching into two near-identical copies of the retry loop."""
+    yield
+
+
+def _throttle_for_sustained_rate(background: bool = False) -> None:
+    """Sliding-window limiter: block until under SUSTAINED_RATE_PER_SEC.
+
+    Background callers stop short of the full budget, so a burst of them
+    can never leave an interactive request with nothing to spend.
+    """
+    ceiling = SUSTAINED_RATE_PER_SEC - (INTERACTIVE_RESERVE_PER_SEC if background else 0)
     with _rate_lock:
         now = time.monotonic()
         window_start = now - 1.0
         while _recent_call_times and _recent_call_times[0] < window_start:
             _recent_call_times.popleft()
 
-        if len(_recent_call_times) >= SUSTAINED_RATE_PER_SEC:
+        if len(_recent_call_times) >= ceiling:
             sleep_for = _recent_call_times[0] + 1.0 - now
         else:
             sleep_for = 0.0
@@ -158,10 +210,13 @@ def call_with_limits(fn, *args, **kwargs):
     # No simulate-offline branch here on purpose — see _OFFLINE_BASE_URL
     # above. An outage is a transport failure, so it belongs at the client
     # boundary, not in a guard that skips the transport entirely.
-    with _concurrency_gate:
+    background = _is_background()
+    # Nested so a background call holds BOTH gates: it still counts against
+    # the overall cap, it just can't take more than its own share of it.
+    with _background_gate if background else _null_gate(), _concurrency_gate:
         attempt = 0
         while True:
-            _throttle_for_sustained_rate()
+            _throttle_for_sustained_rate(background)
             try:
                 return fn(*args, **kwargs)
             except Throttled as exc:

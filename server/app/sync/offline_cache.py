@@ -28,6 +28,7 @@ after a tree sync refreshes what changed instead of only filling gaps.
 import logging
 import threading
 
+from app.crowdin_client import background_work
 from app.db import get_conn
 from app.sync.bulk_search_sync import bulk_sync_source_strings, sync_file_target_text_fast
 from app.sync.file_content_sync import sync_file_content
@@ -117,6 +118,15 @@ def get_status(project_id: int, language_id: str) -> dict:
 
 
 def _run(project_id: int, language_id: str) -> None:
+    """Pre-cache the whole project. Runs as background work throughout: it's
+    one request per file over tens of thousands of files, so without a share
+    of the rate budget reserved for the user, anything done in the app while
+    this runs waits behind it."""
+    with background_work():
+        _run_inner(project_id, language_id)
+
+
+def _run_inner(project_id: int, language_id: str) -> None:
     # Wrapped so running is GUARANTEED to reset however this exits —
     # including a failure in the pending query itself, before the loop.
     # search_index.py has the scar tissue explaining why that matters.

@@ -56,6 +56,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Anything slower than this gets a line in the log with how long it took.
+SLOW_REQUEST_SECONDS = 1.0
+
+
+@app.middleware("http")
+async def log_slow_requests(request: Request, call_next):
+    """Leaves a trail for the intermittent ones.
+
+    "Opening a file was slow" and "approve didn't respond to the first
+    click" are both reports that can't be acted on without knowing which
+    request was slow and by how much — and neither reproduces on demand.
+    Cached reads answer in about 0.04s and a live Crowdin call in about
+    0.2s, so a second is far above anything normal and quiet in ordinary
+    use, while still catching the cases worth explaining.
+
+    Logs at WARNING because that's the level the packaged build writes to
+    desktop.log (see desktop.py) — an INFO line there would go nowhere.
+    """
+    started = time.monotonic()
+    response = await call_next(request)
+    elapsed = time.monotonic() - started
+    if elapsed >= SLOW_REQUEST_SECONDS:
+        logger.warning(
+            "Slow request: %s %s took %.1fs", request.method, request.url.path, elapsed
+        )
+    return response
+
 
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

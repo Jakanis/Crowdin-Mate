@@ -995,15 +995,27 @@ function TranslationItem({
             ▼
           </button>
         </span>
+        {/* Approve shows that it's working while the request is in flight.
+            It was only disabled, which looks identical to a dead button — so
+            a slow approve reads as "the click didn't register", and the
+            natural response is to click again rather than wait. */}
         {canApprove && (
           <button
-            className={`icon-btn icon-btn--approve${t.is_approved ? " icon-btn--active" : ""}`}
+            className={`icon-btn icon-btn--approve${t.is_approved ? " icon-btn--active" : ""}${
+              approve.isPending ? " icon-btn--busy" : ""
+            }`}
             onClick={(e) => {
               e.stopPropagation();
               approve.mutate();
             }}
             disabled={approve.isPending}
-            title={t.is_approved ? "Unapprove" : "Approve"}
+            title={
+              approve.isPending
+                ? "Working…"
+                : t.is_approved
+                  ? "Unapprove"
+                  : "Approve"
+            }
           >
             <CheckIcon />
           </button>

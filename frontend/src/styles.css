@@ -1877,6 +1877,27 @@ body {
   cursor: default;
 }
 
+/* In flight. Distinct from plain :disabled, which is indistinguishable
+   from a button that ignored the click — the pulse is the difference
+   between "working" and "broken" while a request is slow. */
+.icon-btn--busy:disabled {
+  opacity: 1;
+  cursor: progress;
+  animation: icon-btn-busy-pulse 1s ease-in-out infinite;
+}
+
+@keyframes icon-btn-busy-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn--busy:disabled {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
 .icon-btn--approve {
   color: var(--success);
   border-color: color-mix(in srgb, var(--success) 40%, transparent);

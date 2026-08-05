@@ -11,7 +11,7 @@ every write is an upsert keyed by Crowdin's own id.
 import logging
 from datetime import datetime, timezone
 
-from app.crowdin_client import call_with_limits, get_client
+from app.crowdin_client import background_work, call_with_limits, get_client
 from app.db import get_conn
 from app.sync import search_fts
 
@@ -113,6 +113,11 @@ def _prune_missing(conn, project_id: int, live_dir_ids: set[int], live_file_ids:
 
 
 def sync_project_tree(project_id: int) -> dict:
+    with background_work():
+        return _sync_project_tree(project_id)
+
+
+def _sync_project_tree(project_id: int) -> dict:
     client = get_client()
 
     project_resp = call_with_limits(client.projects.get_project, projectId=project_id)
