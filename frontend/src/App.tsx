@@ -379,6 +379,18 @@ export function App() {
           >
             Open in Crowdin ↗
           </a>
+          {/* Background syncing, shown where it can always be seen.
+              The file tree has its own sync button and progress bar, but
+              both live inside the left sidebar — collapse it (which an
+              unpinned sidebar does by itself as soon as you click away) and
+              a minute-long crawl runs with nothing on screen to say so,
+              while everything else feels slow for no visible reason. */}
+          {sync.isPending && (
+            <span className="header-sync" title="Checking Crowdin for changes to the file tree">
+              <span className="header-sync-dot" />
+              Syncing…
+            </span>
+          )}
           <SettingsMenu
             autoAdvance={autoAdvance.enabled}
             onAutoAdvanceChange={autoAdvance.setEnabled}
