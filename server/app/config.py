@@ -8,11 +8,14 @@ Manager on this machine) and are read back only inside this module.
 """
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
 
 import keyring
+
+logger = logging.getLogger(__name__)
 
 # Pre-rename service name (this app used to be ClassicUA-specific) —
 # kept only so _migrate_legacy_keyring below can move existing installs'
@@ -183,7 +186,23 @@ def get_token() -> str | None:
     tokens = get_oauth_tokens()
     if tokens is not None:
         if tokens["expires_at"] <= time.time():
-            tokens = oauth.refresh_access_token()
+            try:
+                tokens = oauth.refresh_access_token()
+            except oauth.RefreshUnavailable:
+                # Offline. Keep the expired token rather than reporting no
+                # credentials at all: being unable to REFRESH is not being
+                # logged out, and treating it as such is what asked people
+                # to sign in again — over a network they don't have — and
+                # left translations unsaveable, since nothing downstream
+                # had a token to make the attempt that would have been
+                # queued.
+                #
+                # The expired token is knowingly useless as a credential.
+                # It doesn't need to work: with no connection the call
+                # fails at the transport, which is the offline path that
+                # queues the write. Once there's a connection again, the
+                # next refresh succeeds and this never comes up.
+                logger.info("Token refresh unavailable (offline); keeping the stored session.")
         return tokens["access_token"] if tokens else None
     return get_pat()
 

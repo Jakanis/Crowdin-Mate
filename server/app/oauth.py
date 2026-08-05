@@ -84,15 +84,45 @@ def exchange_code(code: str) -> dict:
     return config.get_oauth_tokens()
 
 
+class RefreshUnavailable(Exception):
+    """Couldn't reach Crowdin to refresh — as opposed to being refused.
+
+    The difference matters enormously and used to be collapsed. Both came
+    back as "no token", so going offline with an expired access token
+    logged you out: the app asked you to sign in again, which needs the
+    network you haven't got, and translations couldn't be saved because
+    nothing downstream had a token to attempt the (queueable) call with.
+
+    Never reproduced by the simulate-offline switch, which redirects the
+    Crowdin API host only — accounts.crowdin.com stays reachable there, so
+    refresh keeps succeeding and this path never runs.
+    """
+
+
 def refresh_access_token() -> dict | None:
     """Called from config.get_token() when the stored access_token has
-    expired. Returns None (rather than raising) on failure — e.g. the
-    user revoked the app on Crowdin's side — so callers fall through to
-    "not authenticated" instead of crashing on an unrelated request."""
+    expired.
+
+    Returns None when Crowdin ANSWERS and refuses — a revoked app, a
+    withdrawn refresh token — so callers fall through to "not
+    authenticated", which is then true.
+
+    Raises RefreshUnavailable when Crowdin can't be reached at all, so
+    callers can tell "you are logged out" from "not right now"."""
     client = config.get_oauth_client()
     tokens = config.get_oauth_tokens()
     if client is None or tokens is None:
         return None
+
+    # Simulated offline has to cover this too. It works by pointing the
+    # Crowdin API host at an unresolvable name, which leaves
+    # accounts.crowdin.com perfectly reachable — so refresh kept working
+    # under simulation while failing for real, and the bug above went
+    # unnoticed precisely because the switch built to catch it didn't.
+    from app import debug_mode  # local import: avoids a cycle at module load
+
+    if debug_mode.is_simulate_offline():
+        raise RefreshUnavailable("simulated offline")
 
     try:
         resp = requests.post(
@@ -105,8 +135,15 @@ def refresh_access_token() -> dict | None:
             },
             timeout=15,
         )
+    except (requests.ConnectionError, requests.Timeout) as exc:
+        # Never reached Crowdin, so this says nothing about whether the
+        # token is still good.
+        raise RefreshUnavailable(str(exc)) from exc
+
+    try:
         resp.raise_for_status()
     except requests.RequestException:
+        # Crowdin answered and said no.
         return None
 
     data = resp.json()
