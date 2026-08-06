@@ -142,8 +142,22 @@ _OFFLINE_BASE_URL = "simulated-offline.invalid/api/v2/"
 # masked by serving stale cache.
 OFFLINE_ERRORS = (requests.exceptions.RequestException,)
 
+# Nothing this app asks Crowdin for legitimately takes half a minute, and
+# the SDK's own 60s default applies to connecting as well as reading, then
+# gets multiplied by its retries. A tighter bound turns a dead connection
+# from a wait long enough to look like a freeze into a normal error.
+REQUEST_TIMEOUT_SECONDS = 20
+
+# How long the pooled connections may sit unused before they're replaced.
+# Aimed squarely at "came back from a break and the first thing I opened
+# hung": five minutes is far longer than any gap within active use, so
+# ordinary work never pays the reconnect, while any real break does.
+CLIENT_MAX_IDLE_SECONDS = 300
+
 _client: CrowdinClient | None = None
 _client_key: tuple[str, bool] | None = None
+_client_last_used: float = 0.0
+_client_lock = threading.Lock()
 
 
 def get_client() -> CrowdinClient:
@@ -153,26 +167,59 @@ def get_client() -> CrowdinClient:
     new PAT) so we never hold a stale credential — and likewise if the
     simulate-offline toggle flipped, since that's baked into the client's
     base URL and the SDK builds its request-maker once per instance.
+
+    Also rebuilds after a long idle period. The SDK holds one
+    requests.Session, so its connections are pooled and reused — and a
+    pooled connection that went idle while the machine slept, changed
+    network, or simply sat there long enough for something in the middle to
+    drop it is usually not detectably dead. Writing to it blocks until the
+    read timeout rather than failing, which is what turns "open a file I
+    haven't opened before, after a break" into a long hang: that path syncs
+    the file's content synchronously, so the whole request waits on it.
+    Throwing the pool away after an idle spell costs one TCP+TLS handshake
+    on the next call and removes the whole failure mode.
     """
-    global _client, _client_key
+    global _client, _client_key, _client_last_used
     token = get_token()
     if token is None:
         raise RuntimeError("No Crowdin token configured. Call POST /auth/token first.")
 
     offline = debug_mode.is_simulate_offline()
     key = (token, offline)
-    if _client is None or _client_key != key:
-        _client = CrowdinClient(
-            token=token,
-            # 1, not 0: the SDK does `max_retries or self.MAX_RETRIES`, so a
-            # falsy 0 would silently restore its own default of 5.
-            max_retries=1 if offline else 3,   # SDK-level retry, for transient 5xx only
-            retry_delay=0.5,
-            base_url=_OFFLINE_BASE_URL if offline else None,
+    now = time.monotonic()
+    with _client_lock:
+        idle_too_long = (
+            _client is not None and now - _client_last_used > CLIENT_MAX_IDLE_SECONDS
         )
-        _client_key = key
+        if _client is None or _client_key != key or idle_too_long:
+            if idle_too_long:
+                logger.info(
+                    "Crowdin client idle for over %ss — reconnecting rather than risking a "
+                    "stale pooled connection.", CLIENT_MAX_IDLE_SECONDS,
+                )
+            _client = CrowdinClient(
+                token=token,
+                # 1, not 0: the SDK does `max_retries or self.MAX_RETRIES`, so a
+                # falsy 0 would silently restore its own default of 5.
+                max_retries=1 if offline else 3,   # SDK-level retry, for transient 5xx only
+                retry_delay=0.5,
+                # The SDK's own default is 60s, applied to both connect and
+                # read, and its retries multiply it. That is a fine ceiling
+                # for a batch job and far too long for a click: nothing here
+                # legitimately takes half a minute, so waiting three of them
+                # to find out the connection was dead is all downside.
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                base_url=_OFFLINE_BASE_URL if offline else None,
+            )
+            _client_key = key
+        _client_last_used = now
 
     return _client
+
+
+def _mark_client_used() -> None:
+    global _client_last_used
+    _client_last_used = time.monotonic()
 
 
 def add_translation(client, project_id: int, string_id: int, language_id: str, text: str,
@@ -217,6 +264,10 @@ def call_with_limits(fn, *args, **kwargs):
         attempt = 0
         while True:
             _throttle_for_sustained_rate(background)
+            # Every call, not just get_client(): a long-running job holds one
+            # client reference for its whole run, so without this the pool
+            # would look idle throughout and get recycled mid-job.
+            _mark_client_used()
             try:
                 return fn(*args, **kwargs)
             except Throttled as exc:
