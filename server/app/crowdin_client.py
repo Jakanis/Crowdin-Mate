@@ -23,9 +23,12 @@ import time
 from collections import deque
 from contextlib import contextmanager
 
+import socket
+
 import requests
 from crowdin_api import CrowdinClient
 from crowdin_api.exceptions import Throttled
+from requests.adapters import HTTPAdapter
 
 from app import debug_mode
 from app.config import get_token
@@ -142,17 +145,49 @@ _OFFLINE_BASE_URL = "simulated-offline.invalid/api/v2/"
 # masked by serving stale cache.
 OFFLINE_ERRORS = (requests.exceptions.RequestException,)
 
-# Nothing this app asks Crowdin for legitimately takes half a minute, and
-# the SDK's own 60s default applies to connecting as well as reading, then
-# gets multiplied by its retries. A tighter bound turns a dead connection
-# from a wait long enough to look like a freeze into a normal error.
-REQUEST_TIMEOUT_SECONDS = 20
+# (connect, read). Separating them matters: refusing to connect is
+# something we should give up on quickly, while a request that's genuinely
+# being answered can take longer. The SDK's own default is a single 60s
+# applied to both, multiplied by its retries — long enough that a dead
+# connection reads as a freeze rather than an error.
+REQUEST_TIMEOUT_SECONDS = (5, 20)
 
-# How long the pooled connections may sit unused before they're replaced.
-# Aimed squarely at "came back from a break and the first thing I opened
-# hung": five minutes is far longer than any gap within active use, so
-# ordinary work never pays the reconnect, while any real break does.
-CLIENT_MAX_IDLE_SECONDS = 300
+# How long pooled connections may sit unused before being replaced. 90s
+# matches what Go's http.Transport uses for the same reason, and browsers
+# are in the same range: long enough that ordinary work never pays for a
+# reconnect, short enough that a connection is rarely still around by the
+# time the network has moved on underneath it.
+CLIENT_MAX_IDLE_SECONDS = 90
+
+# Ask the OS to probe idle connections so a peer that has gone away is
+# detected and the socket torn down, instead of the next request writing
+# into a black hole and waiting out the read timeout. Idle 60s, then three
+# probes 10s apart — a dead connection is gone within about 90s without
+# anything in this app having to poll.
+#
+# This is the part that actually DETECTS death rather than avoiding it. It
+# doesn't replace the idle recycling above: detection takes that ~90s, so a
+# request made in the meantime would still block. The two cover different
+# halves — recycling means we rarely touch an old connection at all, and
+# keepalive reaps the ones a long-running job holds open.
+def _keepalive_socket_options() -> list[tuple[int, int, int]]:
+    options = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+    # Present on Linux and on Windows 10 1709+, absent on older builds and
+    # some platforms — tuning is a bonus, not a requirement, and plain
+    # SO_KEEPALIVE still works without it.
+    for name, value in (("TCP_KEEPIDLE", 60), ("TCP_KEEPINTVL", 10), ("TCP_KEEPCNT", 3)):
+        option = getattr(socket, name, None)
+        if option is not None:
+            options.append((socket.IPPROTO_TCP, option, value))
+    return options
+
+
+class _KeepAliveAdapter(HTTPAdapter):
+    """HTTPAdapter whose connections carry the keepalive options above."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["socket_options"] = _keepalive_socket_options()
+        super().init_poolmanager(*args, **kwargs)
 
 _client: CrowdinClient | None = None
 _client_key: tuple[str, bool] | None = None
@@ -211,6 +246,11 @@ def get_client() -> CrowdinClient:
                 timeout=REQUEST_TIMEOUT_SECONDS,
                 base_url=_OFFLINE_BASE_URL if offline else None,
             )
+            # One requester, cached on the client and shared by every API
+            # resource, so mounting here covers all of them.
+            session = _client.get_api_requestor().session
+            session.mount("https://", _KeepAliveAdapter())
+            session.mount("http://", _KeepAliveAdapter())
             _client_key = key
         _client_last_used = now
 
